@@ -120,7 +120,7 @@ Cloudflare R2 bucket CORS must allow the frontend origin to `PUT` objects. Examp
 Build the Cloud Run container with:
 
 ```bash
-docker build -f Dockerfile.cloudrun -t via-upload-api .
+docker build -f Dockerfile -t via-upload-api .
 ```
 
 The Cloud Run backend also exposes `POST /api/analyze-video` for n8n. It accepts:

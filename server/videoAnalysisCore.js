@@ -1,7 +1,10 @@
-import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
+import { createWriteStream } from "fs";
+import { mkdtemp, readFile, rm, stat } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { pipeline } from "stream/promises";
 import { spawn } from "child_process";
+import axios from "axios";
 import ffmpegPath from "ffmpeg-static";
 
 const DEFAULT_ANALYSIS_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
@@ -19,15 +22,22 @@ function getRequiredGeminiEnv() {
 }
 
 async function downloadVideo(fileUrl, targetPath) {
-  const response = await fetch(fileUrl);
+  const response = await axios.get(fileUrl, {
+    responseType: "stream",
+    timeout: 10 * 60 * 1000,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+  });
 
-  if (!response.ok) {
-    throw new Error(`Failed to download video: ${response.status} ${response.statusText}`);
+  await pipeline(response.data, createWriteStream(targetPath));
+
+  const contentLength = Number(response.headers["content-length"] || 0);
+  if (Number.isFinite(contentLength) && contentLength > 0) {
+    return contentLength;
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer());
-  await writeFile(targetPath, buffer);
-  return buffer.length;
+  const fileStats = await stat(targetPath);
+  return fileStats.size;
 }
 
 function runFfmpeg(args) {
@@ -91,10 +101,32 @@ async function extractFrames(videoPath, frameDir, frameCount = DEFAULT_FRAME_COU
   return frames;
 }
 
-function buildAnalysisPrompt({ fileName, fileUrl, prompt }) {
-  return prompt || `You are an educational video evaluation assistant.
+async function extractAudioTrack(videoPath, audioPath) {
+  await runFfmpeg([
+    "-y",
+    "-i",
+    videoPath,
+    "-vn",
+    "-map",
+    "0:a:0?",
+    "-ac",
+    "1",
+    "-ar",
+    "16000",
+    "-b:a",
+    "48k",
+    "-acodec",
+    "libmp3lame",
+    audioPath,
+  ]);
+}
 
-Analyze the sampled frames from this uploaded video and produce a concise structured evaluation.
+function buildAnalysisPrompt({ fileName, fileUrl, prompt }) {
+  const promptText =
+    prompt ||
+    `You are an educational video evaluation assistant.
+
+Analyze the sampled frames and extracted audio from this uploaded video and produce a concise structured evaluation.
 
 Video metadata:
 - File name: ${fileName || "unknown"}
@@ -106,12 +138,13 @@ Focus on:
 3. Educational value
 4. Content organization
 5. Viewer engagement
-6. Visible technical quality issues
-7. Concrete improvement suggestions
+6. Spoken narration and audio quality
+7. Visible technical quality issues
+8. Concrete improvement suggestions
 
 Return JSON only:
 {
-  "summary": "Brief summary of what is visible",
+  "summary": "Brief summary of what is visible and heard",
   "topic": "Main topic",
   "purpose": "Likely purpose",
   "quality_scores": {
@@ -119,7 +152,9 @@ Return JSON only:
     "educational_value": 1,
     "organization": 1,
     "engagement": 1,
-    "technical_quality": 1
+    "technical_quality": 1,
+    "audio_quality": 1,
+    "narration_quality": 1
   },
   "strengths": [],
   "issues": [],
@@ -129,7 +164,9 @@ Return JSON only:
 }
 
 Scoring: 1 = poor, 5 = excellent.
-Base your answer only on visible frames. If frames are insufficient, say what is missing.`;
+Base your answer only on the provided frames and extracted audio. If inputs are insufficient, say what is missing.`;
+
+  return `${promptText}\n\nAdditional context:\n- You are receiving sampled video frames and an extracted audio track from the same source video.\n- Use the audio track to judge narration, speaking clarity, pacing, and audible quality.\n- Use the frames to judge camera work, sequencing, and graphics.\n- If a category cannot be judged confidently, say so explicitly rather than guessing.`;
 }
 
 function parseModelJson(outputText) {
@@ -150,7 +187,7 @@ function parseModelJson(outputText) {
   }
 }
 
-async function analyzeFramesWithGemini({ fileName, fileUrl, frames, prompt }) {
+async function analyzeMediaWithGemini({ fileName, fileUrl, frames, audio, prompt }) {
   const env = getRequiredGeminiEnv();
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.model)}:generateContent?key=${encodeURIComponent(env.apiKey)}`;
   const contents = [
@@ -158,6 +195,16 @@ async function analyzeFramesWithGemini({ fileName, fileUrl, frames, prompt }) {
       role: "user",
       parts: [
         { text: buildAnalysisPrompt({ fileName, fileUrl, prompt }) },
+        ...(audio
+          ? [
+              {
+                inlineData: {
+                  mimeType: audio.mimeType,
+                  data: audio.base64,
+                },
+              },
+            ]
+          : []),
         ...frames.map((frame) => ({
           inlineData: {
             mimeType: "image/jpeg",
@@ -211,14 +258,36 @@ export async function analyzeVideoFromUrl({ fileName, fileUrl, prompt }) {
 
   const workspace = await mkdtemp(join(tmpdir(), "via-video-analysis-"));
   const videoPath = join(workspace, "source-video");
+  const audioPath = join(workspace, "audio.mp3");
 
   try {
     const downloadedBytes = await downloadVideo(fileUrl, videoPath);
     const frames = await extractFrames(videoPath, workspace);
-    const analysis = await analyzeFramesWithGemini({
+    let audio = null;
+
+    try {
+      await extractAudioTrack(videoPath, audioPath);
+      const audioStats = await stat(audioPath);
+
+      if (audioStats.size > 0) {
+        const audioBuffer = await readFile(audioPath);
+        audio = {
+          mimeType: "audio/mpeg",
+          base64: audioBuffer.toString("base64"),
+          byteLength: audioBuffer.length,
+        };
+      }
+    } catch (audioError) {
+      console.warn("[video-analysis] audio extraction failed, continuing without audio", {
+        message: audioError instanceof Error ? audioError.message : String(audioError),
+      });
+    }
+
+    const analysis = await analyzeMediaWithGemini({
       fileName,
       fileUrl,
       frames,
+      audio,
       prompt,
     });
 
@@ -228,6 +297,7 @@ export async function analyzeVideoFromUrl({ fileName, fileUrl, prompt }) {
       fileUrl,
       downloadedBytes,
       frameCount: frames.length,
+      audioBytes: audio?.byteLength || 0,
       model: analysis.model,
       analysis: analysis.parsed || analysis.outputText,
       rawText: analysis.parsed ? undefined : analysis.outputText,

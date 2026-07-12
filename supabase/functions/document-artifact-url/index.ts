@@ -17,11 +17,19 @@ const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 type ArtifactRequest = {
   evaluationId?: number;
+  aggregateId?: string;
 };
 
 type EvaluationRow = {
   id: number;
   user_id: string | null;
+  pdf_storage_path: string | null;
+  docx_storage_path: string | null;
+};
+
+type AggregateRow = {
+  id: string;
+  video_case_id: string;
   pdf_storage_path: string | null;
   docx_storage_path: string | null;
 };
@@ -74,9 +82,10 @@ serve(async (req) => {
 
     const payload = (await req.json()) as ArtifactRequest;
     const evaluationId = payload.evaluationId;
+    const aggregateId = typeof payload.aggregateId === "string" ? payload.aggregateId : null;
 
-    if (!evaluationId || !Number.isInteger(evaluationId)) {
-      return new Response(JSON.stringify({ ok: false, error: "evaluationId is required" }), {
+    if ((!evaluationId || !Number.isInteger(evaluationId)) && !aggregateId) {
+      return new Response(JSON.stringify({ ok: false, error: "evaluationId or aggregateId is required" }), {
         status: 400,
         headers: {
           ...corsHeaders,
@@ -93,41 +102,57 @@ serve(async (req) => {
 
     const role = typeof roleRow?.role === "string" ? roleRow.role : "user";
 
-    const { data, error } = await adminSupabase
-      .from("evaluations")
-      .select("id, user_id, pdf_storage_path, docx_storage_path")
-      .eq("id", evaluationId)
-      .maybeSingle();
-
-    if (error || !data) {
-      return new Response(JSON.stringify({ ok: false, error: "Evaluation not found" }), {
-        status: 404,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      });
-    }
-
-    const evaluation = data as EvaluationRow;
     const canReadAll = role === "editor" || role === "admin";
-    if (!canReadAll && evaluation.user_id !== user.id) {
-      return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
-        status: 403,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      });
+    let pdfPath: string | null = null;
+    let docxPath: string | null = null;
+
+    if (aggregateId) {
+      const { data, error } = await adminSupabase
+        .from("video_case_aggregates")
+        .select("id, video_case_id, pdf_storage_path, docx_storage_path")
+        .eq("id", aggregateId)
+        .maybeSingle();
+      const aggregate = data as AggregateRow | null;
+      if (error || !aggregate) {
+        return new Response(JSON.stringify({ ok: false, error: "Aggregate not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (!canReadAll) {
+        const { data: membership } = await adminSupabase
+          .from("video_case_members")
+          .select("id")
+          .eq("video_case_id", aggregate.video_case_id)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (!membership) {
+          return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      }
+      pdfPath = aggregate.pdf_storage_path;
+      docxPath = aggregate.docx_storage_path;
+    } else {
+      const { data, error } = await adminSupabase
+        .from("evaluations")
+        .select("id, user_id, pdf_storage_path, docx_storage_path")
+        .eq("id", evaluationId)
+        .maybeSingle();
+      const evaluation = data as EvaluationRow | null;
+      if (error || !evaluation) {
+        return new Response(JSON.stringify({ ok: false, error: "Evaluation not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (!canReadAll && evaluation.user_id !== user.id) {
+        return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      pdfPath = evaluation.pdf_storage_path;
+      docxPath = evaluation.docx_storage_path;
     }
 
-    if (evaluation.pdf_storage_path || evaluation.docx_storage_path) {
+    if (pdfPath || docxPath) {
       const [pdfSigned, docxSigned] = await Promise.all([
-        evaluation.pdf_storage_path
-          ? adminSupabase.storage.from(DOCUMENTS_BUCKET).createSignedUrl(evaluation.pdf_storage_path, 60 * 60)
+        pdfPath
+          ? adminSupabase.storage.from(DOCUMENTS_BUCKET).createSignedUrl(pdfPath, 60 * 60)
           : Promise.resolve({ data: null, error: null }),
-        evaluation.docx_storage_path
-          ? adminSupabase.storage.from(DOCUMENTS_BUCKET).createSignedUrl(evaluation.docx_storage_path, 60 * 60)
+        docxPath
+          ? adminSupabase.storage.from(DOCUMENTS_BUCKET).createSignedUrl(docxPath, 60 * 60)
           : Promise.resolve({ data: null, error: null }),
       ]);
 

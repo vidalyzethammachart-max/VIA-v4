@@ -15,6 +15,7 @@ const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 type CallbackPayload = {
   evaluation_id?: number | string;
+  aggregate_id?: string;
   docId?: string;
   doc_id?: string;
   googleDocId?: string;
@@ -79,9 +80,10 @@ serve(async (req) => {
   try {
     const payload = (await req.json()) as CallbackPayload;
     const evaluationId = Number(payload.evaluation_id);
+    const aggregateId = normalizeOptionalString(payload.aggregate_id);
 
-    if (!evaluationId || !Number.isInteger(evaluationId)) {
-      return new Response(JSON.stringify({ ok: false, error: "evaluation_id is required" }), {
+    if ((!evaluationId || !Number.isInteger(evaluationId)) && !aggregateId) {
+      return new Response(JSON.stringify({ ok: false, error: "evaluation_id or aggregate_id is required" }), {
         status: 400,
         headers: {
           ...corsHeaders,
@@ -123,9 +125,9 @@ serve(async (req) => {
     }
 
     const { error } = await adminSupabase
-      .from("evaluations")
+      .from(aggregateId ? "video_case_aggregates" : "evaluations")
       .update(updateValues)
-      .eq("id", evaluationId);
+      .eq("id", aggregateId ?? evaluationId);
 
     if (error) {
       return new Response(JSON.stringify({ ok: false, error: error.message }), {
@@ -140,7 +142,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         ok: true,
-        evaluationId,
+        evaluationId: evaluationId || null,
+        aggregateId,
         status: updateValues.document_status,
         docId: docId ?? null,
         sourceDocId,

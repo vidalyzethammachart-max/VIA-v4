@@ -18,6 +18,8 @@ const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 type ForwardPayload = {
   evaluation_id?: number;
+  aggregate_id?: string;
+  document_type?: "evaluation" | "video_case_aggregate";
   subject_name?: string | null;
   order_number?: string | null;
   Email?: string | null;
@@ -47,26 +49,28 @@ function extractDocId(payload: unknown): string | null {
   return null;
 }
 
-async function updateEvaluationDocument(
-  evaluationId: number | undefined,
+async function updateDocument(
+  payload: ForwardPayload,
   values: {
     source_doc_id?: string | null;
     document_status: "ready" | "failed";
     document_error?: string | null;
   },
 ) {
-  if (!evaluationId) {
+  const isAggregate = Boolean(payload.aggregate_id);
+  const recordId = isAggregate ? payload.aggregate_id : payload.evaluation_id;
+  if (!recordId) {
     return;
   }
 
   const { error } = await adminSupabase
-    .from("evaluations")
+    .from(isAggregate ? "video_case_aggregates" : "evaluations")
     .update(values)
-    .eq("id", evaluationId);
+    .eq("id", recordId);
 
   if (error) {
-    console.error("[forward-to-n8n] failed to update evaluation document state", {
-      evaluationId,
+    console.error("[forward-to-n8n] failed to update document state", {
+      recordId,
       error: error.message,
     });
   }
@@ -165,7 +169,7 @@ serve(async (req) => {
 
     if (!res.ok) {
       const text = await res.text();
-      await updateEvaluationDocument(payload.evaluation_id, {
+      await updateDocument(payload, {
         document_status: "failed",
         document_error: text.slice(0, 1000),
       });
@@ -201,6 +205,7 @@ serve(async (req) => {
           ok: true,
           status: "pending",
           evaluationId: payload.evaluation_id ?? null,
+          aggregateId: payload.aggregate_id ?? null,
           message: "Workflow accepted. Waiting for async callback.",
         }),
         {
@@ -213,7 +218,7 @@ serve(async (req) => {
       );
     }
 
-    await updateEvaluationDocument(payload.evaluation_id, {
+    await updateDocument(payload, {
       source_doc_id: docId,
       document_status: "ready",
       document_error: null,
@@ -230,6 +235,7 @@ serve(async (req) => {
         ok: true,
         status: "ready",
         evaluationId: payload.evaluation_id ?? null,
+        aggregateId: payload.aggregate_id ?? null,
         docId,
       }),
       {

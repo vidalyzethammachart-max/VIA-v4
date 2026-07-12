@@ -36,6 +36,11 @@ export type VideoCaseAggregateRow = {
   ai_raw_text: string | null;
   status: VideoCaseAggregateStatus;
   error: string | null;
+  document_status: "pending" | "ready" | "failed";
+  document_error: string | null;
+  source_doc_id: string | null;
+  pdf_storage_path: string | null;
+  docx_storage_path: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -294,6 +299,26 @@ export async function deleteVideoCaseAggregate(aggregateId: string): Promise<voi
   }
 }
 
+export async function getVideoCaseAggregateDocumentUrls(aggregateId: string): Promise<{
+  pdfUrl: string | null;
+  docxUrl: string | null;
+}> {
+  const { data, error } = await supabase.functions.invoke<{
+    ok: boolean;
+    pdfUrl: string | null;
+    docxUrl: string | null;
+    error?: string;
+  }>("document-artifact-url", {
+    body: { aggregateId },
+  });
+
+  if (error || !data?.ok) {
+    throw new Error(error?.message || data?.error || "Aggregate document is not ready.");
+  }
+
+  return { pdfUrl: data.pdfUrl, docxUrl: data.docxUrl };
+}
+
 export async function combineVideoCaseAnalyses(params: {
   videoCaseId: string;
   caseTitle: string;
@@ -308,6 +333,7 @@ export async function combineVideoCaseAnalyses(params: {
     ai_raw_text?: string | null;
     notes?: string | null;
     created_at?: string | null;
+    order_number?: string | null;
   }>;
   prompt?: string;
 }): Promise<VideoCaseAggregateRow> {
@@ -374,5 +400,31 @@ export async function combineVideoCaseAnalyses(params: {
     throw new Error(error.message);
   }
 
-  return data as VideoCaseAggregateRow;
+  const aggregate = data as VideoCaseAggregateRow;
+  const orderNumber = params.sourceRuns.find((run) => run.order_number)?.order_number || null;
+  const { error: documentError } = await supabase.functions.invoke("forward-to-n8n", {
+    body: {
+      aggregate_id: aggregate.id,
+      document_type: "video_case_aggregate",
+      video_case_id: params.videoCaseId,
+      subject_name: `${params.caseTitle} - Aggregate Report`,
+      order_number: orderNumber,
+      source_evaluation_ids: aggregate.source_evaluation_ids,
+      source_count: aggregate.source_count,
+      combined_scores: aggregate.combined_scores,
+      ai_model: aggregate.ai_model,
+      aggregate_analysis: aggregate.ai_output || aggregate.ai_raw_text,
+    },
+  });
+
+  if (documentError) {
+    const message = documentError.message || "Failed to start aggregate document generation.";
+    await supabase
+      .from("video_case_aggregates")
+      .update({ document_status: "failed", document_error: message })
+      .eq("id", aggregate.id);
+    return { ...aggregate, document_status: "failed", document_error: message };
+  }
+
+  return aggregate;
 }

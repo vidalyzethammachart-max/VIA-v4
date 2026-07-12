@@ -12,6 +12,7 @@ import {
   deleteVideoCaseAggregate,
   deleteVideoCaseEvaluation,
   getMyVideoCases,
+  getVideoCaseAggregateDocumentUrls,
   getVideoCaseAggregates,
   getVideoCaseAnalyses,
   getVideoCaseMembership,
@@ -96,6 +97,7 @@ export default function VideoCasesPage() {
   const [evaluationToDelete, setEvaluationToDelete] = useState<VideoCaseEvaluationRow | null>(null);
   const [aggregateToDelete, setAggregateToDelete] = useState<VideoCaseAggregateRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [openingAggregateId, setOpeningAggregateId] = useState<string | null>(null);
 
   const selectedCase = useMemo(
     () => cases.find((item) => item.id === selectedCaseId) ?? null,
@@ -248,6 +250,7 @@ export default function VideoCasesPage() {
           ai_raw_text: run.analysis_ai_raw_text,
           notes: run.overall_suggestion,
           created_at: run.created_at,
+          order_number: run.order_number,
         })),
         prompt: prompt.trim() || undefined,
       });
@@ -293,6 +296,20 @@ export default function VideoCasesPage() {
     } finally {
       setDeleting(false);
       setAggregateToDelete(null);
+    }
+  }
+
+  async function handleOpenAggregateDocument(aggregate: VideoCaseAggregateRow, format: "pdf" | "docx") {
+    try {
+      setOpeningAggregateId(aggregate.id);
+      const urls = await getVideoCaseAggregateDocumentUrls(aggregate.id);
+      const url = format === "pdf" ? urls.pdfUrl : urls.docxUrl;
+      if (!url) throw new Error(`${format.toUpperCase()} document is not available.`);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to open aggregate document.");
+    } finally {
+      setOpeningAggregateId(null);
     }
   }
 
@@ -707,6 +724,40 @@ export default function VideoCasesPage() {
                         <p className="text-xs text-slate-500">
                           {new Date(aggregate.created_at).toLocaleString()}
                         </p>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                        <span className={`rounded-full px-2 py-1 font-semibold ${
+                          aggregate.document_status === "ready"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : aggregate.document_status === "failed"
+                              ? "bg-red-50 text-red-700"
+                              : "bg-amber-50 text-amber-700"
+                        }`}>
+                          Document: {aggregate.document_status}
+                        </span>
+                        {aggregate.document_status === "ready" && aggregate.pdf_storage_path && (
+                          <button
+                            type="button"
+                            onClick={() => void handleOpenAggregateDocument(aggregate, "pdf")}
+                            disabled={openingAggregateId === aggregate.id}
+                            className="btn-secondary px-3 py-1 text-xs"
+                          >
+                            Open PDF
+                          </button>
+                        )}
+                        {aggregate.document_status === "ready" && aggregate.docx_storage_path && (
+                          <button
+                            type="button"
+                            onClick={() => void handleOpenAggregateDocument(aggregate, "docx")}
+                            disabled={openingAggregateId === aggregate.id}
+                            className="btn-secondary px-3 py-1 text-xs"
+                          >
+                            Open DOCX
+                          </button>
+                        )}
+                        {aggregate.document_status === "failed" && aggregate.document_error && (
+                          <span className="text-red-600">{aggregate.document_error}</span>
+                        )}
                       </div>
                       {canCombine && (
                         <button

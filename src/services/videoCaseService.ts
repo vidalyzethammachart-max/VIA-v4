@@ -270,6 +270,28 @@ export async function getVideoCaseAggregates(
   return (data ?? []) as VideoCaseAggregateRow[];
 }
 
+export async function deleteVideoCaseEvaluation(evaluationId: number): Promise<void> {
+  const { error } = await supabase
+    .from("evaluations")
+    .delete()
+    .eq("id", evaluationId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function deleteVideoCaseAggregate(aggregateId: string): Promise<void> {
+  const { error } = await supabase
+    .from("video_case_aggregates")
+    .delete()
+    .eq("id", aggregateId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 export async function combineVideoCaseAnalyses(params: {
   videoCaseId: string;
   caseTitle: string;

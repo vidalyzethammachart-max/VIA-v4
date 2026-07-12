@@ -9,6 +9,8 @@ import { normalizeRole, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import {
   combineVideoCaseAnalyses,
+  deleteVideoCaseAggregate,
+  deleteVideoCaseEvaluation,
   getMyVideoCases,
   getVideoCaseAggregates,
   getVideoCaseAnalyses,
@@ -36,6 +38,25 @@ function getSectionScore(rubric: Record<string, unknown>, sectionId: string): nu
   return scores.reduce((total, score) => total + score, 0) / scores.length;
 }
 
+function getAiOutputText(run: VideoCaseEvaluationRow): string {
+  const output = run.analysis_ai_output;
+  if (typeof output === "string") return output;
+  if (!output || typeof output !== "object") return run.analysis_ai_raw_text || "-";
+
+  const record = output as Record<string, unknown>;
+  const nestedAnalysis = record.analysis;
+  const candidates = [
+    record.summary,
+    record.overall_summary,
+    record.feedback,
+    typeof nestedAnalysis === "object" && nestedAnalysis !== null
+      ? (nestedAnalysis as Record<string, unknown>).summary
+      : nestedAnalysis,
+  ];
+  const text = candidates.find((value): value is string => typeof value === "string" && value.trim().length > 0);
+  return text || JSON.stringify(output);
+}
+
 export default function VideoCasesPage() {
   const { language } = useLanguage();
   const rubricSections = useMemo(() => getSections(language), [language]);
@@ -55,6 +76,10 @@ export default function VideoCasesPage() {
   const [combining, setCombining] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [showCreateValidation, setShowCreateValidation] = useState(false);
+  const [selectedAnalysisIds, setSelectedAnalysisIds] = useState<number[]>([]);
+  const [evaluationToDelete, setEvaluationToDelete] = useState<VideoCaseEvaluationRow | null>(null);
+  const [aggregateToDelete, setAggregateToDelete] = useState<VideoCaseAggregateRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const selectedCase = useMemo(
     () => cases.find((item) => item.id === selectedCaseId) ?? null,
@@ -64,6 +89,10 @@ export default function VideoCasesPage() {
   const effectiveCaseRole: VideoCaseMemberRole =
     appRole === "admin" ? "leader" : (selectedRole ?? "member");
   const canCombine = effectiveCaseRole === "leader";
+  const selectedAnalyses = useMemo(
+    () => analyses.filter((run) => selectedAnalysisIds.includes(run.id)),
+    [analyses, selectedAnalysisIds],
+  );
   const isCaseKeyInvalid = showCreateValidation && !caseKey.trim();
   const isCaseTitleInvalid = showCreateValidation && !caseTitle.trim();
 
@@ -94,6 +123,7 @@ export default function VideoCasesPage() {
       setSelectedRole(membership?.member_role ?? null);
       setAnalyses(analysisRows);
       setAggregates(aggregateRows);
+      setSelectedAnalysisIds(analysisRows.map((run) => run.id));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to load case details.");
     }
@@ -127,6 +157,7 @@ export default function VideoCasesPage() {
       setAnalyses([]);
       setAggregates([]);
       setSelectedRole(null);
+      setSelectedAnalysisIds([]);
       return;
     }
 
@@ -176,13 +207,18 @@ export default function VideoCasesPage() {
       return;
     }
 
+    if (selectedAnalyses.length === 0) {
+      setErrorMessage("Select at least one evaluation to combine.");
+      return;
+    }
+
     try {
       setCombining(true);
       setErrorMessage(null);
       await combineVideoCaseAnalyses({
         videoCaseId: selectedCase.id,
         caseTitle: selectedCase.case_title || selectedCase.case_key,
-        sourceRuns: analyses.map((run) => ({
+        sourceRuns: selectedAnalyses.map((run) => ({
           id: run.id,
           user_id: run.user_id,
           evaluation_id: run.id,
@@ -210,13 +246,47 @@ export default function VideoCasesPage() {
     }
   }
 
+  async function handleDeleteEvaluation() {
+    if (!selectedCase || !evaluationToDelete) return;
+
+    try {
+      setDeleting(true);
+      setErrorMessage(null);
+      await deleteVideoCaseEvaluation(evaluationToDelete.id);
+      setSuccessMessage(`Evaluation #${evaluationToDelete.id} was deleted.`);
+      await loadCaseData(selectedCase.id);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to delete evaluation.");
+    } finally {
+      setDeleting(false);
+      setEvaluationToDelete(null);
+    }
+  }
+
+  async function handleDeleteAggregate() {
+    if (!selectedCase || !aggregateToDelete) return;
+
+    try {
+      setDeleting(true);
+      setErrorMessage(null);
+      await deleteVideoCaseAggregate(aggregateToDelete.id);
+      setSuccessMessage("Aggregate analysis was deleted.");
+      await loadCaseData(selectedCase.id);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to delete aggregate analysis.");
+    } finally {
+      setDeleting(false);
+      setAggregateToDelete(null);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <MainNavbar />
       <ConfirmModal
         isOpen={confirmOpen}
         title="รวมผลและวิเคราะห์ใหม่"
-        message="หัวหน้าเคสจะรวบรวมผลการวิเคราะห์ทั้งหมดในเคสนี้ แล้วส่งให้ AI สรุปผลรวมอีกครั้ง"
+        message={`AI will combine ${selectedAnalyses.length} selected evaluation(s) for this case.`}
         variant="primary"
         onCancel={() => {
           if (!combining) setConfirmOpen(false);
@@ -225,6 +295,32 @@ export default function VideoCasesPage() {
         confirmLabel="รวมผล"
         cancelLabel="ยกเลิก"
         confirmDisabled={combining}
+      />
+      <ConfirmModal
+        isOpen={Boolean(evaluationToDelete)}
+        title="Delete evaluation"
+        message={`Delete evaluation #${evaluationToDelete?.id ?? ""}? This cannot be undone.`}
+        variant="danger"
+        onCancel={() => {
+          if (!deleting) setEvaluationToDelete(null);
+        }}
+        onConfirm={() => void handleDeleteEvaluation()}
+        confirmLabel={deleting ? "Deleting..." : "Delete"}
+        cancelLabel="Cancel"
+        confirmDisabled={deleting}
+      />
+      <ConfirmModal
+        isOpen={Boolean(aggregateToDelete)}
+        title="Delete aggregate analysis"
+        message="Delete this combined AI analysis? This cannot be undone."
+        variant="danger"
+        onCancel={() => {
+          if (!deleting) setAggregateToDelete(null);
+        }}
+        onConfirm={() => void handleDeleteAggregate()}
+        confirmLabel={deleting ? "Deleting..." : "Delete"}
+        cancelLabel="Cancel"
+        confirmDisabled={deleting}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-6 md:py-8">
@@ -434,14 +530,34 @@ export default function VideoCasesPage() {
                     แสดงผลที่ผู้ประเมินแต่ละคนส่งเข้ามาในเคสนี้
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setConfirmOpen(true)}
-                  disabled={!canCombine || combining || !selectedCase}
-                  className="btn-primary"
-                >
-                  {combining ? "กำลังรวมผล..." : "รวมผลและวิเคราะห์ใหม่"}
-                </button>
+                <div className="flex items-center gap-2">
+                  {canCombine && analyses.length > 0 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAnalysisIds(analyses.map((run) => run.id))}
+                        className="btn-secondary text-xs"
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAnalysisIds([])}
+                        className="btn-secondary text-xs"
+                      >
+                        Clear
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setConfirmOpen(true)}
+                    disabled={!canCombine || combining || !selectedCase || selectedAnalyses.length === 0}
+                    className="btn-primary"
+                  >
+                    {combining ? "กำลังรวมผล..." : `รวม ${selectedAnalyses.length} รายการและวิเคราะห์ใหม่`}
+                  </button>
+                </div>
               </div>
 
               <textarea
@@ -454,7 +570,7 @@ export default function VideoCasesPage() {
 
               {analyses.length > 0 && (
                 <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="min-w-[1280px] w-full border-collapse text-left text-xs">
+                  <table className="min-w-[1380px] w-full border-collapse text-left text-xs">
                     <thead className="bg-slate-50 text-slate-600">
                       <tr>
                         <th className="sticky left-0 z-10 min-w-48 border-b border-slate-200 bg-slate-50 px-4 py-3 font-semibold">Evaluation</th>
@@ -465,7 +581,8 @@ export default function VideoCasesPage() {
                           </th>
                         ))}
                         <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">Average</th>
-                        <th className="min-w-72 border-b border-l border-slate-200 px-4 py-3 font-semibold">Overall summary</th>
+                        <th className="min-w-72 border-b border-l border-slate-200 px-4 py-3 font-semibold">AI analysis</th>
+                        {canCombine && <th className="min-w-28 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">Actions</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 bg-white">
@@ -492,8 +609,31 @@ export default function VideoCasesPage() {
                               {overallScore === null ? "-" : overallScore.toFixed(1)}
                             </td>
                             <td className="border-l border-slate-200 px-4 py-3 leading-5 text-slate-600">
-                              {run.overall_suggestion || "-"}
+                              <p className="line-clamp-4 whitespace-pre-wrap">{getAiOutputText(run)}</p>
                             </td>
+                            {canCombine && (
+                              <td className="border-l border-slate-200 px-3 py-3 text-center">
+                                <label className="flex items-center justify-center gap-2 text-slate-600">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedAnalysisIds.includes(run.id)}
+                                    onChange={(event) => {
+                                      setSelectedAnalysisIds((current) => event.target.checked
+                                        ? [...new Set([...current, run.id])]
+                                        : current.filter((id) => id !== run.id));
+                                    }}
+                                  />
+                                  Include
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => setEvaluationToDelete(run)}
+                                  className="mt-2 text-xs font-semibold text-red-600 hover:text-red-800"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         );
                       })}
@@ -522,7 +662,7 @@ export default function VideoCasesPage() {
                         </p>
                       </div>
                       <p className="mt-3 line-clamp-3 text-sm text-slate-600">
-                        {run.overall_suggestion || "No suggestion"}
+                        {getAiOutputText(run)}
                       </p>
                     </article>
                   ))}
@@ -551,6 +691,15 @@ export default function VideoCasesPage() {
                           {new Date(aggregate.created_at).toLocaleString()}
                         </p>
                       </div>
+                      {canCombine && (
+                        <button
+                          type="button"
+                          onClick={() => setAggregateToDelete(aggregate)}
+                          className="text-xs font-semibold text-red-600 hover:text-red-800"
+                        >
+                          Delete aggregate
+                        </button>
+                      )}
                       <pre className="mt-3 overflow-auto rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
 {JSON.stringify(
   {

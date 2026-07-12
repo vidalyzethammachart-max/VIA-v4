@@ -187,6 +187,160 @@ function parseModelJson(outputText) {
   }
 }
 
+function toFiniteNumber(value) {
+  const parsed = typeof value === "string" ? Number(value) : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function computeAverageRubric(analyses) {
+  const totals = new Map();
+  const counts = new Map();
+
+  for (const analysis of analyses) {
+    const rubric = analysis?.rubric && typeof analysis.rubric === "object" ? analysis.rubric : {};
+    for (const [sectionId, questions] of Object.entries(rubric)) {
+      if (!questions || typeof questions !== "object") continue;
+      if (!totals.has(sectionId)) {
+        totals.set(sectionId, new Map());
+        counts.set(sectionId, new Map());
+      }
+
+      const sectionTotals = totals.get(sectionId);
+      const sectionCounts = counts.get(sectionId);
+
+      for (const [questionId, rawValue] of Object.entries(questions)) {
+        const score = toFiniteNumber(rawValue);
+        if (score === null) continue;
+
+        sectionTotals.set(questionId, (sectionTotals.get(questionId) || 0) + score);
+        sectionCounts.set(questionId, (sectionCounts.get(questionId) || 0) + 1);
+      }
+    }
+  }
+
+  const result = {};
+  for (const [sectionId, questionTotals] of totals.entries()) {
+    result[sectionId] = {};
+    const sectionCounts = counts.get(sectionId) || new Map();
+    for (const [questionId, total] of questionTotals.entries()) {
+      const count = sectionCounts.get(questionId) || 0;
+      result[sectionId][questionId] = count > 0 ? Number((total / count).toFixed(2)) : null;
+    }
+  }
+
+  return result;
+}
+
+function stringifyAnalysisSnapshot(analysis, index) {
+  const sourceLabel = analysis?.requested_by || analysis?.user_id || `review-${index + 1}`;
+  const createdAt = analysis?.created_at || analysis?.submitted_at || null;
+  const overallSuggestion =
+    typeof analysis?.overall_suggestion === "string" ? analysis.overall_suggestion.trim() : "";
+  const aiSummary = analysis?.analysis_ai_output || analysis?.ai_output || null;
+  const rubric = analysis?.rubric || {};
+
+  return {
+    source: sourceLabel,
+    createdAt,
+    overallSuggestion: overallSuggestion || null,
+    aiSummary,
+    rubric,
+  };
+}
+
+function buildAggregatePrompt({ caseKey, caseTitle, analyses, averageRubric, prompt }) {
+  const analysisSnapshots = analyses.map((analysis, index) => stringifyAnalysisSnapshot(analysis, index));
+  const promptText =
+    prompt ||
+    `You are an educational video evaluation assistant.
+
+Combine the individual analyses for the same video case into one unified final evaluation.
+
+Case metadata:
+- Case key: ${caseKey}
+- Case title: ${caseTitle || caseKey}
+- Number of individual analyses: ${analyses.length}
+
+Use the following data:
+1. Individual rubric scores and suggestions from each reviewer.
+2. The averaged rubric scores across all reviewers.
+3. Any AI summaries already produced for each reviewer.
+
+Return JSON only:
+{
+  "summary": "Short overall summary",
+  "consensus": "What all reviewers agree on",
+  "differences": ["Where reviewers differed"],
+  "strengths": ["Shared strengths"],
+  "issues": ["Shared issues"],
+  "recommendations": ["Final combined recommendations"],
+  "limitations": ["What cannot be concluded confidently"],
+  "final_score_averages": {},
+  "confidence": 1
+}
+
+Score confidence should be a number from 1 to 5, where 5 means the reviewers are highly aligned.
+Base the response on the supplied analyses and averages only.`;
+
+  return `${promptText}\n\nAveraged rubric:\n${JSON.stringify(averageRubric, null, 2)}\n\nIndividual analyses:\n${JSON.stringify(analysisSnapshots, null, 2)}`;
+}
+
+async function analyzeAggregateWithGemini({ caseKey, caseTitle, analyses, prompt }) {
+  const env = getRequiredGeminiEnv();
+  const averageRubric = computeAverageRubric(analyses);
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.model)}:generateContent?key=${encodeURIComponent(env.apiKey)}`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: buildAggregatePrompt({
+                caseKey,
+                caseTitle,
+                analyses,
+                averageRubric,
+                prompt,
+              }),
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.2,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini aggregate request failed: ${response.status} ${errorText}`);
+  }
+
+  const payload = await response.json();
+  const outputText = payload?.candidates?.[0]?.content?.parts
+    ?.filter((part) => typeof part?.text === "string")
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+
+  if (!outputText) {
+    throw new Error("Gemini aggregate response was empty.");
+  }
+
+  return {
+    model: env.model,
+    averageRubric,
+    outputText,
+    parsed: parseModelJson(outputText),
+  };
+}
+
 async function analyzeMediaWithGemini({ fileName, fileUrl, frames, audio, prompt }) {
   const env = getRequiredGeminiEnv();
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.model)}:generateContent?key=${encodeURIComponent(env.apiKey)}`;
@@ -305,4 +459,31 @@ export async function analyzeVideoFromUrl({ fileName, fileUrl, prompt }) {
   } finally {
     await rm(workspace, { force: true, recursive: true });
   }
+}
+
+export async function analyzeVideoCaseAggregate({ caseKey, caseTitle, analyses, prompt }) {
+  if (!caseKey) {
+    throw new Error("caseKey is required.");
+  }
+
+  if (!Array.isArray(analyses) || analyses.length === 0) {
+    throw new Error("At least one analysis is required.");
+  }
+
+  const aggregate = await analyzeAggregateWithGemini({
+    caseKey,
+    caseTitle,
+    analyses,
+    prompt,
+  });
+
+  return {
+    caseKey,
+    caseTitle: caseTitle || caseKey,
+    sourceCount: analyses.length,
+    averageRubric: aggregate.averageRubric,
+    model: aggregate.model,
+    analysis: aggregate.parsed || aggregate.outputText,
+    rawText: aggregate.parsed ? undefined : aggregate.outputText,
+  };
 }

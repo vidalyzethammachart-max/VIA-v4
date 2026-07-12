@@ -14,6 +14,7 @@ import {
   sanitizeFileName,
 } from "./videoUploadCore.js";
 import { analyzeVideoFromUrl } from "./videoAnalysisCore.js";
+import { aggregateVideoCaseAnalyses } from "./videoCaseAggregateCore.js";
 import { createR2VideoPresign } from "./r2Presign.js";
 
 const DEFAULT_ALLOWED_ORIGINS = [
@@ -71,6 +72,10 @@ app.options("/api/upload-video", (_req, res) => {
 });
 
 app.options("/api/r2-presign-upload", (_req, res) => {
+  res.status(204).end();
+});
+
+app.options("/api/analyze-video-aggregate", (_req, res) => {
   res.status(204).end();
 });
 
@@ -160,6 +165,62 @@ app.post("/api/analyze-video", express.json({ limit: "1mb" }), async (req, res) 
     console.error("[cloud-run-upload] analysis failed", error);
     res.status(502).json({
       error: error instanceof Error ? error.message : "Video analysis failed.",
+    });
+  }
+});
+
+app.post("/api/analyze-video-case", express.json({ limit: "2mb" }), async (req, res) => {
+  try {
+    const { caseTitle, caseId, sourceRuns, prompt } = req.body || {};
+    const result = await aggregateVideoCaseAnalyses({
+      caseTitle,
+      caseId,
+      sourceRuns,
+      prompt,
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("[cloud-run-upload] case aggregation failed", error);
+    res.status(502).json({
+      error: error instanceof Error ? error.message : "Video case aggregation failed.",
+    });
+  }
+});
+
+app.post("/api/analyze-video-aggregate", express.json({ limit: "2mb" }), async (req, res) => {
+  try {
+    const { caseTitle, caseId, sourceRuns, prompt } = req.body || {};
+    const result = await aggregateVideoCaseAnalyses({
+      caseTitle,
+      caseId,
+      sourceRuns,
+      prompt,
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("[cloud-run-upload] aggregate analysis failed", error);
+    res.status(502).json({
+      error: error instanceof Error ? error.message : "Aggregate video analysis failed.",
+    });
+  }
+});
+
+app.post("/api/analyze-video-case", express.json({ limit: "2mb" }), async (req, res) => {
+  try {
+    const { caseTitle, caseId, sourceRuns, prompt } = req.body || {};
+    const result = await aggregateVideoCaseAnalyses({
+      caseTitle,
+      caseId,
+      sourceRuns,
+      prompt,
+    });
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("[cloud-run-upload] case analysis failed", error);
+    res.status(502).json({
+      error: error instanceof Error ? error.message : "Video case analysis failed.",
     });
   }
 });

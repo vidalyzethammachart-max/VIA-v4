@@ -24,7 +24,7 @@ const ACTIONS: HomeAction[] = [
 ];
 
 export default function Home() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   return (
     <div className="min-h-screen bg-white">
@@ -59,6 +59,12 @@ export default function Home() {
                     {t(action.title)}
                   </Link>
                 ))}
+                <Link
+                  to="/video-cases"
+                  className="ui-hover-button inline-flex min-h-12 items-center justify-center rounded-lg border border-slate-300 bg-white px-6 py-3 text-center text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                >
+                  {language === "th" ? "จัดการกลุ่มวิดีโอ" : "Video cases"}
+                </Link>
               </div>
             </div>
 

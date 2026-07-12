@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
@@ -9,6 +9,7 @@ import { useLanguage } from "../i18n/useLanguage";
 import { normalizeRole, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import { roleRequestService } from "../services/roleRequestService";
+import { resolveVideoCaseMembership } from "../services/videoCaseService";
 import type { EvaluationPayload, Rubric } from "../services/evaluationService";
 
 const MAX_VIDEO_SIZE_BYTES = 1024 * 1024 * 1024;
@@ -92,7 +93,6 @@ function validateVideoFile(file: File | null) {
   }
   return null;
 }
-
 function normalizeScore(value: unknown): number {
   const n = Math.round(Number(value || 0));
   return n >= 1 && n <= 5 ? n : 0;
@@ -110,6 +110,13 @@ function getLegacyUploadUrl() {
   uploadUrl.pathname = "/api/upload-video";
   uploadUrl.search = "";
   return uploadUrl.toString();
+}
+
+function getVideoAnalysisUrl() {
+  const analysisUrl = new URL(VIDEO_UPLOAD_API_URL, window.location.origin);
+  analysisUrl.pathname = "/api/analyze-video";
+  analysisUrl.search = "";
+  return analysisUrl.toString();
 }
 
 function readJsonError(responseText: string) {
@@ -154,12 +161,108 @@ function createSubmissionId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function createShortCode() {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = new Uint8Array(4);
+
+  if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  return Array.from(bytes)
+    .map((value) => alphabet[value % alphabet.length])
+    .join("");
+}
+
+function normalizeCaseKeyPart(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function buildVideoCaseKey(orderNumber: string, subjectName: string, shortCode: string) {
+  const orderPart = normalizeCaseKeyPart(orderNumber);
+  const subjectPart = normalizeCaseKeyPart(subjectName);
+  const shortCodePart = normalizeCaseKeyPart(shortCode);
+
+  if (!orderPart || !subjectPart || !shortCodePart) {
+    return "";
+  }
+
+  return `${orderPart}-${subjectPart}-${shortCodePart}`;
+}
+
+function buildVideoCaseDisplayLabel(orderNumber: string, subjectName: string) {
+  const orderPart = orderNumber.trim();
+  const subjectPart = subjectName.trim();
+
+  if (!orderPart || !subjectPart) {
+    return "";
+  }
+
+  return `${orderPart}-${subjectPart}`;
+}
+
 function FormSubmit() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { language, t } = useLanguage();
   const sections = getSections(language);
   const likertLabels = getLikertLabels(language);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const legacyVideoCaseUi = language === "th"
+    ? {
+        title: "à¸à¸¥à¸¸à¹ˆà¸¡à¸§à¸´à¸”à¸µà¹‚à¸­",
+        description: "à¸£à¸°à¸šà¸šà¸ˆà¸°à¸ªà¸£à¹‰à¸²à¸‡à¸£à¸«à¸±à¸ªà¹€à¸„à¸ªà¸ˆà¸²à¸à¹€à¸¥à¸‚à¸—à¸µà¹ˆà¸ªà¸±à¹ˆà¸‡à¸‡à¸²à¸™ à¸Šà¸·à¹ˆà¸­à¸«à¸±à¸§à¸‚à¹‰à¸­ à¹à¸¥à¸°à¸£à¸«à¸±à¸ªà¸ªà¸±à¹‰à¸™à¸­à¸±à¸•à¹‚à¸™à¸¡à¸±à¸•à¸´",
+        keyLabel: "à¸£à¸«à¸±à¸ªà¸à¸¥à¸¸à¹ˆà¸¡à¸§à¸´à¸”à¸µà¹‚à¸­",
+        keyPlaceholder: "à¹€à¸Šà¹ˆà¸™ video-001",
+        leaderLabel: "à¸‰à¸±à¸™à¹€à¸›à¹‡à¸™à¸«à¸±à¸§à¸«à¸™à¹‰à¸²à¸Šà¸¸à¸”à¸™à¸µà¹‰",
+        leaderDescription: "à¸–à¹‰à¸²à¹€à¸„à¸ªà¸™à¸µà¹‰à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸«à¸±à¸§à¸«à¸™à¹‰à¸² à¸„à¸¸à¸“à¸ªà¸²à¸¡à¸²à¸£à¸–à¸£à¸±à¸šà¸šà¸—à¸«à¸±à¸§à¸«à¸™à¹‰à¸²à¹„à¸”à¹‰",
+        keyRequired: "à¸à¸£à¸¸à¸“à¸²à¸£à¸°à¸šà¸¸à¹€à¸¥à¸‚à¸—à¸µà¹ˆà¸ªà¸±à¹ˆà¸‡à¸‡à¸²à¸™à¹à¸¥à¸°à¸Šà¸·à¹ˆà¸­à¸«à¸±à¸§à¸‚à¹‰à¸­",
+        analyzing: "à¸à¸³à¸¥à¸±à¸‡à¸§à¸´à¹€à¸„à¸£à¸²à¸°à¸«à¹Œà¸§à¸´à¸”à¸µà¹‚à¸­",
+      }
+    : {
+        title: "Video case",
+        description: "Enter the order number and subject name, then the system will generate the case key automatically.",
+        keyLabel: "Video case key (auto-generated)",
+        keyPlaceholder: "e.g. 001-Test",
+        leaderLabel: "I am the case leader",
+        leaderDescription: "If the case has no leader yet, you can claim the role.",
+        keyRequired: "Please enter an order number and a subject name.",
+        analyzing: "Analyzing video",
+      };
+  void legacyVideoCaseUi;
+  const videoCaseUi = language === "th"
+    ? {
+        title: "กลุ่มวิดีโอ",
+        description: "ระบบจะสร้างเคสจากเลขที่สั่งงานและชื่อหัวข้อโดยอัตโนมัติ เพื่อให้หลายคนประเมินงานเดียวกันได้",
+        keyLabel: "Video Case",
+        keyPlaceholder: "รอกรอกเลขที่สั่งงานและชื่อหัวข้อ",
+        leaderLabel: "ฉันเป็นหัวหน้าเคสนี้",
+        leaderDescription: "หัวหน้าเคสสามารถรวมผลของผู้ประเมินทุกคนและสั่งให้ AI วิเคราะห์ใหม่ได้",
+        keyRequired: "กรุณาระบุเลขที่สั่งงานและชื่อหัวข้อ",
+        analyzing: "กำลังวิเคราะห์วิดีโอ",
+      }
+    : {
+        title: "Video case",
+        description: "The case is generated automatically from the order number and subject name so multiple people can review the same work.",
+        keyLabel: "Video Case",
+        keyPlaceholder: "Waiting for an order number and subject name",
+        leaderLabel: "I am the case leader",
+        leaderDescription: "The case leader can combine all reviewers' results and ask AI to analyze them again.",
+        keyRequired: "Please enter an order number and a subject name.",
+        analyzing: "Analyzing video",
+      };
+  const videoCaseId = new URLSearchParams(location.search).get("caseId") || null;
+  const showLegacyCaseSummary = new URLSearchParams(location.search).has("legacyCaseSummary");
 
   const [orderNumber, setOrderNumber] = useState("");
   const [subjectName, setSubjectName] = useState("");
@@ -180,6 +283,7 @@ function FormSubmit() {
   const [submissionMode, setSubmissionMode] = useState<"data_only" | "with_video">("data_only");
   const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [submissionProgress, setSubmissionProgress] = useState<SubmissionProgress | null>(null);
+  const [shortCode, setShortCode] = useState(() => createShortCode());
 
   useEffect(() => {
     void supabase.auth.getUser().then(({ data: { user } }) => {
@@ -199,6 +303,26 @@ function FormSubmit() {
           setUserRole(normalizeRole(data?.role));
         });
     });
+
+    const caseId = new URLSearchParams(window.location.search).get("caseId");
+    if (caseId) {
+      void supabase
+        .from("video_cases")
+        .select("case_key, order_number, subject_name, short_code")
+        .eq("id", caseId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.order_number) {
+            setOrderNumber(data.order_number);
+          }
+          if (data?.subject_name) {
+            setSubjectName(data.subject_name);
+          }
+          if (data?.short_code) {
+            setShortCode(data.short_code);
+          }
+        });
+    }
   }, []);
 
   const handleToggleAnswer = (
@@ -230,7 +354,7 @@ function FormSubmit() {
 
       section.questions.forEach((question) => {
         const value = sectionAnswers[question.id];
-        rubric[section.id][question.storageKey] = typeof value === "number" ? value : null;
+        rubric[section.id][question.id] = typeof value === "number" ? value : null;
       });
     });
 
@@ -269,7 +393,6 @@ function FormSubmit() {
       if (!VIDEO_UPLOAD_API_URL) {
         return "ยังไม่ได้ตั้งค่า VITE_UPLOAD_VIDEO_API_URL สำหรับอัปโหลดวิดีโอ";
       }
-
       const videoError = validateVideoFile(selectedVideoFile);
       if (videoError) {
         return videoError;
@@ -292,6 +415,7 @@ function FormSubmit() {
       overall_suggestion: comment.trim(),
       rubric: buildRubric(),
       Email: userEmail || undefined,
+      video_case_id: videoCaseId || undefined,
     };
   };
 
@@ -301,6 +425,7 @@ function FormSubmit() {
     setAnswers({});
     setComment("");
     setSelectedVideoFile(null);
+    setShortCode(createShortCode());
     setSubmissionMode("data_only");
     setShowValidation(false);
     if (videoInputRef.current) videoInputRef.current.value = "";
@@ -313,6 +438,8 @@ function FormSubmit() {
     showValidation &&
     submissionMode === "with_video" &&
     Boolean(validateVideoFile(selectedVideoFile));
+  const generatedCaseKey = buildVideoCaseKey(orderNumber, subjectName, shortCode);
+  const displayCaseLabel = buildVideoCaseDisplayLabel(orderNumber, subjectName);
 
   useEffect(() => {
     if (!showValidation) {
@@ -351,7 +478,15 @@ function FormSubmit() {
     }
   };
 
-  const saveEvaluation = async (payload: EvaluationPayload) => {
+  const saveEvaluation = async (
+    payload: EvaluationPayload,
+    options: {
+      videoCaseId: string | null;
+      analysisAiModel: string | null;
+      analysisAiOutput: Record<string, unknown> | null;
+      analysisAiRawText: string | null;
+    },
+  ) => {
     const {
       data: { user },
       error: userError,
@@ -366,10 +501,15 @@ function FormSubmit() {
       .insert([
         {
           user_id: user.id,
+          video_case_id: options.videoCaseId,
           order_number: payload.order_number ?? null,
           subject_name: payload.subject_name,
           overall_suggestion: payload.overall_suggestion ?? null,
           rubric: payload.rubric,
+          analysis_kind: "human",
+          analysis_ai_model: options.analysisAiModel,
+          analysis_ai_output: options.analysisAiOutput,
+          analysis_ai_raw_text: options.analysisAiRawText,
           document_status: "pending",
           document_error: null,
         },
@@ -440,7 +580,7 @@ function FormSubmit() {
 
   const createR2Presign = async (
     videoFile: File,
-    evaluationId: number,
+    evaluationId: number | string,
   ): Promise<R2PresignResponse> => {
     const response = await fetch(getR2PresignUrl(), {
       method: "POST",
@@ -508,10 +648,10 @@ function FormSubmit() {
 
   const uploadVideoToR2 = async (
     videoFile: File,
-    evaluationId: number,
+    recordId: number | string,
     onUploadProgress?: (percent: number) => void,
   ): Promise<R2UploadedVideo> => {
-    const presign = await createR2Presign(videoFile, evaluationId);
+    const presign = await createR2Presign(videoFile, recordId);
 
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -557,6 +697,7 @@ function FormSubmit() {
     videoFile?: File | null,
     evaluationId?: number,
     onUploadProgress?: (percent: number) => void,
+    preUploadedVideo?: R2UploadedVideo | null,
   ) => {
     if (IS_LEGACY_UPLOAD_MODE && videoFile) {
       if (!evaluationId) {
@@ -582,7 +723,7 @@ function FormSubmit() {
       throw new Error("evaluationId is required for video upload.");
     }
 
-    const uploadedVideo = await uploadVideoToR2(videoFile, evaluationId, onUploadProgress);
+    const uploadedVideo = preUploadedVideo || await uploadVideoToR2(videoFile, evaluationId, onUploadProgress);
     const payloadWithVideo = webhookPayload.map((item) => ({
       ...item,
       hasVideo: true,
@@ -621,6 +762,9 @@ function FormSubmit() {
     try {
       const submissionId = createSubmissionId();
       const videoFile = submissionMode === "with_video" ? selectedVideoFile : null;
+      let videoCaseId: string | null = null;
+      let uploadedVideo: R2UploadedVideo | null = null;
+      let individualAnalysis: Record<string, unknown> | null = null;
 
       if (submissionMode === "with_video") {
         if (!videoFile) {
@@ -636,11 +780,87 @@ function FormSubmit() {
         label: t("form.progressSaving"),
       });
 
-      const evaluationId = await saveEvaluation(payload);
+      if (generatedCaseKey) {
+        const resolvedCase = await resolveVideoCaseMembership({
+          orderNumber: orderNumber.trim(),
+          subjectName: subjectName.trim(),
+          shortCode,
+          caseTitle: subjectName.trim() || generatedCaseKey,
+          sourceFileName: videoFile?.name ?? null,
+          videoObjectKey: null,
+          memberRole: "member",
+        });
+
+        videoCaseId = resolvedCase.id;
+      }
 
       setSubmissionProgress({
-        percent: videoFile ? 20 : 65,
-        label: videoFile ? t("form.progressUploading") : t("form.progressSending"),
+        percent: 20,
+        label: videoFile ? t("form.progressUploading") : t("form.progressSaving"),
+      });
+
+      if (videoFile) {
+        uploadedVideo = await uploadVideoToR2(videoFile, submissionId, (uploadPercent) => {
+          const mappedPercent = IS_LEGACY_UPLOAD_MODE
+            ? Math.min(uploadPercent, 90)
+            : 20 + Math.round(uploadPercent * 0.45);
+
+          setSubmissionProgress({
+            percent: Math.min(mappedPercent, 90),
+            label: t("form.progressUploading"),
+          });
+        });
+
+        await resolveVideoCaseMembership({
+          orderNumber: orderNumber.trim(),
+          subjectName: subjectName.trim(),
+          shortCode,
+          caseTitle: subjectName.trim() || generatedCaseKey,
+          sourceFileName: uploadedVideo.fileName,
+          videoObjectKey: uploadedVideo.objectKey,
+          memberRole: "member",
+        });
+
+        setSubmissionProgress({
+          percent: 66,
+        label: videoCaseUi.analyzing,
+        });
+
+        const analysisResponse = await fetch(getVideoAnalysisUrl(), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fileName: uploadedVideo.fileName,
+            fileUrl: uploadedVideo.downloadUrl,
+          }),
+        });
+
+        const analysisText = await analysisResponse.text().catch(() => "");
+        if (!analysisResponse.ok) {
+          throw new Error(
+            `Video analysis failed: ${analysisResponse.status}${analysisText ? ` ${analysisText}` : ""}`,
+          );
+        }
+
+        try {
+          individualAnalysis = analysisText ? (JSON.parse(analysisText) as Record<string, unknown>) : null;
+        } catch {
+          individualAnalysis = { rawText: analysisText };
+        }
+      }
+
+      const evaluationId = await saveEvaluation(payload, {
+        videoCaseId,
+        analysisAiModel: typeof individualAnalysis?.model === "string" ? individualAnalysis.model : null,
+        analysisAiOutput: individualAnalysis,
+        analysisAiRawText: typeof individualAnalysis?.rawText === "string" ? individualAnalysis.rawText : null,
+      });
+
+      setSubmissionProgress({
+        percent: 78,
+        label: t("form.progressSending"),
       });
 
       await sendEvaluationToN8n(
@@ -657,6 +877,7 @@ function FormSubmit() {
             label: t("form.progressUploading"),
           });
         },
+        uploadedVideo,
       );
 
       setSubmissionProgress({
@@ -772,11 +993,61 @@ function FormSubmit() {
           </section>
         )}
 
+        {(videoCaseId || generatedCaseKey) && (
+          <section className="ui-hover-card mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+            <h2 className="text-sm font-semibold text-slate-900">
+              {language === "th" ? "เชื่อมกับ Video Case แล้ว" : "Video case linked"}
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              {language === "th"
+                ? videoCaseId
+                  ? `แบบประเมินนี้จะถูกบันทึกในเคส ID ${videoCaseId}`
+                  : "แบบประเมินนี้จะถูกบันทึกในเคสที่สร้างจากเลขที่สั่งงานและชื่อหัวข้อ"
+                : videoCaseId
+                  ? `This evaluation will be saved to case ID ${videoCaseId}.`
+                  : "This evaluation will be saved to the case generated from the order number and subject name."}
+            </p>
+            {displayCaseLabel && (
+              <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                {displayCaseLabel}
+              </p>
+            )}
+            <div className="mt-3">
+              <Link to="/video-cases" className="btn-secondary text-center">
+                {language === "th" ? "เปิดหน้าจัดการเคส" : "Open video cases"}
+              </Link>
+            </div>
+          </section>
+        )}
+
+        {showLegacyCaseSummary && (videoCaseId || generatedCaseKey) && (
+          <section className="ui-hover-card mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+            <h2 className="text-sm font-semibold text-slate-900">à¸œà¸¹à¸à¸à¸±à¸š Video case à¹à¸¥à¹‰à¸§</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              {videoCaseId
+                ? `à¸£à¸²à¸¢à¸à¸²à¸£à¸™à¸µà¹‰à¸ˆà¸°à¸–à¸¹à¸à¸œà¸¹à¸à¸à¸±à¸šà¹€à¸„à¸ª ID ${videoCaseId}.`
+                : "à¸£à¸²à¸¢à¸à¸²à¸£à¸™à¸µà¹‰à¸ˆà¸°à¸–à¸¹à¸à¸œà¸¹à¸à¸à¸±à¸šà¹€à¸„à¸ªà¸—à¸µà¹ˆà¸ªà¸£à¹‰à¸²à¸‡à¸ˆà¸²à¸à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¹ƒà¸™à¸Ÿà¸­à¸£à¹Œà¸¡"}
+            </p>
+            {displayCaseLabel && (
+              <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700">
+                {displayCaseLabel}
+              </p>
+            )}
+            <div className="mt-3">
+              <Link to="/video-cases" className="btn-secondary text-center">
+                à¹€à¸›à¸´à¸”à¸«à¸™à¹‰à¸²à¸ˆà¸±à¸”à¸à¸²à¸£à¹€à¸„à¸ª
+              </Link>
+            </div>
+          </section>
+        )}
+
         <form noValidate onSubmit={handleSubmit} className="space-y-6">
           <section className="ui-hover-card space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-end">
               <div className="space-y-1 md:w-40">
-                <label className="text-xs font-medium text-slate-700">{t("form.orderNumber")}</label>
+                <label className="text-xs font-medium text-slate-700">
+                  {t("form.orderNumber")} <span className="text-red-500">*</span>
+                </label>
                 <input
                   value={orderNumber}
                   onChange={(e) => setOrderNumber(e.target.value)}
@@ -795,7 +1066,9 @@ function FormSubmit() {
               </div>
 
               <div className="flex-1 space-y-1">
-                <label className="text-xs font-medium text-slate-700">{t("form.subjectName")}</label>
+                <label className="text-xs font-medium text-slate-700">
+                  {t("form.subjectName")} <span className="text-red-500">*</span>
+                </label>
                 <input
                   value={subjectName}
                   onChange={(e) => setSubjectName(e.target.value)}
@@ -853,7 +1126,9 @@ function FormSubmit() {
           </section>
 
           <section className="ui-hover-card space-y-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
-            <label className="text-sm font-semibold text-slate-800">{t("form.overallSuggestion")}</label>
+            <label className="text-sm font-semibold text-slate-800">
+              {t("form.overallSuggestion")} <span className="text-red-500">*</span>
+            </label>
             <p className="text-xs text-slate-500">{t("form.overallSuggestionDescription")}</p>
             <textarea
               value={comment}
@@ -876,16 +1151,23 @@ function FormSubmit() {
           <section className="ui-hover-card space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
             <div>
               <h2 className="text-sm font-semibold text-slate-900 md:text-base">
-                {t("form.submissionModeTitle")}
+                {videoCaseUi.title}
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                {t("form.submissionModeDescription")}
+                {videoCaseUi.description}
               </p>
-              <p className="mt-1 text-[11px] text-slate-400">
-                {IS_LEGACY_UPLOAD_MODE
-                  ? "Legacy mode: upload goes through the backend relay."
-                  : "R2 mode: upload goes directly to Cloudflare R2."}
-              </p>
+            </div>
+            <div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-medium text-slate-700">{videoCaseUi.keyLabel}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  ระบบจะสร้างจากเลขที่สั่งงาน + ชื่อหัวข้อ + รหัสสั้นภายในอัตโนมัติ
+                </p>
+                <p className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">
+                  {displayCaseLabel || videoCaseUi.keyPlaceholder}
+                </p>
+                <p className="mt-2 text-[11px] text-slate-400">รหัสภายในถูกซ่อนจากผู้ใช้</p>
+              </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <label
@@ -910,7 +1192,6 @@ function FormSubmit() {
                   {t("form.submitDataOnlyDesc")}
                 </span>
               </label>
-
               <label
                 className={`cursor-pointer rounded-xl border p-4 motion-safe:transition ${
                   submissionMode === "with_video"
@@ -934,40 +1215,26 @@ function FormSubmit() {
                 </span>
               </label>
             </div>
-          </section>
-
-          {submissionMode === "with_video" && (
-            <section
-              className={`ui-hover-card space-y-3 rounded-2xl bg-white p-4 shadow-sm md:p-6 ${
-                isVideoInvalid
-                  ? "border border-red-300 ring-2 ring-red-100"
-                  : "border border-slate-200"
-              }`}
-            >
-            <div>
-              <label className="text-sm font-semibold text-slate-800">
-                {t("form.videoUpload")}
-              </label>
-              <p className="mt-1 text-xs text-slate-500">
-                {t("form.videoUploadDescription")}
-              </p>
-            </div>
-            <input
-              ref={videoInputRef}
-              type="file"
-              name="video"
-              accept=".mp4,.m4v,video/mp4,video/x-m4v"
-              required
-              onChange={handleVideoChange}
-              disabled={isSaving}
-              className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-primary/90 disabled:opacity-60"
-            />
-            {selectedVideoFile && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                <p className="font-medium text-slate-900">{selectedVideoFile.name}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {selectedVideoFile.type || "video/*"} | {formatBytes(selectedVideoFile.size)}
-                </p>
+            {submissionMode === "with_video" && (
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <label className="text-sm font-semibold text-slate-800">
+                  {t("form.videoUpload")}
+                </label>
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  name="video"
+                  accept=".mp4,.m4v,video/mp4,video/x-m4v"
+                  required
+                  onChange={handleVideoChange}
+                  disabled={isSaving}
+                  className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-primary/90 disabled:opacity-60"
+                />
+                {selectedVideoFile && (
+                  <p className="text-xs text-slate-600">
+                    {selectedVideoFile.name} | {formatBytes(selectedVideoFile.size)}
+                  </p>
+                )}
               </div>
             )}
             {isVideoInvalid && (
@@ -975,6 +1242,41 @@ function FormSubmit() {
                 {validateVideoFile(selectedVideoFile)}
               </p>
             )}
+          </section>
+
+          <section className="ui-hover-card space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900 md:text-base">{t("form.submissionModeTitle")}</h2>
+              <p className="mt-1 text-xs text-slate-500">{t("form.submissionModeDescription")}</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className={`cursor-pointer rounded-xl border p-4 motion-safe:transition ${submissionMode === "data_only" ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-slate-200 bg-white hover:border-primary/40"}`}>
+                <input type="radio" name="submission_mode" value="data_only" checked={submissionMode === "data_only"} onChange={() => handleSubmissionModeChange("data_only")} className="sr-only" />
+                <span className="text-sm font-semibold text-slate-900">{t("form.submitDataOnly")}</span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">{t("form.submitDataOnlyDesc")}</span>
+              </label>
+              <label className={`cursor-pointer rounded-xl border p-4 motion-safe:transition ${submissionMode === "with_video" ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-slate-200 bg-white hover:border-primary/40"}`}>
+                <input type="radio" name="submission_mode" value="with_video" checked={submissionMode === "with_video"} onChange={() => handleSubmissionModeChange("with_video")} className="sr-only" />
+                <span className="text-sm font-semibold text-slate-900">{t("form.submitWithVideo")}</span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">{t("form.submitWithVideoDesc")}</span>
+              </label>
+            </div>
+          </section>
+
+          {submissionMode === "with_video" && (
+            <section className={`ui-hover-card space-y-3 rounded-2xl bg-white p-4 shadow-sm md:p-6 ${isVideoInvalid ? "border border-red-300 ring-2 ring-red-100" : "border border-slate-200"}`}>
+              <div>
+                <label className="text-sm font-semibold text-slate-800">{t("form.videoUpload")}</label>
+                <p className="mt-1 text-xs text-slate-500">{t("form.videoUploadDescription")}</p>
+              </div>
+              <input ref={videoInputRef} type="file" name="video" accept=".mp4,.m4v,video/mp4,video/x-m4v" required onChange={handleVideoChange} disabled={isSaving} className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-primary/90 disabled:opacity-60" />
+              {selectedVideoFile && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                  <p className="font-medium text-slate-900">{selectedVideoFile.name}</p>
+                  <p className="mt-1 text-xs text-slate-500">{selectedVideoFile.type || "video/*"} | {formatBytes(selectedVideoFile.size)}</p>
+                </div>
+              )}
+              {isVideoInvalid && <p className="text-xs font-medium text-red-600">{validateVideoFile(selectedVideoFile)}</p>}
             </section>
           )}
 

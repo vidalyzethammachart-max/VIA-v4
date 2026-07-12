@@ -14,6 +14,7 @@ type EvaluationItem = {
   order_number: string | null;
   subject_name: string | null;
   overall_suggestion: string | null;
+  video_case_id: string | null;
   pdf_storage_path: string | null;
   docx_storage_path: string | null;
   document_status: "pending" | "ready" | "failed";
@@ -62,7 +63,7 @@ export default function MyFormsDashboard() {
 
       const { data, error } = await supabase
         .from("evaluations")
-        .select("id, user_id, order_number, subject_name, overall_suggestion, pdf_storage_path, docx_storage_path, document_status, document_error, created_at")
+        .select("id, user_id, order_number, subject_name, overall_suggestion, video_case_id, pdf_storage_path, docx_storage_path, document_status, document_error, created_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
@@ -222,6 +223,9 @@ export default function MyFormsDashboard() {
             <Link to="/form-submit" className="btn-primary mt-3 inline-flex">
               {t("myForms.submitNewForm")}
             </Link>
+            <Link to="/video-cases" className="btn-secondary mt-3 inline-flex">
+              Video cases
+            </Link>
             <p className="mt-2 text-sm text-slate-500">{t("myForms.quickActionDesc")}</p>
           </div>
         </section>
@@ -276,6 +280,12 @@ export default function MyFormsDashboard() {
                       </span>
                     </div>
                     <p className="mt-1 text-sm text-slate-500">{formatDate(item.created_at)}</p>
+                    {item.video_case_id && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        Case ID: {item.video_case_id} ·{" "}
+                        <span className="font-medium text-[#04418b]">Linked case</span>
+                      </p>
+                    )}
                     <p className="mt-3 line-clamp-2 text-sm text-slate-600">
                       {item.overall_suggestion?.trim() || t("myForms.noSuggestion")}
                     </p>

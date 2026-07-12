@@ -155,7 +155,8 @@ export function getSections(locale: Locale): Section[] {
     questions: section.questions.map((question) => ({
       id: question.id,
       label: locale === "th" ? question.th : question.en,
-      storageKey: question.th,
+      // Persist stable IDs; labels may change with language or copy edits.
+      storageKey: question.id,
     })),
   }));
 }

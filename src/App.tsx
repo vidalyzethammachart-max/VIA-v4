@@ -8,6 +8,7 @@ import Profile from "./page/Profile";
 import Dashboard from "./page/Dashboard";
 import AdminDashboard from "./page/AdminDashboard";
 import RoleRequestsPage from "./page/RoleRequestsPage";
+import VideoCasesPage from "./page/VideoCasesPage";
 import ForgotPassword from "./page/ForgotPassword";
 import ResetPassword from "./page/ResetPassword";
 import MyFormsDashboard from "./page/MyFormsDashboard";
@@ -99,6 +100,14 @@ export default function App() {
             }
           />
           <Route
+            path="/video-cases"
+            element={
+              <ProtectedRoute>
+                <VideoCasesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin"
             element={
               <ProtectedRoute requiredRole="admin">
@@ -115,6 +124,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <RoleRequestsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/video-cases"
+            element={
+              <ProtectedRoute>
+                <VideoCasesPage />
               </ProtectedRoute>
             }
           />

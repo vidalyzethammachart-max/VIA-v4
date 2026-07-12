@@ -1,0 +1,132 @@
+{
+  "info": {
+    "_postman_id": "4a482074-0ef0-4da7-8549-b6197b5e31ae",
+    "name": "VIA V4 - Video Case Test",
+    "description": "Run requests in order: 1) Create/Join Video Case, 2) Create Evaluation, 3) Send to n8n.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "supabase_url", "value": "https://YOUR_PROJECT_REF.supabase.co" },
+    { "key": "supabase_anon_key", "value": "PASTE_VITE_SUPABASE_ANON_KEY" },
+    { "key": "access_token", "value": "PASTE_LOGGED_IN_USER_ACCESS_TOKEN" },
+    { "key": "user_id", "value": "PASTE_LOGGED_IN_USER_UUID" },
+    { "key": "local_app_url", "value": "http://localhost:5173" },
+    { "key": "order_number", "value": "001" },
+    { "key": "subject_name", "value": "Postman Test" },
+    { "key": "short_code", "value": "pm001" },
+    { "key": "member_role", "value": "member" },
+    { "key": "video_case_id", "value": "" },
+    { "key": "evaluation_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Create or Join Video Case",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"p_order_number\": \"{{order_number}}\",\n  \"p_subject_name\": \"{{subject_name}}\",\n  \"p_short_code\": \"{{short_code}}\",\n  \"p_case_title\": \"{{subject_name}}\",\n  \"p_source_file_name\": null,\n  \"p_video_object_key\": null,\n  \"p_member_role\": \"{{member_role}}\"\n}"
+        },
+        "url": "{{supabase_url}}/rest/v1/rpc/resolve_video_case_membership"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Video case created or found', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('video_case_id', pm.response.json().id);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Create Evaluation",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Prefer", "value": "return=representation" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "[\n  {\n    \"user_id\": \"{{user_id}}\",\n    \"video_case_id\": \"{{video_case_id}}\",\n    \"order_number\": \"{{order_number}}\",\n    \"subject_name\": \"{{subject_name}}\",\n    \"overall_suggestion\": \"Test submission from Postman\",\n    \"rubric\": {\n      \"1\": { \"q1\": 5, \"q2\": 4, \"q3\": 4, \"q4\": 5, \"q5\": 4 },\n      \"2\": { \"q1\": 4, \"q2\": 4, \"q3\": 5, \"q4\": 4, \"q5\": 4 },\n      \"3\": { \"q1\": 4, \"q2\": 4, \"q3\": 4, \"q4\": 5, \"q5\": 4 },\n      \"4\": { \"q1\": 5, \"q2\": 4, \"q3\": 4, \"q4\": 4, \"q5\": 5 },\n      \"5\": { \"q1\": 4, \"q2\": 5, \"q3\": 4, \"q4\": 4, \"q5\": 4 },\n      \"6\": { \"q1\": 4, \"q2\": 4, \"q3\": 4, \"q4\": 5, \"q5\": 4 },\n      \"7\": { \"q1\": 5, \"q2\": 4, \"q3\": 4, \"q4\": 4, \"q5\": 4 },\n      \"8\": { \"q1\": 4, \"q2\": 4, \"q3\": 5, \"q4\": 4, \"q5\": 4 },\n      \"9\": { \"q1\": 4, \"q2\": 5, \"q3\": 4, \"q4\": 4, \"q5\": 5 }\n    },\n    \"analysis_kind\": \"human\",\n    \"document_status\": \"pending\"\n  }\n]"
+        },
+        "url": "{{supabase_url}}/rest/v1/evaluations"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const token = pm.collectionVariables.get('access_token');",
+              "const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+              "const claims = JSON.parse(atob(payload));",
+              "pm.collectionVariables.set('user_id', claims.sub);"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Evaluation created', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('evaluation_id', String(pm.response.json()[0].id));",
+              "pm.test('Section averages were calculated', () => pm.expect(pm.response.json()[0].section_averages).to.not.be.empty;",
+              "pm.test('Evaluation ID was saved', () => pm.expect(pm.collectionVariables.get('evaluation_id')).to.match(/^\\d+$/));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Send Evaluation to n8n",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "[\n  {\n    \"evaluation_id\": 0,\n    \"order_number\": \"{{order_number}}\",\n    \"subjectName\": \"{{subject_name}}\",\n    \"rubric\": [\n      { \"key\": \"language_and_script\", \"name\": \"Language & Script\", \"scores\": [5, 4, 4, 5, 4] },\n      { \"key\": \"camera_angle\", \"name\": \"Camera Angle\", \"scores\": [4, 4, 5, 4, 4] },\n      { \"key\": \"composition\", \"name\": \"Composition\", \"scores\": [4, 4, 4, 5, 4] },\n      { \"key\": \"narrator\", \"name\": \"Narrator\", \"scores\": [5, 4, 4, 4, 5] },\n      { \"key\": \"story_sequence\", \"name\": \"Story Sequence\", \"scores\": [4, 5, 4, 4, 4] },\n      { \"key\": \"scene_and_location\", \"name\": \"Scene & Location\", \"scores\": [4, 4, 4, 5, 4] },\n      { \"key\": \"lighting\", \"name\": \"Lighting\", \"scores\": [5, 4, 4, 4, 4] },\n      { \"key\": \"audio\", \"name\": \"Audio\", \"scores\": [4, 4, 5, 4, 4] },\n      { \"key\": \"graphics_and_visuals\", \"name\": \"Graphics & Visuals\", \"scores\": [4, 5, 4, 4, 5] }\n    ],\n    \"suggestions\": [\"Test submission from Postman\"],\n    \"overallSuggestionRaw\": \"Test submission from Postman\",\n    \"hasVideo\": false\n  }\n]"
+        },
+        "url": "{{local_app_url}}/api/n8n-webhook"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const evaluationId = Number(pm.collectionVariables.get('evaluation_id'));",
+              "if (!Number.isInteger(evaluationId) || evaluationId <= 0) { throw new Error('Create Evaluation (request 2) must succeed before sending to n8n.'); }",
+              "const body = JSON.parse(pm.request.body.raw);",
+              "body[0].evaluation_id = evaluationId;",
+              "pm.request.body.update(JSON.stringify(body));"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('n8n workflow started', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

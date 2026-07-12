@@ -97,6 +97,7 @@ export function SectionCard({
                     }`}
                   >
                     {question.label}
+                    <span className="ml-1 text-red-500">*</span>
                   </p>
                 </div>
 

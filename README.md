@@ -75,6 +75,29 @@ Video submissions use Cloudflare R2 direct upload to avoid request body limits o
 
 n8n should download the video from `payload[0].video.downloadUrl` instead of expecting a multipart binary field. Do not send large video binaries through `/api/n8n-webhook`; that proxy accepts JSON payloads only.
 
+## n8n AI Result Callback
+
+The n8n workflow must call `POST https://YOUR_FRONTEND_DOMAIN/api/n8n-analysis-result` after its AI node finishes. Configure these server-only deployment variables (never expose them as `VITE_*`):
+
+```env
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
+N8N_CALLBACK_SECRET=GENERATE_A_LONG_RANDOM_SECRET
+```
+
+Set request header `x-n8n-callback-secret` to the same `N8N_CALLBACK_SECRET`, and send this JSON from n8n:
+
+```json
+{
+  "evaluation_id": 217,
+  "model": "gemini-2.5-flash",
+  "analysis": {
+    "summary": "AI evaluation result"
+  }
+}
+```
+
+`analysis` is stored in `evaluations.analysis_ai_output`. If the AI result is plain text, send it as `raw_text` and it is stored in `evaluations.analysis_ai_raw_text`.
+
 For uploads larger than 250MB, the upload backend environment must include all R2 variables:
 
 - `R2_ACCOUNT_ID`

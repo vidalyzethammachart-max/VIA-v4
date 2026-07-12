@@ -9,6 +9,7 @@ import path from "node:path";
 import FormData from "form-data";
 import multer from "multer";
 import { analyzeVideoFromUrl } from "./server/videoAnalysisCore.js";
+import { aggregateVideoCaseAnalyses } from "./server/videoCaseAggregateCore.js";
 import { createR2VideoPresign } from "./server/r2Presign.js";
 
 const PORT = Number(process.env.PORT || 8080);
@@ -96,6 +97,63 @@ app.post("/api/analyze-video", express.json({ limit: "1mb" }), async (req, res) 
     console.error("[upload-api] analysis failed", error);
     res.status(502).json({
       error: error instanceof Error ? error.message : "Video analysis failed.",
+    });
+  }
+});
+
+app.post("/api/analyze-video-case", express.json({ limit: "2mb" }), async (req, res) => {
+  try {
+    const { caseTitle, caseId, sourceRuns, prompt } = req.body || {};
+    const result = await aggregateVideoCaseAnalyses({
+      caseTitle,
+      caseId,
+      sourceRuns,
+      prompt,
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("[upload-api] case aggregation failed", error);
+    res.status(502).json({
+      error: error instanceof Error ? error.message : "Video case aggregation failed.",
+    });
+  }
+});
+
+app.post("/api/analyze-video-aggregate", express.json({ limit: "2mb" }), async (req, res) => {
+  try {
+    const { caseTitle, caseId, sourceRuns, prompt } = req.body || {};
+    const result = await aggregateVideoCaseAnalyses({
+      caseTitle,
+      caseId,
+      sourceRuns,
+      prompt,
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("[upload-api] aggregate analysis failed", error);
+    res.status(502).json({
+      error: error instanceof Error ? error.message : "Aggregate video analysis failed.",
+    });
+  }
+});
+
+app.post("/api/analyze-video-case", express.json({ limit: "2mb" }), async (req, res) => {
+  try {
+    const { caseTitle, caseId, sourceRuns, prompt } = req.body || {};
+    const result = await aggregateVideoCaseAnalyses({
+      caseTitle,
+      caseId,
+      sourceRuns,
+      prompt,
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("[upload-api] case analysis failed", error);
+    res.status(502).json({
+      error: error instanceof Error ? error.message : "Video case analysis failed.",
     });
   }
 });

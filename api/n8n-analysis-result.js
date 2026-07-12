@@ -72,14 +72,17 @@ export async function POST(request) {
       .from("evaluations")
       .update(update)
       .eq("id", evaluationId)
-      .select("id, video_case_id, analysis_ai_model")
-      .single();
+      .select("id, video_case_id, analysis_ai_model");
 
     if (error) {
       return jsonResponse(500, { error: error.message });
     }
 
-    return jsonResponse(200, { message: "AI analysis saved.", evaluation: data });
+    if (!data || data.length === 0) {
+      return jsonResponse(404, { error: `Evaluation ${evaluationId} was not found.` });
+    }
+
+    return jsonResponse(200, { message: "AI analysis saved.", evaluation: data[0] });
   } catch (error) {
     return jsonResponse(400, {
       error: error instanceof Error ? error.message : "Invalid callback request.",

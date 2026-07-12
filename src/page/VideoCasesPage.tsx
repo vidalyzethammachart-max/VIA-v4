@@ -38,23 +38,39 @@ function getSectionScore(rubric: Record<string, unknown>, sectionId: string): nu
   return scores.reduce((total, score) => total + score, 0) / scores.length;
 }
 
-function getAiOutputText(run: VideoCaseEvaluationRow): string {
-  const output = run.analysis_ai_output;
-  if (typeof output === "string") return output;
-  if (!output || typeof output !== "object") return run.analysis_ai_raw_text || "-";
+function getAiSummary(output: unknown, rawText: string | null): string {
+  if (typeof output === "string" && output.trim()) return output;
+  if (!output || typeof output !== "object") return rawText || "No AI analysis available.";
 
   const record = output as Record<string, unknown>;
-  const nestedAnalysis = record.analysis;
-  const candidates = [
-    record.summary,
-    record.overall_summary,
-    record.feedback,
-    typeof nestedAnalysis === "object" && nestedAnalysis !== null
-      ? (nestedAnalysis as Record<string, unknown>).summary
-      : nestedAnalysis,
+  const preferredKeys = [
+    "summary",
+    "overall_summary",
+    "overallSummary",
+    "executive_summary",
+    "executiveSummary",
+    "final_report",
+    "finalReport",
+    "report",
+    "feedback",
   ];
-  const text = candidates.find((value): value is string => typeof value === "string" && value.trim().length > 0);
-  return text || JSON.stringify(output);
+  for (const key of preferredKeys) {
+    if (typeof record[key] === "string" && record[key].trim()) return record[key];
+  }
+
+  for (const nestedKey of ["analysis", "result", "data"]) {
+    const nested = record[nestedKey];
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      const summary = getAiSummary(nested, null);
+      if (summary !== "No AI analysis available.") return summary;
+    }
+  }
+
+  return rawText || "Structured AI analysis is available. Open details to inspect it.";
+}
+
+function getAiOutputText(run: VideoCaseEvaluationRow): string {
+  return getAiSummary(run.analysis_ai_output, run.analysis_ai_raw_text);
 }
 
 export default function VideoCasesPage() {
@@ -701,7 +717,18 @@ export default function VideoCasesPage() {
                           Delete aggregate
                         </button>
                       )}
-                      <pre className="mt-3 overflow-auto rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
+                      <div className="mt-3 rounded-xl bg-slate-50 p-4">
+                        <p className="text-sm font-medium text-slate-800">AI summary</p>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                          {getAiSummary(aggregate.ai_output, aggregate.ai_raw_text)}
+                        </p>
+                        <p className="mt-3 text-xs text-slate-500">
+                          Model: {aggregate.ai_model || "-"} · Combined from {aggregate.source_count} evaluation(s)
+                        </p>
+                      </div>
+                      <details className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <summary className="cursor-pointer text-xs font-semibold text-slate-600">View technical details</summary>
+                        <pre className="mt-3 overflow-auto rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
 {JSON.stringify(
   {
     combined_scores: aggregate.combined_scores,
@@ -712,7 +739,8 @@ export default function VideoCasesPage() {
   null,
   2,
 )}
-                      </pre>
+                        </pre>
+                      </details>
                     </article>
                   ))}
                 </div>

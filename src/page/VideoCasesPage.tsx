@@ -598,6 +598,7 @@ export default function VideoCasesPage() {
                             <td className="sticky left-0 z-10 border-r border-slate-200 bg-white px-4 py-3">
                               <p className="font-semibold text-slate-900">{run.subject_name || "Untitled"}</p>
                               <p className="mt-1 text-slate-500">Evaluation #{run.id}</p>
+                              <p className="mt-1 text-slate-500">Employee no.: {run.employee_number || "-"}</p>
                               <p className="mt-1 text-slate-500">{new Date(run.created_at).toLocaleString()}</p>
                             </td>
                             {sectionScores.map((score, index) => (
@@ -654,7 +655,7 @@ export default function VideoCasesPage() {
                             {run.subject_name || "Untitled"} · {run.analysis_kind}
                           </p>
                           <p className="text-xs text-slate-500">
-                            ผู้ประเมิน: {run.user_id || "-"} · รหัสประเมิน: {run.id}
+                            ผู้ประเมิน: {run.employee_number || "-"} · รหัสประเมิน: {run.id}
                           </p>
                         </div>
                         <p className="text-xs text-slate-500">

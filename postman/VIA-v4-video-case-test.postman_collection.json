@@ -16,7 +16,9 @@
     { "key": "short_code", "value": "pm001" },
     { "key": "member_role", "value": "member" },
     { "key": "video_case_id", "value": "" },
-    { "key": "evaluation_id", "value": "" }
+    { "key": "evaluation_id", "value": "" },
+    { "key": "created_by", "value": "" },
+    { "key": "employee_number", "value": "" }
   ],
   "item": [
     {
@@ -82,6 +84,8 @@
             "exec": [
               "pm.test('Evaluation created', () => pm.response.to.have.status(201));",
               "pm.collectionVariables.set('evaluation_id', String(pm.response.json()[0].id));",
+              "pm.collectionVariables.set('created_by', pm.response.json()[0].created_by || '');",
+              "pm.collectionVariables.set('employee_number', pm.response.json()[0].employee_number || '');",
               "pm.test('Section averages were calculated', () => pm.expect(pm.response.json()[0].section_averages).to.not.be.empty;",
               "pm.test('Evaluation ID was saved', () => pm.expect(pm.collectionVariables.get('evaluation_id')).to.match(/^\\d+$/));"
             ],
@@ -99,7 +103,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "[\n  {\n    \"evaluation_id\": 0,\n    \"order_number\": \"{{order_number}}\",\n    \"subjectName\": \"{{subject_name}}\",\n    \"rubric\": [\n      { \"key\": \"language_and_script\", \"name\": \"Language & Script\", \"scores\": [5, 4, 4, 5, 4] },\n      { \"key\": \"camera_angle\", \"name\": \"Camera Angle\", \"scores\": [4, 4, 5, 4, 4] },\n      { \"key\": \"composition\", \"name\": \"Composition\", \"scores\": [4, 4, 4, 5, 4] },\n      { \"key\": \"narrator\", \"name\": \"Narrator\", \"scores\": [5, 4, 4, 4, 5] },\n      { \"key\": \"story_sequence\", \"name\": \"Story Sequence\", \"scores\": [4, 5, 4, 4, 4] },\n      { \"key\": \"scene_and_location\", \"name\": \"Scene & Location\", \"scores\": [4, 4, 4, 5, 4] },\n      { \"key\": \"lighting\", \"name\": \"Lighting\", \"scores\": [5, 4, 4, 4, 4] },\n      { \"key\": \"audio\", \"name\": \"Audio\", \"scores\": [4, 4, 5, 4, 4] },\n      { \"key\": \"graphics_and_visuals\", \"name\": \"Graphics & Visuals\", \"scores\": [4, 5, 4, 4, 5] }\n    ],\n    \"suggestions\": [\"Test submission from Postman\"],\n    \"overallSuggestionRaw\": \"Test submission from Postman\",\n    \"hasVideo\": false\n  }\n]"
+          "raw": "[\n  {\n    \"evaluation_id\": 0,\n    \"created_by\": \"{{created_by}}\",\n    \"employee_number\": \"{{employee_number}}\",\n    \"order_number\": \"{{order_number}}\",\n    \"subjectName\": \"{{subject_name}}\",\n    \"rubric\": [\n      { \"key\": \"language_and_script\", \"name\": \"Language & Script\", \"scores\": [5, 4, 4, 5, 4] },\n      { \"key\": \"camera_angle\", \"name\": \"Camera Angle\", \"scores\": [4, 4, 5, 4, 4] },\n      { \"key\": \"composition\", \"name\": \"Composition\", \"scores\": [4, 4, 4, 5, 4] },\n      { \"key\": \"narrator\", \"name\": \"Narrator\", \"scores\": [5, 4, 4, 4, 5] },\n      { \"key\": \"story_sequence\", \"name\": \"Story Sequence\", \"scores\": [4, 5, 4, 4, 4] },\n      { \"key\": \"scene_and_location\", \"name\": \"Scene & Location\", \"scores\": [4, 4, 4, 5, 4] },\n      { \"key\": \"lighting\", \"name\": \"Lighting\", \"scores\": [5, 4, 4, 4, 4] },\n      { \"key\": \"audio\", \"name\": \"Audio\", \"scores\": [4, 4, 5, 4, 4] },\n      { \"key\": \"graphics_and_visuals\", \"name\": \"Graphics & Visuals\", \"scores\": [4, 5, 4, 4, 5] }\n    ],\n    \"suggestions\": [\"Test submission from Postman\"],\n    \"overallSuggestionRaw\": \"Test submission from Postman\",\n    \"hasVideo\": false\n  }\n]"
         },
         "url": "{{local_app_url}}/api/n8n-webhook"
       },

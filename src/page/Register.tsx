@@ -41,6 +41,7 @@ function RegisterWrapper({ children }: { children: ReactNode }) {
 export default function Register() {
   const { t } = useLanguage();
   const [userId, setUserId] = useState("");
+  const [employeeNumber, setEmployeeNumber] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -48,6 +49,7 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{
     userId?: string;
+    employeeNumber?: string;
     email?: string;
     password?: string;
     confirmPassword?: string;
@@ -65,12 +67,14 @@ export default function Register() {
 
     const nextFieldErrors: {
       userId?: string;
+      employeeNumber?: string;
       email?: string;
       password?: string;
       confirmPassword?: string;
     } = {};
 
     if (!userId.trim()) nextFieldErrors.userId = t("form.fillField");
+    if (!employeeNumber.trim()) nextFieldErrors.employeeNumber = t("form.fillField");
     if (!email.trim()) nextFieldErrors.email = t("form.fillField");
     if (!password.trim()) nextFieldErrors.password = t("form.fillField");
     if (!confirmPassword.trim()) nextFieldErrors.confirmPassword = t("form.fillField");
@@ -91,6 +95,7 @@ export default function Register() {
     try {
       const normalizedEmail = email.trim().toLowerCase();
       const normalizedUserId = userId.trim();
+      const normalizedEmployeeNumber = employeeNumber.trim();
 
       const { data, error } = await supabase.auth.signUp({
         email: normalizedEmail,
@@ -98,6 +103,7 @@ export default function Register() {
         options: {
           data: {
             user_id: normalizedUserId,
+            employee_number: normalizedEmployeeNumber,
           },
         },
       });
@@ -116,6 +122,7 @@ export default function Register() {
             {
               auth_user_id: data.user.id,
               user_id: normalizedUserId,
+              employee_number: normalizedEmployeeNumber,
               email: normalizedEmail,
             },
             { onConflict: "auth_user_id" },
@@ -221,6 +228,31 @@ export default function Register() {
           />
           {fieldErrors.userId && (
             <p className="mt-2 text-sm text-red-500 dark:text-red-400">{fieldErrors.userId}</p>
+          )}
+        </div>
+        <div>
+          <label className="mb-1 block font-medium text-gray-600 dark:text-slate-300">
+            {t("profile.employeeNumber")}
+          </label>
+          <input
+            type="text"
+            value={employeeNumber}
+            onChange={(e) => {
+              setEmployeeNumber(e.target.value);
+              if (fieldErrors.employeeNumber) {
+                setFieldErrors((current) => ({ ...current, employeeNumber: undefined }));
+              }
+            }}
+            className={`w-full rounded-lg border bg-white px-4 py-2 text-black focus:outline-none focus:ring-1 dark:bg-slate-950 dark:text-white ${
+              fieldErrors.employeeNumber
+                ? "border-red-400 focus:ring-red-200 dark:border-red-500/60"
+                : "border-gray-500 focus:ring-[#04418b] dark:border-slate-700"
+            }`}
+            placeholder={t("profile.enterEmployeeNumber")}
+            required
+          />
+          {fieldErrors.employeeNumber && (
+            <p className="mt-2 text-sm text-red-500 dark:text-red-400">{fieldErrors.employeeNumber}</p>
           )}
         </div>
         <div>

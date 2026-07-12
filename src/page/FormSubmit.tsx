@@ -27,6 +27,8 @@ type N8nRubricItem = {
 
 type N8nEvaluationPayload = {
   evaluation_id: number;
+  created_by: string;
+  employee_number?: string;
   order_number: string;
   subjectName: string;
   email?: string;
@@ -276,6 +278,7 @@ function FormSubmit() {
   const [submitErrorMessage, setSubmitErrorMessage] = useState<string | null>(null);
   const [submitSuccessMessage, setSubmitSuccessMessage] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<AppRole>("user");
+  const [employeeNumber, setEmployeeNumber] = useState<string | null>(null);
   const [isRequestingRole, setIsRequestingRole] = useState(false);
   const [roleRequestMessage, setRoleRequestMessage] = useState<string | null>(null);
   const [showValidation, setShowValidation] = useState(false);
@@ -296,11 +299,12 @@ function FormSubmit() {
 
       void supabase
         .from("user_information")
-        .select("role")
+        .select("role, employee_number")
         .eq("auth_user_id", user.id)
         .maybeSingle()
         .then(({ data }) => {
           setUserRole(normalizeRole(data?.role));
+          setEmployeeNumber(data?.employee_number ?? null);
         });
     });
 
@@ -535,6 +539,8 @@ function FormSubmit() {
     return [
       {
         evaluation_id: evaluationId,
+        created_by: authUserId || payload.user_id,
+        employee_number: employeeNumber || undefined,
         order_number: payload.order_number || "",
         subjectName: payload.subject_name,
         email: payload.Email || undefined,

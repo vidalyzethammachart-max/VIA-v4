@@ -43,6 +43,8 @@ export type VideoCaseAggregateRow = {
 export type VideoCaseEvaluationRow = {
   id: number;
   user_id: string | null;
+  created_by: string | null;
+  employee_number: string | null;
   video_case_id: string | null;
   analysis_kind: "human" | "aggregate";
   order_number: string | null;
@@ -208,7 +210,7 @@ export async function getVideoCaseAnalyses(videoCaseId: string): Promise<VideoCa
   const { data, error } = await supabase
     .from("evaluations")
     .select(
-      "id, user_id, video_case_id, analysis_kind, order_number, subject_name, overall_suggestion, rubric, analysis_ai_model, analysis_ai_output, analysis_ai_raw_text, document_status, document_error, created_at",
+      "id, user_id, created_by, employee_number, video_case_id, analysis_kind, order_number, subject_name, overall_suggestion, rubric, analysis_ai_model, analysis_ai_output, analysis_ai_raw_text, document_status, document_error, created_at",
     )
     .eq("video_case_id", videoCaseId)
     .order("created_at", { ascending: false });

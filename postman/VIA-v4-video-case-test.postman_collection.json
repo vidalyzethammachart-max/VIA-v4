@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "4a482074-0ef0-4da7-8549-b6197b5e31ae",
     "name": "VIA V4 - Video Case Test",
-    "description": "Run requests in order: 1) Create/Join Video Case, 2) Create Evaluation, 3) Send to n8n.",
+    "description": "Run 1-3 to test the real workflow. Request 4 is an optional direct callback test.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -19,6 +19,8 @@
     { "key": "evaluation_id", "value": "" },
     { "key": "created_by", "value": "" },
     { "key": "employee_number", "value": "" }
+    ,{ "key": "n8n_callback_url", "value": "https://via4-app.vercel.app/api/n8n-analysis-result" }
+    ,{ "key": "n8n_callback_secret", "value": "PASTE_N8N_CALLBACK_SECRET" }
   ],
   "item": [
     {
@@ -86,7 +88,9 @@
               "pm.collectionVariables.set('evaluation_id', String(pm.response.json()[0].id));",
               "pm.collectionVariables.set('created_by', pm.response.json()[0].created_by || '');",
               "pm.collectionVariables.set('employee_number', pm.response.json()[0].employee_number || '');",
-              "pm.test('Section averages were calculated', () => pm.expect(pm.response.json()[0].section_averages).to.not.be.empty;",
+              "pm.test('Section averages were calculated', () => pm.expect(pm.response.json()[0].section_averages).to.not.be.empty);",
+              "pm.test('Creator snapshot was saved', () => pm.expect(pm.response.json()[0].created_by).to.match(/^[0-9a-f-]{36}$/i));",
+              "pm.test('Employee number was saved', () => pm.expect(pm.response.json()[0].employee_number).to.be.a('string').and.not.be.empty);",
               "pm.test('Evaluation ID was saved', () => pm.expect(pm.collectionVariables.get('evaluation_id')).to.match(/^\\d+$/));"
             ],
             "type": "text/javascript"
@@ -126,6 +130,46 @@
           "script": {
             "exec": [
               "pm.test('n8n workflow started', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Optional - Save AI Result Callback",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-n8n-callback-secret", "value": "{{n8n_callback_secret}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"evaluation_id\": 0,\n  \"model\": \"gemini-2.5-flash\",\n  \"analysis\": {\n    \"summary\": \"Postman callback test\",\n    \"source\": \"postman\"\n  }\n}"
+        },
+        "url": "{{n8n_callback_url}}"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const evaluationId = Number(pm.collectionVariables.get('evaluation_id'));",
+              "if (!Number.isInteger(evaluationId) || evaluationId <= 0) { throw new Error('Create Evaluation (request 2) must succeed before testing the callback.'); }",
+              "const body = JSON.parse(pm.request.body.raw);",
+              "body.evaluation_id = evaluationId;",
+              "pm.request.body.update(JSON.stringify(body));"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('AI callback saved', () => pm.response.to.have.status(200));",
+              "pm.test('Callback confirms the evaluation', () => pm.expect(pm.response.json().evaluation.id).to.equal(Number(pm.collectionVariables.get('evaluation_id'))));"
             ],
             "type": "text/javascript"
           }

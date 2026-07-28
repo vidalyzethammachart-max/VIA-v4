@@ -123,8 +123,12 @@ detail page.
 - System admins are treated as leaders for aggregate creation and deletion.
 - Editors and other members cannot delete aggregates.
 - The frontend hides delete controls for unauthorized users.
-- Database RLS remains the security boundary and must reject unauthorized
-  deletes even if the client is manipulated.
+- The migration adds a `FOR DELETE` RLS policy because the current schema grants
+  `DELETE` but has no aggregate delete policy.
+- The delete policy permits any current case leader or system admin; deletion
+  is not restricted to the original `requested_by` user.
+- Database RLS remains the security boundary and rejects unauthorized deletes
+  even if the client is manipulated.
 
 ## Delete Behavior
 
@@ -152,7 +156,9 @@ becomes the latest aggregate shown in the case header.
 - Re-running the migration succeeds when the columns already exist.
 - Backfill sets null snapshot values from matching `user_information` rows.
 - Backfill does not overwrite an existing snapshot.
-- Existing aggregate select and delete policies remain unchanged.
+- Existing aggregate select, insert, and update policies remain unchanged.
+- The new aggregate delete policy permits case leaders and system admins and
+  rejects ordinary members.
 
 ### Service
 

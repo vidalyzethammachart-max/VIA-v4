@@ -83,6 +83,33 @@ function combineNestedValues(values) {
   return filtered[0];
 }
 
+function computeSectionAverages(questionAverages) {
+  if (!isPlainObject(questionAverages)) {
+    return {};
+  }
+
+  const result = {};
+
+  for (const [sectionId, questions] of Object.entries(questionAverages)) {
+    if (!isPlainObject(questions)) {
+      continue;
+    }
+
+    const scores = Object.values(questions)
+      .map(toNumeric)
+      .filter((value) => typeof value === "number");
+
+    if (scores.length === 0) {
+      continue;
+    }
+
+    const total = scores.reduce((sum, value) => sum + value, 0);
+    result[sectionId] = Number((total / scores.length).toFixed(2));
+  }
+
+  return result;
+}
+
 function normalizeSourceRun(sourceRun) {
   return {
     id: sourceRun?.id || null,
@@ -98,7 +125,15 @@ function normalizeSourceRun(sourceRun) {
   };
 }
 
-function buildAggregatePrompt({ caseTitle, caseId, sourceRuns, aggregatedScores, aggregatedMatrix, prompt }) {
+function buildAggregatePrompt({
+  caseTitle,
+  caseId,
+  sourceRuns,
+  questionAverages,
+  sectionAverages,
+  aggregatedMatrix,
+  prompt,
+}) {
   const basePrompt =
     prompt ||
     `You are an educational video evaluation assistant.
@@ -111,7 +146,8 @@ Video case metadata:
 - Case ID: ${caseId}
 - Reviewer count: ${sourceRuns.length}
 
-Use the averaged rubric and matrix as the primary quantitative signal.
+Use the question-level averages as the primary quantitative signal.
+Use the section-level averages only as a roll-up summary.
 Also compare the individual reviewer notes and AI outputs if they exist.
 
 Return JSON only:
@@ -143,7 +179,9 @@ ${JSON.stringify(
     case_id: caseId,
     case_title: caseTitle || "untitled case",
     reviewer_count: compactRuns.length,
-    aggregated_scores: aggregatedScores,
+    question_averages_by_section: questionAverages,
+    section_averages: sectionAverages,
+    question_averages: questionAverages,
     aggregated_matrix: aggregatedMatrix,
     source_runs: compactRuns,
   },
@@ -171,7 +209,16 @@ function parseModelJson(outputText) {
   }
 }
 
-async function analyzeTextWithGemini({ caseTitle, caseId, sourceRuns, prompt, aggregatedScores, aggregatedMatrix }) {
+async function analyzeTextWithGemini({
+  caseTitle,
+  caseId,
+  sourceRuns,
+  prompt,
+  questionAveragesBySection,
+  questionAverages,
+  sectionAverages,
+  aggregatedMatrix,
+}) {
   const env = getRequiredGeminiEnv();
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.model)}:generateContent?key=${encodeURIComponent(env.apiKey)}`;
   const response = await fetch(endpoint, {
@@ -189,7 +236,9 @@ async function analyzeTextWithGemini({ caseTitle, caseId, sourceRuns, prompt, ag
                 caseTitle,
                 caseId,
                 sourceRuns,
-                aggregatedScores,
+                questionAveragesBySection,
+                questionAverages,
+                sectionAverages,
                 aggregatedMatrix,
                 prompt,
               }),
@@ -227,11 +276,14 @@ async function analyzeTextWithGemini({ caseTitle, caseId, sourceRuns, prompt, ag
 }
 
 export function combineAggregateStatistics(sourceRuns) {
-  const rubric = combineNestedValues(sourceRuns.map((run) => run?.rubric ?? null)) || {};
+  const questionAverages = combineNestedValues(sourceRuns.map((run) => run?.rubric ?? null)) || {};
   const matrix = combineNestedValues(sourceRuns.map((run) => run?.matrix ?? null)) || {};
+  const sectionAverages = computeSectionAverages(questionAverages);
 
   return {
-    aggregatedScores: rubric,
+    questionAveragesBySection: questionAverages,
+    aggregatedScores: questionAverages,
+    sectionAverages,
     aggregatedMatrix: matrix,
   };
 }
@@ -246,13 +298,16 @@ export async function aggregateVideoCaseAnalyses({
     throw new Error("At least one analysis run is required for aggregation.");
   }
 
-  const { aggregatedScores, aggregatedMatrix } = combineAggregateStatistics(sourceRuns);
+  const { questionAveragesBySection, aggregatedScores, sectionAverages, aggregatedMatrix } =
+    combineAggregateStatistics(sourceRuns);
   const analysis = await analyzeTextWithGemini({
     caseTitle,
     caseId,
     sourceRuns,
     prompt,
+    questionAveragesBySection,
     aggregatedScores,
+    sectionAverages,
     aggregatedMatrix,
   });
 
@@ -261,11 +316,12 @@ export async function aggregateVideoCaseAnalyses({
     caseTitle,
     caseId,
     sourceRunCount: sourceRuns.length,
+    questionAveragesBySection,
     aggregatedScores,
+    sectionAverages,
     aggregatedMatrix,
     model: analysis.model,
     analysis: analysis.parsed || analysis.outputText,
     rawText: analysis.parsed ? undefined : analysis.outputText,
   };
 }
-

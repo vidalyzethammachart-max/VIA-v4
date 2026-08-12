@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
@@ -24,6 +24,7 @@ type EvaluationItem = {
 
 export default function MyFormsDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { language, t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<EvaluationItem[]>([]);
@@ -33,6 +34,10 @@ export default function MyFormsDashboard() {
   const [statusFilter, setStatusFilter] = useState<"all" | EvaluationItem["document_status"]>("all");
   const [deleteTarget, setDeleteTarget] = useState<EvaluationItem | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const navigationState = location.state as
+    | { generated?: boolean; evaluationId?: number; submissionId?: string; aggregateId?: string }
+    | null;
+  const showSuccessBanner = Boolean(navigationState?.generated);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -197,6 +202,23 @@ export default function MyFormsDashboard() {
       />
 
       <main className="mx-auto max-w-6xl px-4 py-6 md:py-8">
+        {showSuccessBanner && (
+          <section className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-sm">
+            <p className="font-semibold">
+              {navigationState?.aggregateId
+                ? "Combined summary sent for re-analysis."
+                : "Evaluation sent for analysis."}
+            </p>
+            <p className="mt-1 text-emerald-700">
+              {navigationState?.aggregateId
+                ? `Aggregate ID: ${navigationState.aggregateId}`
+                : navigationState?.evaluationId
+                  ? `Evaluation ID: ${navigationState.evaluationId}`
+                  : "Your submission has been saved and sent to the processing flow."}
+            </p>
+          </section>
+        )}
+
         <section className="grid gap-4 md:grid-cols-3">
           <div className="ui-hover-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-semibold text-slate-500">

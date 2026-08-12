@@ -17,6 +17,7 @@ export interface EvaluationPayload {
 }
 
 type ForwardPayload = EvaluationPayload & {
+  document_type: "evaluation";
   evaluation_id: number;
 };
 
@@ -124,6 +125,7 @@ export async function submitEvaluation(
 
     const forwardPayload: ForwardPayload = {
       ...payload,
+      document_type: "evaluation",
       evaluation_id: data.id,
     };
 

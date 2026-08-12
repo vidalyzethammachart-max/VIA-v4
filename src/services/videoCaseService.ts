@@ -1,5 +1,10 @@
 import { supabase } from "../lib/supabaseClient";
 import { normalizeRole } from "../lib/roles";
+import { buildVideoCaseSummaryPayload } from "./videoCaseSummaryPayloadCore.js";
+import { resolveAggregateSourceIds } from "./videoCaseSourceIds.js";
+
+export { buildVideoCaseSummaryPayload } from "./videoCaseSummaryPayloadCore.js";
+export { resolveAggregateSourceIds } from "./videoCaseSourceIds.js";
 
 export type VideoCaseMemberRole = "member" | "leader";
 export type VideoCaseAggregateStatus = "pending" | "ready" | "failed";
@@ -27,10 +32,13 @@ export type VideoCaseAggregateRow = {
   id: string;
   video_case_id: string;
   requested_by: string;
+  requested_by_name: string | null;
+  requested_by_employee_number: string | null;
   source_evaluation_ids: number[];
   source_count: number;
   source_snapshot: Record<string, unknown>;
   combined_scores: Record<string, unknown>;
+  section_averages?: Record<string, unknown>;
   ai_model: string | null;
   ai_output: Record<string, unknown> | null;
   ai_raw_text: string | null;
@@ -43,6 +51,21 @@ export type VideoCaseAggregateRow = {
   docx_storage_path: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type SummarySourceRun = {
+  id: number | null;
+  analyst_user_id: string | null;
+  evaluation_id: number | null;
+  employee_number: string | null;
+  run_kind: string;
+  rubric: Record<string, unknown>;
+  matrix: Record<string, unknown>;
+  ai_output: Record<string, unknown> | null;
+  ai_raw_text: string | null;
+  notes: string | null;
+  created_at: string | null;
+  order_number: string | null;
 };
 
 export type VideoCaseEvaluationRow = {
@@ -59,6 +82,8 @@ export type VideoCaseEvaluationRow = {
   analysis_ai_model: string | null;
   analysis_ai_output: Record<string, unknown> | null;
   analysis_ai_raw_text: string | null;
+  pdf_storage_path: string | null;
+  docx_storage_path: string | null;
   document_status: "pending" | "ready" | "failed";
   document_error: string | null;
   created_at: string;
@@ -70,11 +95,33 @@ type AggregateApiResponse = {
   caseTitle: string;
   sourceRunCount: number;
   aggregatedScores: Record<string, unknown>;
+  sectionAverages: Record<string, unknown>;
   aggregatedMatrix: Record<string, unknown>;
   model: string;
   analysis: Record<string, unknown> | string;
   rawText?: string;
 };
+
+async function getCurrentUserEmployeeNumber(): Promise<string | null> {
+  const { data: userData, error: authError } = await supabase.auth.getUser();
+  if (authError || !userData.user) {
+    throw new Error("Authentication required.");
+  }
+
+  const { data, error } = await supabase
+    .from("user_information")
+    .select("employee_number")
+    .eq("auth_user_id", userData.user.id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return typeof data?.employee_number === "string" && data.employee_number.trim()
+    ? data.employee_number.trim()
+    : null;
+}
 
 function getUploadApiBaseUrl() {
   const configured = import.meta.env.VITE_UPLOAD_VIDEO_API_URL as string | undefined;
@@ -87,6 +134,31 @@ function buildApiUrl(pathname: string) {
   base.pathname = pathname;
   base.search = "";
   return base.toString();
+}
+
+function toSummarySourceRun(run: Record<string, unknown>, index: number): SummarySourceRun {
+  return {
+    id: typeof run.id === "number" ? run.id : index + 1,
+    analyst_user_id: typeof run.analyst_user_id === "string" ? run.analyst_user_id : null,
+    evaluation_id: typeof run.evaluation_id === "number" ? run.evaluation_id : null,
+    employee_number: typeof run.employee_number === "string" && run.employee_number.trim()
+      ? run.employee_number.trim()
+      : null,
+    run_kind: typeof run.run_kind === "string" && run.run_kind.trim() ? run.run_kind.trim() : "human",
+    rubric: isRecord(run.rubric) ? run.rubric : {},
+    matrix: isRecord(run.matrix) ? run.matrix : {},
+    ai_output: isRecord(run.ai_output) ? run.ai_output : null,
+    ai_raw_text: typeof run.ai_raw_text === "string" && run.ai_raw_text.trim() ? run.ai_raw_text : null,
+    notes: typeof run.notes === "string" && run.notes.trim() ? run.notes : null,
+    created_at: typeof run.created_at === "string" && run.created_at.trim() ? run.created_at : null,
+    order_number: typeof run.order_number === "string" && run.order_number.trim()
+      ? run.order_number.trim()
+      : null,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
@@ -215,7 +287,7 @@ export async function getVideoCaseAnalyses(videoCaseId: string): Promise<VideoCa
   const { data, error } = await supabase
     .from("evaluations")
     .select(
-      "id, user_id, created_by, employee_number, video_case_id, analysis_kind, order_number, subject_name, overall_suggestion, rubric, analysis_ai_model, analysis_ai_output, analysis_ai_raw_text, document_status, document_error, created_at",
+      "id, user_id, created_by, employee_number, video_case_id, analysis_kind, order_number, subject_name, overall_suggestion, rubric, analysis_ai_model, analysis_ai_output, analysis_ai_raw_text, pdf_storage_path, docx_storage_path, document_status, document_error, created_at",
     )
     .eq("video_case_id", videoCaseId)
     .order("created_at", { ascending: false });
@@ -277,6 +349,39 @@ export async function getVideoCaseAggregates(
   return (data ?? []) as VideoCaseAggregateRow[];
 }
 
+export async function getVideoCaseAggregate(
+  aggregateId: string,
+): Promise<VideoCaseAggregateRow | null> {
+  const { data, error } = await supabase
+    .from("video_case_aggregates")
+    .select("*")
+    .eq("id", aggregateId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data as VideoCaseAggregateRow | null) ?? null;
+}
+
+export async function getVideoCaseAggregateSourceIds(
+  aggregateId: string,
+  fallbackIds: number[],
+): Promise<number[]> {
+  const { data, error } = await supabase
+    .from("video_case_aggregate_sources")
+    .select("evaluation_id, source_position")
+    .eq("aggregate_id", aggregateId)
+    .order("source_position", { ascending: true });
+
+  if (error) {
+    return resolveAggregateSourceIds([], fallbackIds);
+  }
+
+  return resolveAggregateSourceIds(data ?? [], fallbackIds);
+}
+
 export async function deleteVideoCaseEvaluation(evaluationId: number): Promise<void> {
   const { error } = await supabase
     .from("evaluations")
@@ -284,18 +389,29 @@ export async function deleteVideoCaseEvaluation(evaluationId: number): Promise<v
     .eq("id", evaluationId);
 
   if (error) {
+    if (error.code === "23503") {
+      throw new Error("This evaluation is used by a combined summary and cannot be deleted.");
+    }
     throw new Error(error.message);
   }
 }
 
 export async function deleteVideoCaseAggregate(aggregateId: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("video_case_aggregates")
     .delete()
-    .eq("id", aggregateId);
+    .eq("id", aggregateId)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error(
+      "Aggregate not found or you do not have permission to delete it.",
+    );
   }
 }
 
@@ -325,6 +441,7 @@ export async function combineVideoCaseAnalyses(params: {
   sourceRuns: Array<{
     id: number;
     user_id: string | null;
+    employee_number?: string | null;
     evaluation_id: number | null;
     run_kind?: string;
     rubric?: Record<string, unknown>;
@@ -348,6 +465,7 @@ export async function combineVideoCaseAnalyses(params: {
       sourceRuns: params.sourceRuns.map((run) => ({
         id: run.id,
         analyst_user_id: run.user_id,
+        employee_number: run.employee_number ?? null,
         evaluation_id: run.evaluation_id,
         run_kind: run.run_kind || "human",
         rubric: run.rubric || {},
@@ -385,8 +503,14 @@ export async function combineVideoCaseAnalyses(params: {
         case_id: result.caseId,
         case_title: result.caseTitle,
         source_runs: params.sourceRuns,
+        combine_prompt: params.prompt || null,
+        question_averages_by_section: result.aggregatedScores,
+        question_averages: result.aggregatedScores,
+        section_averages: result.sectionAverages,
+        matrix_averages: result.aggregatedMatrix,
       },
       combined_scores: result.aggregatedScores,
+      section_averages: result.sectionAverages,
       ai_model: result.model,
       ai_output: typeof result.analysis === "object" && result.analysis !== null ? result.analysis : null,
       ai_raw_text: typeof result.analysis === "string" ? result.analysis : result.rawText || null,
@@ -400,31 +524,65 @@ export async function combineVideoCaseAnalyses(params: {
     throw new Error(error.message);
   }
 
-  const aggregate = data as VideoCaseAggregateRow;
-  const orderNumber = params.sourceRuns.find((run) => run.order_number)?.order_number || null;
+  return data as VideoCaseAggregateRow;
+}
+
+export async function sendVideoCaseAggregateToN8n(aggregateId: string): Promise<VideoCaseAggregateRow> {
+  return sendVideoCaseAggregateToN8nWithPrompt(aggregateId, null);
+}
+
+export async function sendVideoCaseAggregateToN8nWithPrompt(
+  aggregateId: string,
+  combinePromptOverride: string | null,
+): Promise<VideoCaseAggregateRow> {
+  const aggregate = await getVideoCaseAggregate(aggregateId);
+  if (!aggregate) {
+    throw new Error("Aggregate not found.");
+  }
+
+  const requestedByEmployeeNumber = await getCurrentUserEmployeeNumber();
+  const sourceSnapshot = (aggregate.source_snapshot || {}) as Record<string, unknown>;
+  const combinePrompt = typeof combinePromptOverride === "string"
+    ? combinePromptOverride.trim() || null
+    : typeof sourceSnapshot.combine_prompt === "string"
+      ? sourceSnapshot.combine_prompt
+      : null;
+  const summary = buildVideoCaseSummaryPayload({
+    aggregate,
+    requestedByEmployeeNumber,
+    combinePrompt,
+  });
+
   const { error: documentError } = await supabase.functions.invoke("forward-to-n8n", {
-    body: {
-      aggregate_id: aggregate.id,
-      document_type: "video_case_aggregate",
-      video_case_id: params.videoCaseId,
-      subject_name: `${params.caseTitle} - Aggregate Report`,
-      order_number: orderNumber,
-      source_evaluation_ids: aggregate.source_evaluation_ids,
-      source_count: aggregate.source_count,
-      combined_scores: aggregate.combined_scores,
-      ai_model: aggregate.ai_model,
-      aggregate_analysis: aggregate.ai_output || aggregate.ai_raw_text,
-    },
+    body: summary,
   });
 
   if (documentError) {
     const message = documentError.message || "Failed to start aggregate document generation.";
-    await supabase
+    const { data, error } = await supabase
       .from("video_case_aggregates")
       .update({ document_status: "failed", document_error: message })
-      .eq("id", aggregate.id);
-    return { ...aggregate, document_status: "failed", document_error: message };
+      .eq("id", aggregate.id)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data as VideoCaseAggregateRow;
   }
 
-  return aggregate;
+  const { data, error } = await supabase
+    .from("video_case_aggregates")
+    .update({ document_status: "pending", document_error: null })
+    .eq("id", aggregate.id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as VideoCaseAggregateRow;
 }

@@ -1157,23 +1157,9 @@ function FormSubmit() {
           <section className="ui-hover-card space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
             <div>
               <h2 className="text-sm font-semibold text-slate-900 md:text-base">
-                {videoCaseUi.title}
+                {t("form.submissionModeTitle")}
               </h2>
-              <p className="mt-1 text-xs text-slate-500">
-                {videoCaseUi.description}
-              </p>
-            </div>
-            <div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs font-medium text-slate-700">{videoCaseUi.keyLabel}</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  ระบบจะสร้างจากเลขที่สั่งงาน + ชื่อหัวข้อ + รหัสสั้นภายในอัตโนมัติ
-                </p>
-                <p className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">
-                  {displayCaseLabel || videoCaseUi.keyPlaceholder}
-                </p>
-                <p className="mt-2 text-[11px] text-slate-400">รหัสภายในถูกซ่อนจากผู้ใช้</p>
-              </div>
+              <p className="mt-1 text-xs text-slate-500">{t("form.submissionModeDescription")}</p>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <label
@@ -1221,68 +1207,64 @@ function FormSubmit() {
                 </span>
               </label>
             </div>
-            {submissionMode === "with_video" && (
-              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <label className="text-sm font-semibold text-slate-800">
-                  {t("form.videoUpload")}
-                </label>
-                <input
-                  ref={videoInputRef}
-                  type="file"
-                  name="video"
-                  accept=".mp4,.m4v,video/mp4,video/x-m4v"
-                  required
-                  onChange={handleVideoChange}
-                  disabled={isSaving}
-                  className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-primary/90 disabled:opacity-60"
-                />
-                {selectedVideoFile && (
-                  <p className="text-xs text-slate-600">
-                    {selectedVideoFile.name} | {formatBytes(selectedVideoFile.size)}
-                  </p>
-                )}
-              </div>
-            )}
-            {isVideoInvalid && (
-              <p className="text-xs font-medium text-red-600">
-                {validateVideoFile(selectedVideoFile)}
-              </p>
-            )}
           </section>
 
           <section className="ui-hover-card space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
             <div>
-              <h2 className="text-sm font-semibold text-slate-900 md:text-base">{t("form.submissionModeTitle")}</h2>
-              <p className="mt-1 text-xs text-slate-500">{t("form.submissionModeDescription")}</p>
+              <h2 className="text-sm font-semibold text-slate-900 md:text-base">
+                {videoCaseUi.title}
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                {videoCaseUi.description}
+              </p>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className={`cursor-pointer rounded-xl border p-4 motion-safe:transition ${submissionMode === "data_only" ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-slate-200 bg-white hover:border-primary/40"}`}>
-                <input type="radio" name="submission_mode" value="data_only" checked={submissionMode === "data_only"} onChange={() => handleSubmissionModeChange("data_only")} className="sr-only" />
-                <span className="text-sm font-semibold text-slate-900">{t("form.submitDataOnly")}</span>
-                <span className="mt-1 block text-xs leading-5 text-slate-500">{t("form.submitDataOnlyDesc")}</span>
-              </label>
-              <label className={`cursor-pointer rounded-xl border p-4 motion-safe:transition ${submissionMode === "with_video" ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-slate-200 bg-white hover:border-primary/40"}`}>
-                <input type="radio" name="submission_mode" value="with_video" checked={submissionMode === "with_video"} onChange={() => handleSubmissionModeChange("with_video")} className="sr-only" />
-                <span className="text-sm font-semibold text-slate-900">{t("form.submitWithVideo")}</span>
-                <span className="mt-1 block text-xs leading-5 text-slate-500">{t("form.submitWithVideoDesc")}</span>
-              </label>
+            <div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-medium text-slate-700">{videoCaseUi.keyLabel}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  ระบบจะสร้างจากเลขที่สั่งงาน + ชื่อหัวข้อ + รหัสสั้นภายในอัตโนมัติ
+                </p>
+                <p className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700">
+                  {displayCaseLabel || videoCaseUi.keyPlaceholder}
+                </p>
+                <p className="mt-2 text-[11px] text-slate-400">รหัสภายในถูกซ่อนจากผู้ใช้</p>
+              </div>
             </div>
           </section>
 
           {submissionMode === "with_video" && (
-            <section className={`ui-hover-card space-y-3 rounded-2xl bg-white p-4 shadow-sm md:p-6 ${isVideoInvalid ? "border border-red-300 ring-2 ring-red-100" : "border border-slate-200"}`}>
+            <section
+              className={`ui-hover-card space-y-3 rounded-2xl bg-white p-4 shadow-sm md:p-6 ${
+                isVideoInvalid ? "border border-red-300 ring-2 ring-red-100" : "border border-slate-200"
+              }`}
+            >
               <div>
-                <label className="text-sm font-semibold text-slate-800">{t("form.videoUpload")}</label>
+                <label className="text-sm font-semibold text-slate-800">
+                  {t("form.videoUpload")}
+                </label>
                 <p className="mt-1 text-xs text-slate-500">{t("form.videoUploadDescription")}</p>
               </div>
-              <input ref={videoInputRef} type="file" name="video" accept=".mp4,.m4v,video/mp4,video/x-m4v" required onChange={handleVideoChange} disabled={isSaving} className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-primary/90 disabled:opacity-60" />
+              <input
+                ref={videoInputRef}
+                type="file"
+                name="video"
+                accept=".mp4,.m4v,video/mp4,video/x-m4v"
+                required
+                onChange={handleVideoChange}
+                disabled={isSaving}
+                className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-primary/90 disabled:opacity-60"
+              />
               {selectedVideoFile && (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
                   <p className="font-medium text-slate-900">{selectedVideoFile.name}</p>
-                  <p className="mt-1 text-xs text-slate-500">{selectedVideoFile.type || "video/*"} | {formatBytes(selectedVideoFile.size)}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {selectedVideoFile.type || "video/*"} | {formatBytes(selectedVideoFile.size)}
+                  </p>
                 </div>
               )}
-              {isVideoInvalid && <p className="text-xs font-medium text-red-600">{validateVideoFile(selectedVideoFile)}</p>}
+              {isVideoInvalid && (
+                <p className="text-xs font-medium text-red-600">{validateVideoFile(selectedVideoFile)}</p>
+              )}
             </section>
           )}
 

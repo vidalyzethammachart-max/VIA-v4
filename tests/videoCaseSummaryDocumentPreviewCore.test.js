@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -60,4 +61,62 @@ test("returns available formats for a ready aggregate", () => {
     resolveVideoCaseSummaryDocumentState(base, "case-1"),
     { kind: "ready", hasPdf: true, hasDocx: true },
   );
+});
+
+test("registers the protected aggregate document preview route", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+  assert.match(
+    appSource,
+    /path="\/video-cases\/:videoCaseId\/summaries\/:summaryId\/preview"\s+element=\{\s*<ProtectedRoute>\s*<VideoCaseSummaryDocumentPreviewPage \/>\s*<\/ProtectedRoute>\s*\}/,
+  );
+});
+
+test("guards aggregate polling and signed URL lifecycle", () => {
+  const pageSource = readFileSync(
+    new URL("../src/page/VideoCaseSummaryDocumentPreviewPage.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(pageSource, /const SIGNED_URL_REFRESH_MS = 50 \* 60 \* 1000;/);
+  assert.match(pageSource, /const SIGNED_URL_RETRY_MS = 30 \* 1000;/);
+  assert.match(pageSource, /nextRefreshDelay = SIGNED_URL_RETRY_MS;/);
+  assert.match(pageSource, /artifactUrls \? null : artifactError/);
+  assert.match(pageSource, /setLoading\(true\);\s*setAggregate\(null\);/);
+  assert.match(pageSource, /aggregate\.id === summaryId/);
+  assert.match(pageSource, /aggregate\.video_case_id === videoCaseId/);
+  assert.match(pageSource, /window\.setTimeout\(poll, POLL_INTERVAL_MS\)/);
+  assert.doesNotMatch(pageSource, /window\.setInterval\(/);
+});
+
+test("links summary document states to the nested preview page", () => {
+  const summaryPageSource = readFileSync(
+    new URL("../src/page/VideoCaseSummaryPage.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    summaryPageSource,
+    /import\s+\{\s*buildVideoCaseSummaryDocumentPreviewPath\s*\}\s+from\s+"\.\.\/services\/videoCaseSummaryDocumentPreviewCore";/,
+  );
+  assert.match(
+    summaryPageSource,
+    /buildVideoCaseSummaryDocumentPreviewPath\(videoCaseId,\s*aggregate\.id\)/,
+  );
+  assert.match(
+    summaryPageSource,
+    /aggregate\?\.document_status === "ready"\s*&&\s*\(aggregate\.pdf_storage_path \|\| aggregate\.docx_storage_path\)\s*\?\s*"ดูเอกสาร"/,
+  );
+  assert.match(
+    summaryPageSource,
+    /aggregate\?\.document_status === "pending" \|\| aggregate\?\.document_status === "failed"\s*\?\s*"ตรวจสอบสถานะเอกสาร"/,
+  );
+  assert.match(
+    summaryPageSource,
+    /aggregate\?\.document_status === "failed"\s*\?\s*"ตรวจสอบสถานะเอกสาร"\s*:\s*null;/,
+  );
+  assert.match(summaryPageSource, />\s*ดูเอกสาร\s*</);
+  assert.match(summaryPageSource, />\s*ตรวจสอบสถานะเอกสาร\s*</);
+  assert.doesNotMatch(summaryPageSource, /getVideoCaseAggregateDocumentUrls/);
+  assert.doesNotMatch(summaryPageSource, /<iframe/);
 });

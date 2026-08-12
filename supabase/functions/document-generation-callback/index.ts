@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveDocumentTarget } from "../_shared/documentTarget.js";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -14,6 +15,7 @@ const corsHeaders = {
 const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 type CallbackPayload = {
+  document_type?: "evaluation" | "video_case_summary";
   evaluation_id?: number | string;
   aggregate_id?: string;
   docId?: string;
@@ -79,11 +81,12 @@ serve(async (req) => {
 
   try {
     const payload = (await req.json()) as CallbackPayload;
-    const evaluationId = Number(payload.evaluation_id);
-    const aggregateId = normalizeOptionalString(payload.aggregate_id);
-
-    if ((!evaluationId || !Number.isInteger(evaluationId)) && !aggregateId) {
-      return new Response(JSON.stringify({ ok: false, error: "evaluation_id or aggregate_id is required" }), {
+    let target: ReturnType<typeof resolveDocumentTarget>;
+    try {
+      target = resolveDocumentTarget(payload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return new Response(JSON.stringify({ ok: false, error: message }), {
         status: 400,
         headers: {
           ...corsHeaders,
@@ -124,10 +127,12 @@ serve(async (req) => {
       });
     }
 
-    const { error } = await adminSupabase
-      .from(aggregateId ? "video_case_aggregates" : "evaluations")
+    const { data: updatedTarget, error } = await adminSupabase
+      .from(target.table)
       .update(updateValues)
-      .eq("id", aggregateId ?? evaluationId);
+      .eq("id", target.id)
+      .select("id")
+      .maybeSingle();
 
     if (error) {
       return new Response(JSON.stringify({ ok: false, error: error.message }), {
@@ -139,11 +144,21 @@ serve(async (req) => {
       });
     }
 
+    if (!updatedTarget) {
+      return new Response(JSON.stringify({ ok: false, error: "Document target was not found." }), {
+        status: 404,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      });
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,
-        evaluationId: evaluationId || null,
-        aggregateId,
+        evaluationId: target.kind === "evaluation" ? target.id : null,
+        aggregateId: target.kind === "aggregate" ? target.id : null,
         status: updateValues.document_status,
         docId: docId ?? null,
         sourceDocId,

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveDocumentTarget } from "../_shared/documentTarget.js";
 
 const WEBHOOK_URL = Deno.env.get("N8N_WEBHOOK_URL")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -19,10 +20,11 @@ const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 type ForwardPayload = {
   evaluation_id?: number;
   aggregate_id?: string;
-  document_type?: "evaluation" | "video_case_aggregate";
+  document_type?: "evaluation" | "video_case_summary";
   subject_name?: string | null;
   order_number?: string | null;
   Email?: string | null;
+  summary?: Record<string, unknown> | null;
 };
 
 function extractDocId(payload: unknown): string | null {
@@ -50,27 +52,21 @@ function extractDocId(payload: unknown): string | null {
 }
 
 async function updateDocument(
-  payload: ForwardPayload,
+  target: ReturnType<typeof resolveDocumentTarget>,
   values: {
     source_doc_id?: string | null;
     document_status: "ready" | "failed";
     document_error?: string | null;
   },
 ) {
-  const isAggregate = Boolean(payload.aggregate_id);
-  const recordId = isAggregate ? payload.aggregate_id : payload.evaluation_id;
-  if (!recordId) {
-    return;
-  }
-
   const { error } = await adminSupabase
-    .from(isAggregate ? "video_case_aggregates" : "evaluations")
+    .from(target.table)
     .update(values)
-    .eq("id", recordId);
+    .eq("id", target.id);
 
   if (error) {
     console.error("[forward-to-n8n] failed to update document state", {
-      recordId,
+      recordId: target.id,
       error: error.message,
     });
   }
@@ -143,8 +139,25 @@ serve(async (req) => {
     console.log("[forward-to-n8n] user authenticated", { userId: user.id });
 
     const payload = (await req.json()) as ForwardPayload;
+    let target: ReturnType<typeof resolveDocumentTarget>;
+    try {
+      target = resolveDocumentTarget(payload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      });
+    }
+
     const securedPayload = {
       ...payload,
+      document_type: target.documentType,
+      evaluation_id: target.kind === "evaluation" ? target.id : undefined,
+      aggregate_id: target.kind === "aggregate" ? target.id : undefined,
       actor_user_id: user.id,
       callback_url: `${SUPABASE_URL}/functions/v1/document-generation-callback`,
       documents_bucket: DOCUMENTS_BUCKET,
@@ -169,7 +182,7 @@ serve(async (req) => {
 
     if (!res.ok) {
       const text = await res.text();
-      await updateDocument(payload, {
+      await updateDocument(target, {
         document_status: "failed",
         document_error: text.slice(0, 1000),
       });
@@ -204,8 +217,8 @@ serve(async (req) => {
         JSON.stringify({
           ok: true,
           status: "pending",
-          evaluationId: payload.evaluation_id ?? null,
-          aggregateId: payload.aggregate_id ?? null,
+          evaluationId: target.kind === "evaluation" ? target.id : null,
+          aggregateId: target.kind === "aggregate" ? target.id : null,
           message: "Workflow accepted. Waiting for async callback.",
         }),
         {
@@ -218,7 +231,7 @@ serve(async (req) => {
       );
     }
 
-    await updateDocument(payload, {
+    await updateDocument(target, {
       source_doc_id: docId,
       document_status: "ready",
       document_error: null,
@@ -234,8 +247,8 @@ serve(async (req) => {
       JSON.stringify({
         ok: true,
         status: "ready",
-        evaluationId: payload.evaluation_id ?? null,
-        aggregateId: payload.aggregate_id ?? null,
+        evaluationId: target.kind === "evaluation" ? target.id : null,
+        aggregateId: target.kind === "aggregate" ? target.id : null,
         docId,
       }),
       {

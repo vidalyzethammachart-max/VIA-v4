@@ -9,6 +9,9 @@ import Dashboard from "./page/Dashboard";
 import AdminDashboard from "./page/AdminDashboard";
 import RoleRequestsPage from "./page/RoleRequestsPage";
 import VideoCasesPage from "./page/VideoCasesPage";
+import VideoCaseDetailPage from "./page/VideoCaseDetailPage";
+import VideoCaseSummaryPage from "./page/VideoCaseSummaryPage";
+import VideoCaseSummaryDocumentPreviewPage from "./page/VideoCaseSummaryDocumentPreviewPage";
 import ForgotPassword from "./page/ForgotPassword";
 import ResetPassword from "./page/ResetPassword";
 import MyFormsDashboard from "./page/MyFormsDashboard";
@@ -108,6 +111,38 @@ export default function App() {
             }
           />
           <Route
+            path="/video-cases/:videoCaseId"
+            element={
+              <ProtectedRoute>
+                <VideoCaseDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/video-cases/:videoCaseId/summaries/:summaryId"
+            element={
+              <ProtectedRoute>
+                <VideoCaseSummaryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/video-cases/:videoCaseId/summaries/:summaryId/preview"
+            element={
+              <ProtectedRoute>
+                <VideoCaseSummaryDocumentPreviewPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/video-cases/:videoCaseId/aggregates/:aggregateId"
+            element={
+              <ProtectedRoute>
+                <VideoCaseSummaryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin"
             element={
               <ProtectedRoute requiredRole="admin">
@@ -124,14 +159,6 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <RoleRequestsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/video-cases"
-            element={
-              <ProtectedRoute>
-                <VideoCasesPage />
               </ProtectedRoute>
             }
           />

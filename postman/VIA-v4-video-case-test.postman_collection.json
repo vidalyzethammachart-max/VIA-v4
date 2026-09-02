@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "4a482074-0ef0-4da7-8549-b6197b5e31ae",
     "name": "VIA V4 - Video Case Test",
-    "description": "Run 1-3 to test an individual evaluation. Requests 4-6 test callbacks and the separate video case summary identifier contract.",
+    "description": "Run 1-3 to test an individual evaluation. Run 1A, 2A, 2B, and 3A to verify a score 1 plus score 5 aggregate source set before combining in the Video Case UI. Requests 4-6 test callbacks and the separate video case summary identifier contract.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -20,6 +20,10 @@
     { "key": "aggregate_id", "value": "" },
     { "key": "created_by", "value": "" },
     { "key": "employee_number", "value": "" },
+    { "key": "score_test_subject_name", "value": "Postman Score 1-5 Aggregate Test" },
+    { "key": "score_test_short_code", "value": "pm-score-15" },
+    { "key": "evaluation_id_low", "value": "" },
+    { "key": "evaluation_id_high", "value": "" },
     { "key": "n8n_callback_url", "value": "https://via4-app.vercel.app/api/n8n-analysis-result" },
     { "key": "n8n_callback_secret", "value": "PASTE_N8N_CALLBACK_SECRET" },
     { "key": "document_callback_secret", "value": "PASTE_DOCUMENT_CALLBACK_SECRET" }
@@ -47,6 +51,157 @@
             "exec": [
               "pm.test('Video case created or found', () => pm.response.to.have.status(200));",
               "pm.collectionVariables.set('video_case_id', pm.response.json().id);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "1A. Create Score 1-5 Test Case",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"p_order_number\": \"{{order_number}}\",\n  \"p_subject_name\": \"{{score_test_subject_name}}\",\n  \"p_short_code\": \"{{score_test_short_code}}\",\n  \"p_case_title\": \"{{score_test_subject_name}}\",\n  \"p_source_file_name\": null,\n  \"p_video_object_key\": null,\n  \"p_member_role\": \"leader\"\n}"
+        },
+        "url": "{{supabase_url}}/rest/v1/rpc/resolve_video_case_membership"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Score 1-5 video case created or found', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('video_case_id', pm.response.json().id);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2A. Create Evaluation - All Scores 1",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Prefer", "value": "return=representation" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "[\n  {\n    \"user_id\": \"{{user_id}}\",\n    \"video_case_id\": \"{{video_case_id}}\",\n    \"order_number\": \"{{order_number}}\",\n    \"subject_name\": \"{{score_test_subject_name}} - คะแนน 1\",\n    \"overall_suggestion\": \"Score 1 aggregate smoke test\",\n    \"rubric\": {\n      \"1\": { \"q1\": 1, \"q2\": 1, \"q3\": 1, \"q4\": 1, \"q5\": 1 },\n      \"2\": { \"q1\": 1, \"q2\": 1, \"q3\": 1, \"q4\": 1, \"q5\": 1 },\n      \"3\": { \"q1\": 1, \"q2\": 1, \"q3\": 1, \"q4\": 1, \"q5\": 1 },\n      \"4\": { \"q1\": 1, \"q2\": 1, \"q3\": 1, \"q4\": 1, \"q5\": 1 },\n      \"5\": { \"q1\": 1, \"q2\": 1, \"q3\": 1, \"q4\": 1, \"q5\": 1 },\n      \"6\": { \"q1\": 1, \"q2\": 1, \"q3\": 1, \"q4\": 1, \"q5\": 1 },\n      \"7\": { \"q1\": 1, \"q2\": 1, \"q3\": 1, \"q4\": 1, \"q5\": 1 },\n      \"8\": { \"q1\": 1, \"q2\": 1, \"q3\": 1, \"q4\": 1, \"q5\": 1 },\n      \"9\": { \"q1\": 1, \"q2\": 1, \"q3\": 1, \"q4\": 1, \"q5\": 1 }\n    },\n    \"analysis_kind\": \"human\",\n    \"document_status\": \"pending\"\n  }\n]"
+        },
+        "url": "{{supabase_url}}/rest/v1/evaluations"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const token = pm.collectionVariables.get('access_token');",
+              "const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+              "pm.collectionVariables.set('user_id', JSON.parse(atob(payload)).sub);"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Score 1 evaluation created', () => pm.response.to.have.status(201));",
+              "const evaluation = pm.response.json()[0];",
+              "pm.collectionVariables.set('evaluation_id_low', String(evaluation.id));",
+              "pm.test('Every score 1 section average is 1', () => Object.values(evaluation.section_averages).forEach((value) => pm.expect(value).to.equal(1)));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2B. Create Evaluation - All Scores 5",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Prefer", "value": "return=representation" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "[\n  {\n    \"user_id\": \"{{user_id}}\",\n    \"video_case_id\": \"{{video_case_id}}\",\n    \"order_number\": \"{{order_number}}\",\n    \"subject_name\": \"{{score_test_subject_name}} - คะแนน 5\",\n    \"overall_suggestion\": \"Score 5 aggregate smoke test\",\n    \"rubric\": {\n      \"1\": { \"q1\": 5, \"q2\": 5, \"q3\": 5, \"q4\": 5, \"q5\": 5 },\n      \"2\": { \"q1\": 5, \"q2\": 5, \"q3\": 5, \"q4\": 5, \"q5\": 5 },\n      \"3\": { \"q1\": 5, \"q2\": 5, \"q3\": 5, \"q4\": 5, \"q5\": 5 },\n      \"4\": { \"q1\": 5, \"q2\": 5, \"q3\": 5, \"q4\": 5, \"q5\": 5 },\n      \"5\": { \"q1\": 5, \"q2\": 5, \"q3\": 5, \"q4\": 5, \"q5\": 5 },\n      \"6\": { \"q1\": 5, \"q2\": 5, \"q3\": 5, \"q4\": 5, \"q5\": 5 },\n      \"7\": { \"q1\": 5, \"q2\": 5, \"q3\": 5, \"q4\": 5, \"q5\": 5 },\n      \"8\": { \"q1\": 5, \"q2\": 5, \"q3\": 5, \"q4\": 5, \"q5\": 5 },\n      \"9\": { \"q1\": 5, \"q2\": 5, \"q3\": 5, \"q4\": 5, \"q5\": 5 }\n    },\n    \"analysis_kind\": \"human\",\n    \"document_status\": \"pending\"\n  }\n]"
+        },
+        "url": "{{supabase_url}}/rest/v1/evaluations"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const token = pm.collectionVariables.get('access_token');",
+              "const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+              "pm.collectionVariables.set('user_id', JSON.parse(atob(payload)).sub);"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Score 5 evaluation created', () => pm.response.to.have.status(201));",
+              "const evaluation = pm.response.json()[0];",
+              "pm.collectionVariables.set('evaluation_id_high', String(evaluation.id));",
+              "pm.test('Every score 5 section average is 5', () => Object.values(evaluation.section_averages).forEach((value) => pm.expect(value).to.equal(5)));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3A. Verify Score 1-5 Sources",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": "{{supabase_url}}/rest/v1/evaluations?id=in.({{evaluation_id_low}},{{evaluation_id_high}})&select=id,video_case_id,subject_name,section_averages"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const low = Number(pm.collectionVariables.get('evaluation_id_low'));",
+              "const high = Number(pm.collectionVariables.get('evaluation_id_high'));",
+              "if (!Number.isInteger(low) || !Number.isInteger(high)) { throw new Error('Run 2A and 2B before verification.'); }"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Both score test evaluations are available', () => pm.expect(pm.response.json()).to.have.length(2));",
+              "const rows = pm.response.json();",
+              "const low = rows.find((row) => row.id === Number(pm.collectionVariables.get('evaluation_id_low')));",
+              "const high = rows.find((row) => row.id === Number(pm.collectionVariables.get('evaluation_id_high')));",
+              "pm.test('Score 1 source averages are 1', () => Object.values(low.section_averages).forEach((value) => pm.expect(value).to.equal(1)));",
+              "pm.test('Score 5 source averages are 5', () => Object.values(high.section_averages).forEach((value) => pm.expect(value).to.equal(5)));",
+              "pm.test('Both sources belong to the same Video Case', () => pm.expect(low.video_case_id).to.equal(high.video_case_id));"
             ],
             "type": "text/javascript"
           }

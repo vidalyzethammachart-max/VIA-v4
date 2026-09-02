@@ -23,30 +23,6 @@ import {
   type VideoCaseRow,
 } from "../services/videoCaseService";
 
-function getAiSummary(output: unknown, rawText: string | null): string {
-  if (typeof output === "string" && output.trim()) return output;
-  if (!output || typeof output !== "object") return rawText || "No AI analysis available.";
-
-  const record = output as Record<string, unknown>;
-  for (const key of ["summary", "overall_summary", "overallSummary", "report", "feedback"]) {
-    if (typeof record[key] === "string" && record[key].trim()) return record[key];
-  }
-
-  for (const nestedKey of ["analysis", "result", "data"]) {
-    const nested = record[nestedKey];
-    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
-      const summary = getAiSummary(nested, null);
-      if (summary !== "No AI analysis available.") return summary;
-    }
-  }
-
-  return rawText || "Structured AI analysis is available. Open details to inspect it.";
-}
-
-function getAiOutputText(run: VideoCaseEvaluationRow): string {
-  return getAiSummary(run.analysis_ai_output, run.analysis_ai_raw_text);
-}
-
 function getEvaluationAverage(run: VideoCaseEvaluationRow): number | null {
   const scores = Object.values(run.rubric || {})
     .flatMap((section) =>
@@ -423,16 +399,15 @@ export default function VideoCaseDetailPage() {
                 <p className="mt-4 text-sm text-slate-500">ยังไม่มีผลวิเคราะห์</p>
               ) : (
                 <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="min-w-[1320px] w-full border-collapse text-left text-xs">
+                  <table className="min-w-[1060px] w-full border-collapse text-left text-xs">
                     <thead className="bg-slate-50 text-slate-600">
                       <tr>
                         <th className="sticky left-0 z-10 min-w-48 border-b border-slate-200 bg-slate-50 px-4 py-3 font-semibold">แบบประเมิน</th>
                         <th className="min-w-28 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">รหัสพนักงาน</th>
                         <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">คะแนนเฉลี่ย</th>
                         <th className="min-w-80 border-b border-l border-slate-200 px-4 py-3 font-semibold">ข้อเสนอแนะโดยรวม</th>
-                        <th className="min-w-72 border-b border-l border-slate-200 px-4 py-3 font-semibold">ผลวิเคราะห์ AI</th>
-                        {canCombine && <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">เลือก</th>}
                         <th className="min-w-28 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">ดูสรุปผล</th>
+                        {canCombine && <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">เลือก</th>}
                         {canCombine && <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">ลบ</th>}
                       </tr>
                     </thead>
@@ -458,8 +433,13 @@ export default function VideoCaseDetailPage() {
                                 {run.overall_suggestion?.trim() || "-"}
                               </p>
                             </td>
-                            <td className="border-l border-slate-200 px-4 py-3 leading-5 text-slate-600">
-                              <p className="line-clamp-4 whitespace-pre-wrap">{getAiOutputText(run)}</p>
+                            <td className="border-l border-slate-200 px-3 py-3 text-center">
+                              <Link
+                                to={`/preview/${run.id}`}
+                                className="btn-secondary text-xs"
+                              >
+                                ดูสรุปผล
+                              </Link>
                             </td>
                             {canCombine && (
                               <td className="border-l border-slate-200 px-3 py-3 text-center">
@@ -474,17 +454,10 @@ export default function VideoCaseDetailPage() {
                                     );
                                   }}
                                   aria-label={`เลือกแบบประเมิน #${run.id} เพื่อรวมผล`}
+                                  className="h-5 w-5 accent-emerald-600"
                                 />
                               </td>
                             )}
-                            <td className="border-l border-slate-200 px-3 py-3 text-center">
-                              <Link
-                                to={`/preview/${run.id}`}
-                                className="btn-secondary text-xs"
-                              >
-                                ดูสรุปผล
-                              </Link>
-                            </td>
                             {canCombine && (
                               <td className="border-l border-slate-200 px-3 py-3 text-center">
                                 <button

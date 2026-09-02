@@ -43,7 +43,6 @@ test("uses Thai evaluation labels and button actions", () => {
     "แบบประเมิน",
     "คะแนนเฉลี่ย",
     "ข้อเสนอแนะโดยรวม",
-    "ผลวิเคราะห์ AI",
     "เลือก",
     "ดูสรุปผล",
     "ลบ",
@@ -54,6 +53,12 @@ test("uses Thai evaluation labels and button actions", () => {
   assert.match(pageSource, />เลือก<\/th>/);
   assert.match(pageSource, />ดูสรุปผล<\/th>/);
   assert.match(pageSource, />ลบ<\/th>/);
+  assert.match(
+    pageSource,
+    /ดูสรุปผล<\/th>\s*\{canCombine && <th[^>]*>เลือก<\/th>\}\s*\{canCombine && <th[^>]*>ลบ<\/th>\}/,
+  );
+  assert.match(pageSource, /className="h-5 w-5 accent-emerald-600"/);
+  assert.doesNotMatch(pageSource, />ผลวิเคราะห์ AI<\/th>/);
   assert.doesNotMatch(pageSource, /min-w-40 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">จัดการ<\/th>/);
   assert.doesNotMatch(pageSource, /เลือกเพื่อรวม/);
 });

@@ -120,3 +120,27 @@ test("links summary document states to the nested preview page", () => {
   assert.doesNotMatch(summaryPageSource, /getVideoCaseAggregateDocumentUrls/);
   assert.doesNotMatch(summaryPageSource, /<iframe/);
 });
+
+test("does not overwrite an aggregate callback result with pending after dispatch", () => {
+  const serviceSource = readFileSync(
+    new URL("../src/services/videoCaseService.ts", import.meta.url),
+    "utf8",
+  );
+  const dispatchStart = serviceSource.indexOf(
+    "export async function sendVideoCaseAggregateToN8nWithPrompt",
+  );
+  const dispatchSource = serviceSource.slice(dispatchStart);
+  const pendingUpdate = dispatchSource.indexOf('update({ document_status: "pending", document_error: null })');
+  const dispatch = dispatchSource.indexOf('supabase.functions.invoke("forward-to-n8n"');
+
+  assert.ok(pendingUpdate >= 0, "aggregate dispatch must mark the document pending");
+  assert.ok(dispatch >= 0, "aggregate dispatch must call forward-to-n8n");
+  assert.ok(
+    pendingUpdate < dispatch,
+    "pending must be saved before n8n can callback with ready artifacts",
+  );
+  assert.match(
+    dispatchSource,
+    /await supabase\.functions\.invoke\("forward-to-n8n"[\s\S]*?await getVideoCaseAggregate\(aggregate\.id\)[\s\S]*?return latestAggregate;/,
+  );
+});

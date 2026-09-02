@@ -553,6 +553,16 @@ export async function sendVideoCaseAggregateToN8nWithPrompt(
     combinePrompt,
   });
 
+  // Set pending before dispatch so an n8n callback cannot be overwritten after it marks ready.
+  const { error: pendingError } = await supabase
+    .from("video_case_aggregates")
+    .update({ document_status: "pending", document_error: null })
+    .eq("id", aggregate.id);
+
+  if (pendingError) {
+    throw new Error(pendingError.message);
+  }
+
   const { error: documentError } = await supabase.functions.invoke("forward-to-n8n", {
     body: summary,
   });
@@ -573,16 +583,10 @@ export async function sendVideoCaseAggregateToN8nWithPrompt(
     return data as VideoCaseAggregateRow;
   }
 
-  const { data, error } = await supabase
-    .from("video_case_aggregates")
-    .update({ document_status: "pending", document_error: null })
-    .eq("id", aggregate.id)
-    .select("*")
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
+  const latestAggregate = await getVideoCaseAggregate(aggregate.id);
+  if (!latestAggregate) {
+    throw new Error("Aggregate disappeared after document dispatch.");
   }
 
-  return data as VideoCaseAggregateRow;
+  return latestAggregate;
 }

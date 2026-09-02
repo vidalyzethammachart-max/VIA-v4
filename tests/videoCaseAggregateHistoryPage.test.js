@@ -44,12 +44,14 @@ test("uses Thai evaluation labels and button actions", () => {
     "คะแนนเฉลี่ย",
     "ข้อเสนอแนะโดยรวม",
     "ผลวิเคราะห์ AI",
-    "เลือกเพื่อรวม",
+    "เลือก",
+    "ดูสรุปผล",
     "ลบ",
   ]) {
     assert.match(pageSource, new RegExp(label));
   }
-  assert.doesNotMatch(pageSource, />\s*Include\s*</);
+  assert.match(pageSource, /to=\{`\/preview\/\$\{run\.id\}`\}/);
+  assert.doesNotMatch(pageSource, /เลือกเพื่อรวม/);
 });
 
 test("guards aggregate deletion with leader permission and confirmation", () => {

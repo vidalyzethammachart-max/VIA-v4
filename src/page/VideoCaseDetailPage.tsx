@@ -423,7 +423,7 @@ export default function VideoCaseDetailPage() {
                 <p className="mt-4 text-sm text-slate-500">ยังไม่มีผลวิเคราะห์</p>
               ) : (
                 <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="min-w-[1200px] w-full border-collapse text-left text-xs">
+                  <table className="min-w-[1320px] w-full border-collapse text-left text-xs">
                     <thead className="bg-slate-50 text-slate-600">
                       <tr>
                         <th className="sticky left-0 z-10 min-w-48 border-b border-slate-200 bg-slate-50 px-4 py-3 font-semibold">แบบประเมิน</th>
@@ -431,7 +431,8 @@ export default function VideoCaseDetailPage() {
                         <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">คะแนนเฉลี่ย</th>
                         <th className="min-w-80 border-b border-l border-slate-200 px-4 py-3 font-semibold">ข้อเสนอแนะโดยรวม</th>
                         <th className="min-w-72 border-b border-l border-slate-200 px-4 py-3 font-semibold">ผลวิเคราะห์ AI</th>
-                        {canCombine && <th className="min-w-32 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">จัดการ</th>}
+                        {canCombine && <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">เลือก</th>}
+                        <th className="min-w-40 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">จัดการ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 bg-white">
@@ -461,28 +462,39 @@ export default function VideoCaseDetailPage() {
                             </td>
                             {canCombine && (
                               <td className="border-l border-slate-200 px-3 py-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => {
+                                <input
+                                  type="checkbox"
+                                  checked={selectedAnalysisIds.includes(run.id)}
+                                  onChange={(event) => {
                                     setSelectedAnalysisIds((current) =>
-                                      current.includes(run.id)
-                                        ? current.filter((id) => id !== run.id)
-                                        : [...new Set([...current, run.id])],
+                                      event.target.checked
+                                        ? [...new Set([...current, run.id])]
+                                        : current.filter((id) => id !== run.id),
                                     );
                                   }}
+                                  aria-label={`เลือกแบบประเมิน #${run.id} เพื่อรวมผล`}
+                                />
+                              </td>
+                            )}
+                            <td className="border-l border-slate-200 px-3 py-3 text-center">
+                              <div className="flex flex-wrap justify-center gap-2">
+                                <Link
+                                  to={`/preview/${run.id}`}
                                   className="btn-secondary text-xs"
                                 >
-                                  {selectedAnalysisIds.includes(run.id) ? "ยกเลิกการเลือก" : "เลือกเพื่อรวม"}
-                                </button>
+                                  ดูสรุปผล
+                                </Link>
+                                {canCombine && (
                                 <button
                                   type="button"
                                   onClick={() => setEvaluationToDelete(run)}
-                                  className="btn-danger mt-2 text-xs"
+                                  className="btn-danger text-xs"
                                 >
                                   ลบ
                                 </button>
-                              </td>
-                            )}
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}

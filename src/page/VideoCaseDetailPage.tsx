@@ -432,7 +432,8 @@ export default function VideoCaseDetailPage() {
                         <th className="min-w-80 border-b border-l border-slate-200 px-4 py-3 font-semibold">ข้อเสนอแนะโดยรวม</th>
                         <th className="min-w-72 border-b border-l border-slate-200 px-4 py-3 font-semibold">ผลวิเคราะห์ AI</th>
                         {canCombine && <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">เลือก</th>}
-                        <th className="min-w-40 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">จัดการ</th>
+                        <th className="min-w-28 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">ดูสรุปผล</th>
+                        {canCombine && <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">ลบ</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 bg-white">
@@ -477,14 +478,15 @@ export default function VideoCaseDetailPage() {
                               </td>
                             )}
                             <td className="border-l border-slate-200 px-3 py-3 text-center">
-                              <div className="flex flex-wrap justify-center gap-2">
-                                <Link
-                                  to={`/preview/${run.id}`}
-                                  className="btn-secondary text-xs"
-                                >
-                                  ดูสรุปผล
-                                </Link>
-                                {canCombine && (
+                              <Link
+                                to={`/preview/${run.id}`}
+                                className="btn-secondary text-xs"
+                              >
+                                ดูสรุปผล
+                              </Link>
+                            </td>
+                            {canCombine && (
+                              <td className="border-l border-slate-200 px-3 py-3 text-center">
                                 <button
                                   type="button"
                                   onClick={() => setEvaluationToDelete(run)}
@@ -492,9 +494,8 @@ export default function VideoCaseDetailPage() {
                                 >
                                   ลบ
                                 </button>
-                                )}
-                              </div>
-                            </td>
+                              </td>
+                            )}
                           </tr>
                         );
                       })}

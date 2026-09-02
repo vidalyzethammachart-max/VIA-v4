@@ -85,3 +85,14 @@ test("shows an explicit empty aggregate history state", () => {
     /ยังไม่มีการรวมผลแบบประเมินสำหรับ Video Case นี้/,
   );
 });
+
+test("separates aggregate history columns with visible vertical borders", () => {
+  assert.match(
+    pageSource,
+    /className="border-b border-r border-slate-200 px-4 py-3 font-semibold"/,
+  );
+  assert.match(
+    pageSource,
+    /className="border-r border-slate-200 px-4 py-3"/,
+  );
+});

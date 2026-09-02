@@ -509,7 +509,7 @@ export default function VideoCaseDetailPage() {
                         ].map((label) => (
                           <th
                             key={label}
-                            className="border-b border-slate-200 px-4 py-3 font-semibold"
+                            className="border-b border-r border-slate-200 px-4 py-3 font-semibold"
                           >
                             {label}
                           </th>
@@ -522,7 +522,7 @@ export default function VideoCaseDetailPage() {
                           key={item.aggregateId}
                           className="align-top hover:bg-slate-50/70"
                         >
-                          <td className="px-4 py-3">
+                          <td className="border-r border-slate-200 px-4 py-3">
                             <p className="font-semibold text-slate-900">
                               {item.fileName}
                             </p>
@@ -530,18 +530,18 @@ export default function VideoCaseDetailPage() {
                               {item.aggregateId}
                             </p>
                           </td>
-                          <td className="px-4 py-3 text-slate-600">
+                          <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
                             {item.createdAt
                               ? new Date(item.createdAt).toLocaleString()
                               : "-"}
                           </td>
-                          <td className="px-4 py-3 text-slate-700">
+                          <td className="border-r border-slate-200 px-4 py-3 text-slate-700">
                             {item.creatorName}
                           </td>
-                          <td className="px-4 py-3 text-slate-700">
+                          <td className="border-r border-slate-200 px-4 py-3 text-slate-700">
                             {item.employeeNumber}
                           </td>
-                          <td className="px-4 py-3 text-slate-600">
+                          <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
                             <p>{item.sourceCount} แบบประเมิน</p>
                             <p className="mt-1">
                               {item.sourceEvaluationIds.length
@@ -551,13 +551,13 @@ export default function VideoCaseDetailPage() {
                                 : "-"}
                             </p>
                           </td>
-                          <td className="px-4 py-3 text-slate-600">
+                          <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
                             {getStatusLabel(item.analysisStatus)}
                           </td>
-                          <td className="px-4 py-3 text-slate-600">
+                          <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
                             {getStatusLabel(item.documentStatus)}
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="border-r border-slate-200 px-4 py-3">
                             <div className="flex flex-wrap items-center gap-2">
                               <Link
                                 to={buildVideoCaseAggregateSummaryPath(selectedCase.id, item.aggregateId)}

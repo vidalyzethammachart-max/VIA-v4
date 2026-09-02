@@ -194,6 +194,18 @@ export default function ProfileDropdown() {
                 }
               />
             </li>
+            <li>
+              <MenuItem
+                label={language === "th" ? "กลุ่มวิดีโอ" : "Video cases"}
+                isDark={isDark}
+                onClick={() => closeAndNavigate("/video-cases")}
+                icon={
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75A2.25 2.25 0 016 4.5h4.19a2.25 2.25 0 011.59.66l.91.91a2.25 2.25 0 001.59.66H18A2.25 2.25 0 0120.25 9v8.25A2.25 2.25 0 0118 19.5H6a2.25 2.25 0 01-2.25-2.25V6.75z" />
+                  </svg>
+                }
+              />
+            </li>
             {canAccessFormSubmit && (
               <li>
                 <MenuItem

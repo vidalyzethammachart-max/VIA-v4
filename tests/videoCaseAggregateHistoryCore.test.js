@@ -15,6 +15,9 @@ const aggregate = {
   status: "ready",
   document_status: "pending",
   created_at: "2026-07-28T10:00:00.000Z",
+  source_snapshot: {
+    case_title: "Postman Test",
+  },
 };
 
 test("builds a normalized aggregate history item", () => {
@@ -28,6 +31,7 @@ test("builds a normalized aggregate history item", () => {
     analysisStatus: "ready",
     documentStatus: "pending",
     createdAt: "2026-07-28T10:00:00.000Z",
+    fileName: "Postman Test - รายงานสรุปผลการประเมิน.pdf",
   });
 });
 

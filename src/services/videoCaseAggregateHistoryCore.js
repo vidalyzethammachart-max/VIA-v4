@@ -19,10 +19,17 @@ function uniquePositiveIds(values) {
 
 export function buildVideoCaseAggregateHistoryItem(aggregate) {
   const aggregateId = cleanText(aggregate?.id, "");
+  const snapshot = aggregate?.source_snapshot && typeof aggregate.source_snapshot === "object"
+    ? aggregate.source_snapshot
+    : {};
+  const caseTitle = cleanText(snapshot.case_title, "");
 
   return {
     aggregateId,
     shortAggregateId: aggregateId.slice(0, 8) || "-",
+    fileName: caseTitle
+      ? `${caseTitle} - รายงานสรุปผลการประเมิน.pdf`
+      : `รายงานสรุปผลการประเมิน-${aggregateId.slice(0, 8) || "-"}.pdf`,
     creatorName: cleanText(aggregate?.requested_by_name, "Unknown user"),
     employeeNumber: cleanText(
       aggregate?.requested_by_employee_number,

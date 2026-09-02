@@ -13,15 +13,15 @@ const serviceSource = readFileSync(
 
 test("renders the aggregate audit columns", () => {
   for (const label of [
-    "Aggregate history",
-    "Aggregate",
-    "Created",
-    "Created by",
-    "Employee no.",
-    "Sources",
-    "Analysis",
-    "Document",
-    "Action",
+    "ประวัติการรวมผลการประเมิน",
+    "ชื่อไฟล์",
+    "วันที่สร้าง",
+    "ผู้รวมผล",
+    "รหัสพนักงาน",
+    "แบบประเมินที่ใช้",
+    "สถานะการวิเคราะห์",
+    "สถานะเอกสาร",
+    "จัดการ",
   ]) {
     assert.match(pageSource, new RegExp(label.replace(".", "\\.")));
   }
@@ -32,7 +32,24 @@ test("links each aggregate to its existing summary page", () => {
     pageSource,
     /buildVideoCaseAggregateSummaryPath\(selectedCase\.id,\s*item\.aggregateId\)/,
   );
-  assert.match(pageSource, />\s*View summary\s*</);
+  assert.match(pageSource, />\s*ดูสรุปผล\s*</);
+  assert.match(pageSource, /className="btn-secondary text-xs"/);
+  assert.match(pageSource, /className="btn-danger text-xs"/);
+});
+
+test("uses Thai evaluation labels and button actions", () => {
+  for (const label of [
+    "รายการแบบประเมิน",
+    "แบบประเมิน",
+    "คะแนนเฉลี่ย",
+    "ข้อเสนอแนะโดยรวม",
+    "ผลวิเคราะห์ AI",
+    "เลือกเพื่อรวม",
+    "ลบ",
+  ]) {
+    assert.match(pageSource, new RegExp(label));
+  }
+  assert.doesNotMatch(pageSource, />\s*Include\s*</);
 });
 
 test("guards aggregate deletion with leader permission and confirmation", () => {
@@ -54,6 +71,6 @@ test("guards aggregate deletion with leader permission and confirmation", () => 
 test("shows an explicit empty aggregate history state", () => {
   assert.match(
     pageSource,
-    /No evaluation summaries have been combined for this Video Case yet\./,
+    /ยังไม่มีการรวมผลแบบประเมินสำหรับ Video Case นี้/,
   );
 });

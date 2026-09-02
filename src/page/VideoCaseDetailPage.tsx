@@ -62,6 +62,16 @@ function getEvaluationAverage(run: VideoCaseEvaluationRow): number | null {
   return scores.reduce((sum, score) => sum + score, 0) / scores.length;
 }
 
+function getStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    pending: "กำลังดำเนินการ",
+    ready: "พร้อมใช้งาน",
+    failed: "ไม่สำเร็จ",
+  };
+
+  return labels[status] || status;
+}
+
 export default function VideoCaseDetailPage() {
   const navigate = useNavigate();
   const { videoCaseId } = useParams<{ videoCaseId: string }>();
@@ -376,9 +386,9 @@ export default function VideoCaseDetailPage() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-900">Evaluations</h3>
+                  <h3 className="text-lg font-semibold text-slate-900">รายการแบบประเมิน</h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Review each submission before combining them into a new summary.
+                    ตรวจสอบแต่ละแบบประเมินก่อนนำมารวมผลเป็นรายงานสรุปใหม่
                   </p>
                 </div>
                 {canCombine && analyses.length > 0 && (
@@ -388,14 +398,14 @@ export default function VideoCaseDetailPage() {
                       onClick={() => setSelectedAnalysisIds(analyses.map((run) => run.id))}
                       className="btn-secondary text-xs"
                     >
-                      Select all
+                      เลือกทั้งหมด
                     </button>
                     <button
                       type="button"
                       onClick={() => setSelectedAnalysisIds([])}
                       className="btn-secondary text-xs"
                     >
-                      Clear
+                      ล้างการเลือก
                     </button>
                     <button
                       type="button"
@@ -416,12 +426,12 @@ export default function VideoCaseDetailPage() {
                   <table className="min-w-[1200px] w-full border-collapse text-left text-xs">
                     <thead className="bg-slate-50 text-slate-600">
                       <tr>
-                        <th className="sticky left-0 z-10 min-w-48 border-b border-slate-200 bg-slate-50 px-4 py-3 font-semibold">Evaluation</th>
-                        <th className="min-w-28 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">Employee no.</th>
-                        <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">Average</th>
-                        <th className="min-w-80 border-b border-l border-slate-200 px-4 py-3 font-semibold">Overall suggestion</th>
-                        <th className="min-w-72 border-b border-l border-slate-200 px-4 py-3 font-semibold">AI analysis</th>
-                        {canCombine && <th className="min-w-28 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">Actions</th>}
+                        <th className="sticky left-0 z-10 min-w-48 border-b border-slate-200 bg-slate-50 px-4 py-3 font-semibold">แบบประเมิน</th>
+                        <th className="min-w-28 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">รหัสพนักงาน</th>
+                        <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">คะแนนเฉลี่ย</th>
+                        <th className="min-w-80 border-b border-l border-slate-200 px-4 py-3 font-semibold">ข้อเสนอแนะโดยรวม</th>
+                        <th className="min-w-72 border-b border-l border-slate-200 px-4 py-3 font-semibold">ผลวิเคราะห์ AI</th>
+                        {canCombine && <th className="min-w-32 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">จัดการ</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 bg-white">
@@ -431,8 +441,8 @@ export default function VideoCaseDetailPage() {
                         return (
                           <tr key={run.id} className="align-top hover:bg-slate-50/70">
                             <td className="sticky left-0 z-10 border-r border-slate-200 bg-white px-4 py-3">
-                              <p className="font-semibold text-slate-900">{run.subject_name || "Untitled"}</p>
-                              <p className="mt-1 text-slate-500">Evaluation #{run.id}</p>
+                              <p className="font-semibold text-slate-900">{run.subject_name || "ไม่มีชื่อหัวข้อ"}</p>
+                              <p className="mt-1 text-slate-500">แบบประเมิน #{run.id}</p>
                               <p className="mt-1 text-slate-500">{new Date(run.created_at).toLocaleString()}</p>
                             </td>
                             <td className="border-l border-slate-200 px-3 py-3 text-center text-slate-700">
@@ -451,26 +461,25 @@ export default function VideoCaseDetailPage() {
                             </td>
                             {canCombine && (
                               <td className="border-l border-slate-200 px-3 py-3 text-center">
-                                <label className="flex items-center justify-center gap-2 text-slate-600">
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedAnalysisIds.includes(run.id)}
-                                    onChange={(event) => {
-                                      setSelectedAnalysisIds((current) =>
-                                        event.target.checked
-                                          ? [...new Set([...current, run.id])]
-                                          : current.filter((id) => id !== run.id),
-                                      );
-                                    }}
-                                  />
-                                  Include
-                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedAnalysisIds((current) =>
+                                      current.includes(run.id)
+                                        ? current.filter((id) => id !== run.id)
+                                        : [...new Set([...current, run.id])],
+                                    );
+                                  }}
+                                  className="btn-secondary text-xs"
+                                >
+                                  {selectedAnalysisIds.includes(run.id) ? "ยกเลิกการเลือก" : "เลือกเพื่อรวม"}
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => setEvaluationToDelete(run)}
-                                  className="mt-2 text-xs font-semibold text-red-600 hover:text-red-800"
+                                  className="btn-danger mt-2 text-xs"
                                 >
-                                  Delete
+                                  ลบ
                                 </button>
                               </td>
                             )}
@@ -486,16 +495,16 @@ export default function VideoCaseDetailPage() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">
-                  Aggregate history
+                  ประวัติการรวมผลการประเมิน
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Combined evaluation summaries for this Video Case.
+                  รายงานสรุปผลที่รวมจากแบบประเมินใน Video Case นี้
                 </p>
               </div>
 
               {aggregateHistory.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-500">
-                  No evaluation summaries have been combined for this Video Case yet.
+                  ยังไม่มีการรวมผลแบบประเมินสำหรับ Video Case นี้
                 </p>
               ) : (
                 <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
@@ -503,14 +512,14 @@ export default function VideoCaseDetailPage() {
                     <thead className="bg-slate-50 text-slate-600">
                       <tr>
                         {[
-                          "Aggregate",
-                          "Created",
-                          "Created by",
-                          "Employee no.",
-                          "Sources",
-                          "Analysis",
-                          "Document",
-                          "Action",
+                          "ชื่อไฟล์",
+                          "วันที่สร้าง",
+                          "ผู้รวมผล",
+                          "รหัสพนักงาน",
+                          "แบบประเมินที่ใช้",
+                          "สถานะการวิเคราะห์",
+                          "สถานะเอกสาร",
+                          "จัดการ",
                         ].map((label) => (
                           <th
                             key={label}
@@ -529,7 +538,7 @@ export default function VideoCaseDetailPage() {
                         >
                           <td className="px-4 py-3">
                             <p className="font-semibold text-slate-900">
-                              {item.shortAggregateId}
+                              {item.fileName}
                             </p>
                             <p className="mt-1 break-all text-slate-400">
                               {item.aggregateId}
@@ -547,7 +556,7 @@ export default function VideoCaseDetailPage() {
                             {item.employeeNumber}
                           </td>
                           <td className="px-4 py-3 text-slate-600">
-                            <p>{item.sourceCount} evaluation(s)</p>
+                            <p>{item.sourceCount} แบบประเมิน</p>
                             <p className="mt-1">
                               {item.sourceEvaluationIds.length
                                 ? item.sourceEvaluationIds
@@ -557,26 +566,26 @@ export default function VideoCaseDetailPage() {
                             </p>
                           </td>
                           <td className="px-4 py-3 text-slate-600">
-                            {item.analysisStatus}
+                            {getStatusLabel(item.analysisStatus)}
                           </td>
                           <td className="px-4 py-3 text-slate-600">
-                            {item.documentStatus}
+                            {getStatusLabel(item.documentStatus)}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex flex-wrap items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-2">
                               <Link
                                 to={buildVideoCaseAggregateSummaryPath(selectedCase.id, item.aggregateId)}
-                                className="font-semibold text-[#04418b] hover:underline"
+                                className="btn-secondary text-xs"
                               >
-                                View summary
+                                ดูสรุปผล
                               </Link>
                               {canCombine && (
                                 <button
                                   type="button"
                                   onClick={() => setAggregateToDelete(aggregate)}
-                                  className="font-semibold text-red-600 hover:text-red-800"
+                                  className="btn-danger text-xs"
                                 >
-                                  Delete
+                                  ลบ
                                 </button>
                               )}
                             </div>

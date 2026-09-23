@@ -1,0 +1,191 @@
+// ===============================
+// Source data
+// ===============================
+const normalizedData =
+  $('Normalize Incoming Payload').first().json || {};
+
+const transformData =
+  $('Transform VIA Payload').first().json || {};
+
+const statsData =
+  $('Calculate Evaluation Stats').first().json || {};
+
+const sections =
+  $input.first().json || {};
+
+// ===============================
+// Document target
+// ===============================
+const documentType =
+  normalizedData.document_type ??
+  transformData.document_type ??
+  (normalizedData.aggregate_id ? 'video_case_summary' : 'evaluation');
+
+const isSummary = documentType === 'video_case_summary';
+
+const aggregateId =
+  normalizedData.aggregate_id ??
+  transformData.aggregate_id ??
+  null;
+
+const evaluationIdRaw =
+  normalizedData.evaluation_id ??
+  transformData.evaluation_id ??
+  transformData.evaluationId ??
+  null;
+
+const evaluationId =
+  evaluationIdRaw !== null &&
+  evaluationIdRaw !== '' &&
+  Number.isInteger(Number(evaluationIdRaw)) &&
+  Number(evaluationIdRaw) > 0
+    ? Number(evaluationIdRaw)
+    : null;
+
+// ตรวจ ID ตามประเภทเอกสาร
+if (isSummary && !aggregateId) {
+  throw new Error('aggregate_id is required for video_case_summary');
+}
+
+if (!isSummary && !evaluationId) {
+  throw new Error('evaluation_id is required for evaluation');
+}
+
+// ===============================
+// Rubric
+// ===============================
+const rubric = Array.isArray(transformData.rubric)
+  ? transformData.rubric
+  : [];
+
+const finalRubric = rubric.map((item) => {
+  const scores = Array.isArray(item.scores)
+    ? item.scores
+    : [];
+
+  const cleanScores = scores.map((value) => {
+    const score = isSummary ? Number(value || 0) : Math.round(Number(value || 0));
+    return score >= 1 && score <= 5 ? score : 0;
+  });
+
+  return {
+    key: item.key,
+    name: item.name,
+    scores: cleanScores,
+    average: item.average,
+  };
+});
+
+// ===============================
+// Basic information
+// ===============================
+const orderNumber =
+  normalizedData.order_number ??
+  transformData.order_number ??
+  '';
+
+const subjectName =
+  normalizedData.subjectName ??
+  normalizedData.subject_name ??
+  transformData.subjectName ??
+  transformData.subject_name ??
+  '';
+
+const email =
+  normalizedData.email ??
+  transformData.email ??
+  '';
+
+// ===============================
+// Overall score
+// ===============================
+const overallAverage = Number(
+  statsData.stats?.overallAverage ??
+  transformData.stats?.overallAverage ??
+  0
+);
+
+const overallAverageText = overallAverage
+  ? overallAverage.toFixed(2)
+  : '';
+
+// ===============================
+// Status
+// ===============================
+let statusFix = '☐';
+let statusPublish = '☐';
+
+if (overallAverage < 3) {
+  statusFix = '☑';
+} else {
+  statusPublish = '☑';
+}
+
+// ===============================
+// Final output
+// ===============================
+const out = {
+  document_type: documentType,
+
+  video_case_id:
+    normalizedData.video_case_id ??
+    transformData.video_case_id ??
+    null,
+
+  order_number: orderNumber,
+  subjectName,
+  rubric: finalRubric,
+  email,
+
+  ORDER_NUMBER: orderNumber,
+  SUBJECT_NAME: subjectName,
+  OVERALL_AVERAGE: overallAverageText,
+
+  OVERVIEW: sections.summary || '',
+  STRONGEST_LIST: sections.highlight || '',
+  WEAKEST_LIST: sections.need_improve || '',
+
+  STRENGTHS: sections.strengths || '',
+  WEAKNESSES: sections.weaknesses || '',
+  RECOMMENDATIONS: sections.extra_suggest || '',
+
+  STATUS_FIX: statusFix,
+  STATUS_PUBLISH: statusPublish,
+
+  source_evaluation_ids:
+    normalizedData.source_evaluation_ids ?? [],
+
+  source_count:
+    normalizedData.source_count ?? 0,
+
+  sender_employee_number:
+    normalizedData.sender_employee_number ?? null,
+
+  combine_prompt:
+    normalizedData.combine_prompt ?? null,
+
+  callback_url:
+    normalizedData.callback_url ?? null,
+
+  documents_bucket:
+    normalizedData.documents_bucket ?? null,
+
+  actor_user_id:
+    normalizedData.actor_user_id ?? null,
+};
+
+// เพิ่ม primary ID เพียงชนิดเดียว
+if (isSummary) {
+  out.aggregate_id = aggregateId;
+} else {
+  out.evaluation_id = evaluationId;
+}
+
+// ===============================
+// Return
+// ===============================
+return [
+  {
+    json: out,
+  },
+];

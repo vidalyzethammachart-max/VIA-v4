@@ -1,0 +1,212 @@
+const basePayload = $json || {};
+const documentType =
+  basePayload.document_type ??
+  (basePayload.aggregate_id ? "video_case_summary" : "evaluation");
+const isSummary = documentType === "video_case_summary";
+
+const sectionDefinitions = [
+  { id: "1", key: "language_and_script", name: "Language & Script" },
+  { id: "2", key: "camera_angle", name: "Camera Angle" },
+  { id: "3", key: "composition", name: "Composition" },
+  { id: "4", key: "narrator", name: "Narrator" },
+  { id: "5", key: "story_sequence", name: "Story Sequence" },
+  { id: "6", key: "scene_and_location", name: "Scene & Location" },
+  { id: "7", key: "lighting", name: "Lighting" },
+  { id: "8", key: "audio", name: "Audio" },
+  { id: "9", key: "graphics_and_visuals", name: "Graphics & Visuals" },
+];
+
+function normalizeSubjectName(value) {
+  if (!value) return "";
+  return String(value).replace(/_sub$/i, "").trim();
+}
+
+function cleanScore(value) {
+  const numericValue = isSummary ? Number(value) : Math.round(Number(value));
+  return numericValue >= 1 && numericValue <= 5
+    ? numericValue
+    : 0;
+}
+
+function average(scores) {
+  const validScores = scores.filter(
+    (score) => score >= 1 && score <= 5,
+  );
+
+  if (validScores.length === 0) return 0;
+
+  const total = validScores.reduce(
+    (sum, score) => sum + score,
+    0,
+  );
+
+  return Number(
+    (total / validScores.length).toFixed(2),
+  );
+}
+
+function sortQuestionEntries(entries) {
+  return entries.sort(([leftKey], [rightKey]) => {
+    const leftNumber = Number(
+      String(leftKey).replace(/\D/g, ""),
+    );
+
+    const rightNumber = Number(
+      String(rightKey).replace(/\D/g, ""),
+    );
+
+    if (
+      Number.isFinite(leftNumber) &&
+      Number.isFinite(rightNumber)
+    ) {
+      return leftNumber - rightNumber;
+    }
+
+    return String(leftKey).localeCompare(
+      String(rightKey),
+    );
+  });
+}
+
+function transformArrayRubric(rubric) {
+  return rubric.map((section, index) => {
+    const definition =
+      sectionDefinitions[index] || {};
+
+    const scores = Array.isArray(section.scores)
+      ? section.scores.map(cleanScore)
+      : [];
+
+    return {
+      key:
+        section.key ||
+        definition.key ||
+        `section_${index + 1}`,
+
+      name:
+        section.name ||
+        definition.name ||
+        `Section ${index + 1}`,
+
+      scores,
+      average:
+        Number(section.average) ||
+        average(scores),
+    };
+  });
+}
+
+function transformObjectRubric(rubric) {
+  return sectionDefinitions.map((definition) => {
+    const sectionData =
+      rubric?.[definition.id] || {};
+
+    const scores = sortQuestionEntries(
+      Object.entries(sectionData),
+    ).map(([, value]) => cleanScore(value));
+
+    return {
+      key: definition.key,
+      name: definition.name,
+      scores,
+      average: average(scores),
+    };
+  });
+}
+
+const rawRubric =
+  basePayload.rubric ??
+  basePayload.question_averages ??
+  {};
+
+let rubric = [];
+
+if (Array.isArray(rawRubric)) {
+  rubric = transformArrayRubric(rawRubric);
+} else if (
+  rawRubric &&
+  typeof rawRubric === "object"
+) {
+  rubric = transformObjectRubric(rawRubric);
+}
+
+const output = {
+  document_type: documentType,
+
+  video_case_id:
+    basePayload.video_case_id ?? null,
+
+  order_number:
+    basePayload.order_number ?? "",
+
+  subjectName: normalizeSubjectName(
+    basePayload.subjectName ??
+    basePayload.subject_name ??
+    basePayload.case_title ??
+    "",
+  ),
+
+  email:
+    basePayload.email ??
+    basePayload.Email ??
+    "",
+
+  rubric,
+
+  suggestions:
+    Array.isArray(basePayload.suggestions)
+      ? basePayload.suggestions
+      : [],
+
+  overallSuggestionRaw:
+    basePayload.overallSuggestionRaw ??
+    basePayload.overall_suggestion ??
+    basePayload.combine_prompt ??
+    "",
+
+  hasVideo: Boolean(basePayload.hasVideo),
+  video: basePayload.video ?? null,
+
+  source_evaluation_ids:
+    basePayload.source_evaluation_ids ?? [],
+
+  source_count:
+    basePayload.source_count ?? 0,
+
+  question_averages:
+    basePayload.question_averages ?? {},
+
+  section_averages:
+    basePayload.section_averages ?? {},
+
+  aggregate_analysis:
+    basePayload.aggregate_analysis ?? null,
+
+  combine_prompt:
+    basePayload.combine_prompt ?? null,
+
+  sender_employee_number:
+    basePayload.sender_employee_number ?? null,
+
+  callback_url:
+    basePayload.callback_url ?? null,
+
+  documents_bucket:
+    basePayload.documents_bucket ?? null,
+
+  actor_user_id:
+    basePayload.actor_user_id ?? null,
+};
+
+// ใส่ primary ID เพียงชนิดเดียว
+if (isSummary) {
+  output.aggregate_id =
+    basePayload.aggregate_id ?? null;
+} else {
+  output.evaluation_id =
+    basePayload.evaluation_id ?? null;
+}
+
+return {
+  json: output,
+};

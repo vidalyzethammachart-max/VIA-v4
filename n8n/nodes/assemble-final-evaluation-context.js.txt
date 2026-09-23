@@ -1,0 +1,90 @@
+const input = $json;
+const documentType = input.document_type ??
+  (input.aggregate_id ? "video_case_summary" : "evaluation");
+const isSummary = documentType === "video_case_summary";
+
+// ===============================
+// Manual Evaluation
+// ===============================
+const manualRaw =
+  input.content?.parts?.[0]?.text || '{}';
+
+let manualEvaluation = {};
+
+try {
+  manualEvaluation = JSON.parse(
+    manualRaw
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim()
+  );
+} catch (e) {
+  manualEvaluation = { raw: manualRaw };
+}
+
+// ===============================
+// Video Evaluation
+// ===============================
+const videoEvaluation =
+  input.videoanalysis ||
+  input.videoAnalysis ||
+  input.ai_video_analysis ||
+  input.videoEvaluation ||
+  {};
+
+// ===============================
+// Clean duplicate rubric
+// ===============================
+delete manualEvaluation.rubric;
+
+// ===============================
+// Final Output
+// ===============================
+return [
+  {
+    json: {
+      document_type: documentType,
+      ...(isSummary
+        ? { aggregate_id: input.aggregate_id ?? null }
+        : { evaluation_id: input.evaluation_id ?? null }),
+      video_case_id: input.video_case_id ?? null,
+      source_evaluation_ids: input.source_evaluation_ids ?? [],
+      source_count: input.source_count ?? 0,
+      question_averages: input.question_averages ?? {},
+      section_averages: input.section_averages ?? {},
+      aggregate_analysis: input.aggregate_analysis ?? null,
+      combine_prompt: input.combine_prompt ?? null,
+      sender_employee_number: input.sender_employee_number ?? null,
+      callback_url: input.callback_url ?? null,
+      documents_bucket: input.documents_bucket ?? null,
+      actor_user_id: input.actor_user_id ?? null,
+
+      order_number:
+        input.order_number ?? "",
+
+      subjectName:
+        input.subjectName ?? "",
+
+      email:
+        input.email ?? "",
+
+      // ใช้ rubric แค่ชุดเดียว
+      rubric: input.rubric || [],
+
+      suggestions:
+        input.suggestions || [],
+
+      overallSuggestionRaw:
+        input.overallSuggestionRaw || "",
+
+      hasVideo:
+        Boolean(input.hasVideo),
+
+      stats:
+        input.stats || {},
+
+      manualEvaluation,
+      videoEvaluation
+    }
+  }
+];

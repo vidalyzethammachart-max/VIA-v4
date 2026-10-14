@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { buildDashboardModel, buildDashboardStats, loadDashboardData, type DashboardData } from "../services/dashboardService";
+import { Link, useNavigate } from "react-router-dom";
 
 import { accountingService } from "../services/accountingService";
 import MainNavbar from "../components/MainNavbar";
@@ -8,191 +8,78 @@ import { getSections } from "../config/sections";
 import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
 
-type RubricValue = number | null;
-type RubricData = {
-  [sectionId: string]: {
-    [questionLabel: string]: RubricValue;
-  };
-};
-
-type EvaluationRow = {
-  id: number;
-  rubric: RubricData;
-  created_at: string;
-};
-
-type QuestionStats = {
-  id: string;
-  label: string;
-  count: number;
-  scores: { [score: number]: number };
-  average: number;
-};
-
-type SectionStats = {
-  id: string;
-  title: string;
-  questions: QuestionStats[];
-};
-
-const DASHBOARD_QUERY_TIMEOUT_MS = 8000;
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => {
-      window.setTimeout(() => {
-        reject(new Error(`${label} timed out`));
-      }, timeoutMs);
-    }),
-  ]);
-}
-
 export default function Dashboard() {
   const navigate = useNavigate();
   const { loading: authLoading, user: authUser } = useAuthRole();
   const { language, t } = useLanguage();
+  const th = language === "th";
   const sections = useMemo(() => getSections(language), [language]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<SectionStats[]>([]);
-  const [totalResponses, setTotalResponses] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [activityKind, setActivityKind] = useState<"all" | "evaluation" | "aggregate">("all");
+  const [visibleCount, setVisibleCount] = useState(8);
   const [activeTab, setActiveTab] = useState<string>(sections[0]?.id || "1");
   const [chartType, setChartType] = useState<"bar" | "donut">("bar");
+  const controller = useRef<AbortController | null>(null);
+  const requestVersion = useRef(0);
+  const userId = authUser?.id;
+  const model = useMemo(() => data ? buildDashboardModel(data) : null, [data]);
+  const stats = useMemo(() => buildDashboardStats(model?.evaluations || [], sections), [model, sections]);
+  const totalResponses = model?.evaluations.length || 0;
+  const activities = (model?.recent || []).filter(row => activityKind === "all" || row.kind === activityKind);
 
-  useEffect(() => {
-    setActiveTab((current) => current || sections[0]?.id || "1");
-  }, [sections]);
-
-  const processStats = useCallback(
-    (evaluations: EvaluationRow[]) => {
-      setTotalResponses(evaluations.length);
-
-      const sectionMap = new Map<string, Map<string, number[]>>();
-
-      evaluations.forEach((row) => {
-        const rubric = row.rubric;
-        if (!rubric) return;
-
-        Object.entries(rubric).forEach(([sectionId, questions]) => {
-          if (!questions) return;
-
-          if (!sectionMap.has(sectionId)) {
-            sectionMap.set(sectionId, new Map());
-          }
-
-          const questionMap = sectionMap.get(sectionId)!;
-
-          Object.entries(questions).forEach(([storageKey, rawScore]) => {
-            const score = typeof rawScore === "string" ? Number(rawScore) : rawScore;
-            if (score === null || score === undefined || Number.isNaN(score)) return;
-
-            if (!questionMap.has(storageKey)) {
-              questionMap.set(storageKey, []);
-            }
-            questionMap.get(storageKey)!.push(score);
-          });
-        });
-      });
-
-      const result: SectionStats[] = sections.map((sectionConf) => {
-        const questionMap = sectionMap.get(sectionConf.id) || new Map();
-        const questions: QuestionStats[] = sectionConf.questions.map(
-          (question) => {
-            const scores = [
-              ...(questionMap.get(question.storageKey) || []),
-              ...(questionMap.get(question.id) || []),
-            ];
-            const count = scores.length;
-            const totalScore = scores.reduce((sum, score) => sum + score, 0);
-            const average = count > 0 ? totalScore / count : 0;
-            const scoreCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-
-            scores.forEach((score) => {
-              if (score >= 1 && score <= 5) {
-                scoreCounts[score as 1 | 2 | 3 | 4 | 5] += 1;
-              }
-            });
-
-            return {
-              id: question.id,
-              label: question.label,
-              count,
-              scores: scoreCounts,
-              average,
-            };
-          },
-        );
-
-        return {
-          id: sectionConf.id,
-          title: sectionConf.title,
-          questions,
-        };
-      });
-
-      setStats(result);
-    },
-    [sections],
-  );
-
-  const fetchEvaluations = useCallback(async () => {
+  const fetchDashboard = useCallback(async () => {
+    if (!userId) return;
+    controller.current?.abort();
+    const currentController = new AbortController();
+    controller.current = currentController;
+    const version = ++requestVersion.current;
+    const timeout = window.setTimeout(() => currentController.abort(), 20_000);
+    setRefreshing(true);
     try {
-      if (!authUser) {
-        navigate("/", { replace: true });
-        return;
-      }
-
-      const { data, error } = await withTimeout(
-        supabase.from("evaluations").select("id, rubric, created_at"),
-        DASHBOARD_QUERY_TIMEOUT_MS,
-        "Loading dashboard evaluations",
-      );
-
-      if (error) throw error;
-
-      if (data) {
-        processStats(data as EvaluationRow[]);
-      }
+      const loaded = await loadDashboardData(currentController.signal);
+      if (version !== requestVersion.current) return;
+      setData(loaded);
+      setUpdatedAt(new Date());
+      setErrorMessage(null);
     } catch (error) {
-      console.error("Error fetching evaluations:", error);
+      if (version !== requestVersion.current) return;
+      setErrorMessage(currentController.signal.aborted ? "timeout" : error instanceof Error ? error.message : "Unknown error");
     } finally {
-      setLoading(false);
+      window.clearTimeout(timeout);
+      if (version === requestVersion.current) {
+        controller.current = null;
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [authUser, navigate, processStats]);
+  }, [userId]);
 
   useEffect(() => {
-    const run = async () => {
-      try {
-        if (authLoading) {
-          setLoading(true);
-          return;
-        }
-
-        if (!authUser) {
-          navigate("/", { replace: true });
-          return;
-        }
-
-        void accountingService
-          .logActivity({
-            user_id: authUser.id,
-            action: "dashboard.viewed",
-            resource: "dashboard",
-          })
-          .catch((logError) => {
-            console.error("Activity log failed:", logError);
-          });
-
-        await fetchEvaluations();
-      } catch (error) {
-        console.error("Access check failed", error);
-        setLoading(false);
-      }
+    if (authLoading) return;
+    if (!userId) { navigate("/", { replace: true }); return; }
+    setData(null);
+    setLoading(true);
+    void fetchDashboard();
+    void accountingService.logActivity({ user_id: userId, action: "dashboard.viewed", resource: "dashboard" }).catch(() => {});
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible" && !controller.current) void fetchDashboard();
     };
-
-    void run();
-  }, [authLoading, authUser, fetchEvaluations, navigate]);
-
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    const interval = window.setInterval(refreshVisible, 30_000);
+    return () => {
+      requestVersion.current++;
+      controller.current?.abort();
+      controller.current = null;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [authLoading, userId, fetchDashboard, navigate]);
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
@@ -214,11 +101,77 @@ export default function Dashboard() {
           <h1 className="mb-2 text-3xl font-bold text-gray-900 dark:text-gray-100">
             {t("dashboard.title")}
           </h1>
-          <p className="text-gray-500 dark:text-gray-400">
+          {model && <p className="text-gray-500 dark:text-gray-400">
             {t("dashboard.totalResponses", { count: totalResponses })}
-          </p>
+          </p>}
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button type="button" className="btn-secondary" disabled={refreshing} onClick={() => void fetchDashboard()}>
+              {refreshing ? (th ? "กำลังอัปเดต..." : "Updating...") : (th ? "รีเฟรชข้อมูล" : "Refresh")}
+            </button>
+            <Link to="/video-cases" className="btn-secondary">{th ? "จัดการ Video Case" : "Manage video cases"}</Link>
+            {updatedAt && <span className="text-xs text-slate-500">{th ? "อัปเดตล่าสุด" : "Last updated"} {updatedAt.toLocaleTimeString()}</span>}
+          </div>
         </div>
 
+        {errorMessage && <div role="alert" className="mb-6 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
+          {th ? "โหลดข้อมูล Dashboard ไม่สำเร็จ กรุณากดรีเฟรชเพื่อลองอีกครั้ง" : "Could not load dashboard data. Refresh to try again."}
+          {data && <p>{th ? "ข้อมูลด้านล่างเป็นข้อมูลจากการโหลดสำเร็จครั้งล่าสุด" : "Showing the last successfully loaded data."}</p>}
+        </div>}
+
+        {model && <>
+          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              [th ? "Video Case ที่ใช้งาน" : "Active video cases", model.caseCount],
+              [th ? "ผลประเมินรายบุคคล" : "Individual evaluations", totalResponses],
+              [th ? "ผลรวมการประเมิน" : "Combined summaries", model.summaryCount],
+              [th ? "รายงานพร้อมเปิด" : "Reports ready", model.readyDocumentCount],
+            ].map(([label, count]) => <div key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
+              <p className="mt-2 text-3xl font-bold text-slate-900 dark:text-slate-100">{count}</p>
+            </div>)}
+          </div>
+          <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
+            {th ? "แสดงข้อมูลตามสิทธิ์ของคุณ ไม่รวมเคสในถังขยะ กราฟด้านล่างใช้ผลประเมินรายบุคคลโดยไม่นับผลรวมซ้ำ และอัปเดตอัตโนมัติทุก 30 วินาทีขณะเปิดหน้านี้" : "Shows data you can access, excluding trashed cases. Charts use individual evaluations without double-counting summaries. Updates every 30 seconds while visible."}
+          </p>
+          <section className="mb-8 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-6">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{th ? "ผลวิเคราะห์วิดีโอและรายงาน" : "Video analyses and reports"}</h2>
+            <div className="my-4 flex flex-wrap gap-2" role="group" aria-label={th ? "ประเภทผลวิเคราะห์" : "Analysis type"}>
+              {(["all", "evaluation", "aggregate"] as const).map(kind => <button key={kind} type="button" aria-pressed={activityKind === kind}
+                className={activityKind === kind ? "btn-primary" : "btn-secondary"}
+                onClick={() => { setActivityKind(kind); setVisibleCount(8); }}>
+                {kind === "all" ? (th ? "ทั้งหมด" : "All") : kind === "evaluation" ? (th ? "รายบุคคล" : "Individual") : (th ? "ผลรวม Video Case" : "Case summaries")}
+              </button>)}
+            </div>
+            {activities.length === 0 ? <p className="py-6 text-sm text-slate-500">{th ? "ยังไม่มีผลวิเคราะห์ประเภทนี้" : "No analyses of this type yet."}</p> : <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[700px] text-left text-sm">
+                  <thead className="border-b border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400"><tr>
+                    {(th ? ["วิดีโอ / เคส", "ประเภท", "วันที่", "คะแนนเฉลี่ย", "เอกสาร", "เปิดดู"] : ["Video / case", "Type", "Date", "Average", "Document", "View"]).map(label => <th key={label} className="px-3 py-3 font-medium">{label}</th>)}
+                  </tr></thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                    {activities.slice(0, visibleCount).map(row => <tr key={row.id} className="text-slate-700 dark:text-slate-200">
+                      <td className="max-w-[260px] break-words px-3 py-3">
+                        {row.videoCaseId ? <Link to={`/video-cases/${row.videoCaseId}`} className="font-semibold text-[#04418b] dark:text-sky-300">{row.title}</Link> : <span className="font-semibold">{row.title}</span>}
+                        <p className="mt-1 text-xs text-slate-500">{row.id.replace("evaluation-", "#").replace("aggregate-", "")}</p>
+                      </td>
+                      <td className="px-3 py-3">{row.kind === "aggregate" ? (th ? `ผลรวม ${row.sourceCount} รายการ` : `${row.sourceCount} evaluations combined`) : (th ? "รายบุคคล" : "Individual")}</td>
+                      <td className="px-3 py-3">{new Date(row.createdAt).toLocaleString(language === "th" ? "th-TH" : "en-US")}</td>
+                      <td className="px-3 py-3 font-semibold">{row.average === null ? "—" : row.average.toFixed(2)}</td>
+                      <td className="px-3 py-3">{row.documentPath ? (th ? "พร้อมเปิด" : "Ready") : row.documentStatus === "failed" ? (th ? "สร้างไม่สำเร็จ" : "Failed") : (th ? "ยังไม่พร้อม" : "Not ready")}</td>
+                      <td className="px-3 py-3"><div className="flex flex-wrap gap-2">
+                        <Link to={row.resultPath} className="btn-secondary whitespace-nowrap text-xs">{th ? "ดูผล" : "View result"}</Link>
+                        {row.documentPath && <Link to={row.documentPath} className="btn-primary whitespace-nowrap text-xs">PDF / DOCX</Link>}
+                      </div></td>
+                    </tr>)}
+                  </tbody>
+                </table>
+              </div>
+              {activities.length > visibleCount && <button type="button" className="btn-secondary mt-4" onClick={() => setVisibleCount(count => count + 8)}>{th ? "แสดงเพิ่มเติม" : "Show more"}</button>}
+            </>}
+          </section>
+        </>}
+
+        {model && <>
         <div className="mb-8 flex flex-col items-start justify-between gap-6 xl:flex-row">
           <div className="w-full flex-1">
             <span className="mb-2 block text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -464,6 +417,7 @@ export default function Dashboard() {
             </p>
           </div>
         )}
+        </>}
       </div>
     </div>
   );

@@ -3,6 +3,8 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
+import VideoCaseEditor from "../components/VideoCaseEditor";
+import { buildVideoCaseSummaryDocumentPreviewPath } from "../services/videoCaseSummaryDocumentPreviewCore.js";
 import { normalizeRole, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import {
@@ -53,6 +55,8 @@ export default function VideoCaseDetailPage() {
   const { videoCaseId } = useParams<{ videoCaseId: string }>();
   const [loading, setLoading] = useState(true);
   const [appRole, setAppRole] = useState<AppRole>("user");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [editingCase, setEditingCase] = useState<VideoCaseRow | null>(null);
   const [cases, setCases] = useState<VideoCaseRow[]>([]);
   const [selectedRole, setSelectedRole] = useState<VideoCaseMemberRole | null>(null);
   const [analyses, setAnalyses] = useState<VideoCaseEvaluationRow[]>([]);
@@ -111,6 +115,7 @@ export default function VideoCaseDetailPage() {
   useEffect(() => {
     void supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
+      setCurrentUserId(user.id);
 
       void supabase
         .from("user_information")
@@ -240,6 +245,17 @@ export default function VideoCaseDetailPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <MainNavbar />
+      {editingCase && (
+        <VideoCaseEditor key={editingCase.id} videoCase={editingCase}
+          onCancel={() => setEditingCase(null)}
+          onSaved={(updated) => {
+            setCases((previous) => previous.map((item) => item.id === updated.id ? updated : item));
+            setEditingCase(null);
+            setErrorMessage(null);
+            setSuccessMessage("บันทึกข้อมูลเคสเรียบร้อยแล้ว");
+          }}
+        />
+      )}
       <ConfirmModal
         isOpen={confirmOpen}
         title="รวมผลแบบประเมิน"
@@ -331,13 +347,19 @@ export default function VideoCaseDetailPage() {
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">Current video case</p>
                   <h2 className="mt-2 text-2xl font-bold text-slate-900">{selectedCase.case_title || selectedCase.case_key}</h2>
                   <p className="mt-2 text-sm text-slate-500">Case key: {selectedCase.case_key}</p>
+                  {selectedCase.description && <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-600">{selectedCase.description}</p>}
                   <p className="mt-1 text-sm text-slate-500">
                     {selectedCase.source_file_name || "No source file"} · Updated {new Date(selectedCase.updated_at).toLocaleString()}
                   </p>
                 </div>
+                <div className="flex shrink-0 flex-col items-start gap-3">
+                {(appRole === "admin" || selectedCase.created_by === currentUserId) && (
+                  <button type="button" className="btn-secondary" onClick={() => setEditingCase(selectedCase)}>แก้ไขเคส</button>
+                )}
                 <p className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
                   Your role: {effectiveCaseRole}{appRole === "admin" ? " (via system admin)" : ""}
                 </p>
+                </div>
               </div>
               <div className="grid border-t border-slate-200 sm:grid-cols-3">
                 <div className="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
@@ -529,6 +551,14 @@ export default function VideoCaseDetailPage() {
                             <p className="mt-1 break-all text-slate-400">
                               {item.aggregateId}
                             </p>
+                            {aggregate.document_status === "ready" && (aggregate.pdf_storage_path || aggregate.docx_storage_path) && (
+                              <Link
+                                to={buildVideoCaseSummaryDocumentPreviewPath(selectedCase.id, item.aggregateId)}
+                                className="btn-primary mt-2 inline-flex text-xs"
+                              >
+                                เปิดไฟล์รวม PDF / DOCX
+                              </Link>
+                            )}
                           </td>
                           <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
                             {item.createdAt

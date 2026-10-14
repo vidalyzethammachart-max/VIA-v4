@@ -7,11 +7,13 @@ export type VideoCaseAggregateHistoryInput = {
   status?: unknown;
   document_status?: unknown;
   created_at?: unknown;
+  source_snapshot?: unknown;
 };
 
 export type VideoCaseAggregateHistoryItem = {
   aggregateId: string;
   shortAggregateId: string;
+  fileName: string;
   creatorName: string;
   employeeNumber: string;
   sourceEvaluationIds: number[];

@@ -1,0 +1,4 @@
+SELECT c.id,c.case_key,c.case_title,c.deleted_at,
+  (SELECT jsonb_agg(jsonb_build_object('id',e.id,'document_status',e.document_status,'has_pdf',e.pdf_storage_path IS NOT NULL,'has_docx',e.docx_storage_path IS NOT NULL,'average',(SELECT avg(v.value::numeric) FROM jsonb_each(e.rubric) s CROSS JOIN LATERAL jsonb_each_text(s.value) v))) FROM public.evaluations e WHERE e.video_case_id=c.id) AS evaluations,
+  (SELECT jsonb_agg(jsonb_build_object('id',a.id,'status',a.status,'document_status',a.document_status,'source_count',a.source_count,'source_ids',a.source_evaluation_ids,'has_pdf',a.pdf_storage_path IS NOT NULL,'has_docx',a.docx_storage_path IS NOT NULL,'average',(SELECT avg(v.value::numeric) FROM jsonb_each(a.combined_scores) s CROSS JOIN LATERAL jsonb_each_text(s.value) v))) FROM public.video_case_aggregates a WHERE a.video_case_id=c.id) AS aggregates
+FROM public.video_cases c WHERE c.order_number IN ('E2E-NORMAL-20261014-1150','E2E-SHARED-20261014-ROUND1');

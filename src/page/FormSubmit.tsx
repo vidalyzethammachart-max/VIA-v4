@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
-import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
 import { SectionCard } from "../components/SectionCard";
 import { getLikertLabels, getSections, type LikertValue } from "../config/sections";
@@ -10,6 +9,7 @@ import { normalizeRole, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import { roleRequestService } from "../services/roleRequestService";
 import { resolveVideoCaseMembership } from "../services/videoCaseService";
+import { buildVideoCaseKey } from "../services/videoCaseIdentity";
 import type { EvaluationPayload, Rubric } from "../services/evaluationService";
 
 const MAX_VIDEO_SIZE_BYTES = 1024 * 1024 * 1024;
@@ -163,45 +163,6 @@ function createSubmissionId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function createShortCode() {
-  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const bytes = new Uint8Array(4);
-
-  if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
-    crypto.getRandomValues(bytes);
-  } else {
-    for (let index = 0; index < bytes.length; index += 1) {
-      bytes[index] = Math.floor(Math.random() * 256);
-    }
-  }
-
-  return Array.from(bytes)
-    .map((value) => alphabet[value % alphabet.length])
-    .join("");
-}
-
-function normalizeCaseKeyPart(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-function buildVideoCaseKey(orderNumber: string, subjectName: string, shortCode: string) {
-  const orderPart = normalizeCaseKeyPart(orderNumber);
-  const subjectPart = normalizeCaseKeyPart(subjectName);
-  const shortCodePart = normalizeCaseKeyPart(shortCode);
-
-  if (!orderPart || !subjectPart || !shortCodePart) {
-    return "";
-  }
-
-  return `${orderPart}-${subjectPart}-${shortCodePart}`;
-}
-
 function buildVideoCaseDisplayLabel(orderNumber: string, subjectName: string) {
   const orderPart = orderNumber.trim();
   const subjectPart = subjectName.trim();
@@ -282,11 +243,11 @@ function FormSubmit() {
   const [isRequestingRole, setIsRequestingRole] = useState(false);
   const [roleRequestMessage, setRoleRequestMessage] = useState<string | null>(null);
   const [showValidation, setShowValidation] = useState(false);
-  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const submittingRef = useRef(false);
   const [submissionMode, setSubmissionMode] = useState<"data_only" | "with_video">("data_only");
   const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [submissionProgress, setSubmissionProgress] = useState<SubmissionProgress | null>(null);
-  const [shortCode, setShortCode] = useState(() => createShortCode());
+  const [loadedCaseId, setLoadedCaseId] = useState<string | null>(null);
 
   useEffect(() => {
     void supabase.auth.getUser().then(({ data: { user } }) => {
@@ -308,26 +269,29 @@ function FormSubmit() {
         });
     });
 
-    const caseId = new URLSearchParams(window.location.search).get("caseId");
-    if (caseId) {
-      void supabase
-        .from("video_cases")
-        .select("case_key, order_number, subject_name, short_code")
-        .eq("id", caseId)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data?.order_number) {
-            setOrderNumber(data.order_number);
-          }
-          if (data?.subject_name) {
-            setSubjectName(data.subject_name);
-          }
-          if (data?.short_code) {
-            setShortCode(data.short_code);
-          }
-        });
-    }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadedCaseId(null);
+    if (!videoCaseId) return;
+    void supabase.from("video_cases").select("id, order_number, subject_name, deleted_at")
+      .eq("id", videoCaseId).maybeSingle().then(({ data, error }) => {
+        if (cancelled) return;
+        if (data?.deleted_at) {
+          setSubmitErrorMessage("เคสนี้อยู่ในถังขยะ กรุณาให้ผู้สร้างเคสหรือแอดมินกู้คืนก่อนส่งประเมิน");
+          return;
+        }
+        if (error || !data?.order_number || !data?.subject_name) {
+          setSubmitErrorMessage("โหลดข้อมูลเคสไม่สำเร็จ กรุณาเลือกเคสอีกครั้ง");
+          return;
+        }
+        setOrderNumber(data.order_number);
+        setSubjectName(data.subject_name);
+        setLoadedCaseId(data.id);
+      });
+    return () => { cancelled = true; };
+  }, [videoCaseId]);
 
   const handleToggleAnswer = (
     sectionId: string,
@@ -366,6 +330,7 @@ function FormSubmit() {
   };
 
   const validateForm = (): string | null => {
+    if (videoCaseId && loadedCaseId !== videoCaseId) return "กรุณารอโหลดข้อมูลเคสให้เรียบร้อยก่อนส่ง";
     if (!authUserId) {
       return t("form.sessionNotReady");
     }
@@ -429,7 +394,6 @@ function FormSubmit() {
     setAnswers({});
     setComment("");
     setSelectedVideoFile(null);
-    setShortCode(createShortCode());
     setSubmissionMode("data_only");
     setShowValidation(false);
     if (videoInputRef.current) videoInputRef.current.value = "";
@@ -442,7 +406,7 @@ function FormSubmit() {
     showValidation &&
     submissionMode === "with_video" &&
     Boolean(validateVideoFile(selectedVideoFile));
-  const generatedCaseKey = buildVideoCaseKey(orderNumber, subjectName, shortCode);
+  const generatedCaseKey = buildVideoCaseKey(orderNumber, subjectName);
   const displayCaseLabel = buildVideoCaseDisplayLabel(orderNumber, subjectName);
 
   useEffect(() => {
@@ -748,6 +712,8 @@ function FormSubmit() {
   };
 
   const submitForm = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitErrorMessage(null);
     setSubmitSuccessMessage(null);
     setSubmissionProgress({
@@ -761,6 +727,7 @@ function FormSubmit() {
     if (!payload) {
       setSubmitErrorMessage(t("form.sessionNotReady"));
       setSubmissionProgress(null);
+      submittingRef.current = false;
       setIsSaving(false);
       return;
     }
@@ -776,7 +743,6 @@ function FormSubmit() {
         if (!videoFile) {
           setSubmitErrorMessage(validateVideoFile(videoFile));
           setSubmissionProgress(null);
-          setIsSaving(false);
           return;
         }
       }
@@ -790,7 +756,7 @@ function FormSubmit() {
         const resolvedCase = await resolveVideoCaseMembership({
           orderNumber: orderNumber.trim(),
           subjectName: subjectName.trim(),
-          shortCode,
+          videoCaseId: loadedCaseId ?? undefined,
           caseTitle: subjectName.trim() || generatedCaseKey,
           sourceFileName: videoFile?.name ?? null,
           videoObjectKey: null,
@@ -820,7 +786,7 @@ function FormSubmit() {
         await resolveVideoCaseMembership({
           orderNumber: orderNumber.trim(),
           subjectName: subjectName.trim(),
-          shortCode,
+          videoCaseId: videoCaseId ?? undefined,
           caseTitle: subjectName.trim() || generatedCaseKey,
           sourceFileName: uploadedVideo.fileName,
           videoObjectKey: uploadedVideo.objectKey,
@@ -901,6 +867,7 @@ function FormSubmit() {
       setSubmitErrorMessage(error instanceof Error ? error.message : t("form.submitFailed"));
       setSubmissionProgress(null);
     } finally {
+      submittingRef.current = false;
       setIsSaving(false);
     }
   };
@@ -916,12 +883,7 @@ function FormSubmit() {
       return;
     }
 
-    setShowSubmitConfirm(true);
-  };
-
-  const handleConfirmSubmit = async () => {
-    setShowSubmitConfirm(false);
-    await submitForm();
+    void submitForm();
   };
 
   const handleRequestEditorRole = async () => {
@@ -947,20 +909,6 @@ function FormSubmit() {
   return (
     <div className="min-h-screen bg-slate-50">
       <MainNavbar />
-      <ConfirmModal
-        isOpen={showSubmitConfirm}
-        title={t("form.submitConfirmTitle")}
-        message={t("form.submitConfirmMessage")}
-        variant="primary"
-        onCancel={() => {
-          if (!isSaving) setShowSubmitConfirm(false);
-        }}
-        onConfirm={() => void handleConfirmSubmit()}
-        confirmLabel={t("form.submitConfirmAction")}
-        cancelLabel={t("common.cancel")}
-        confirmDisabled={isSaving}
-      />
-
       <main className="mx-auto max-w-5xl px-4 py-6 md:py-8">
         {userRole === "user" && (
           <section className="ui-hover-card mb-6 rounded-2xl border border-slate-200 bg-white p-4 md:p-6">
@@ -1056,6 +1004,7 @@ function FormSubmit() {
                 </label>
                 <input
                   value={orderNumber}
+                  readOnly={Boolean(videoCaseId)}
                   onChange={(e) => setOrderNumber(e.target.value)}
                   placeholder={t("form.orderPlaceholder")}
                   required
@@ -1077,6 +1026,7 @@ function FormSubmit() {
                 </label>
                 <input
                   value={subjectName}
+                  readOnly={Boolean(videoCaseId)}
                   onChange={(e) => setSubjectName(e.target.value)}
                   placeholder={t("form.subjectPlaceholder")}
                   required

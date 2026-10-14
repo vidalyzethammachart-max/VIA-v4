@@ -1,0 +1,205 @@
+{
+    "fileKey":  "6CTrBXEZcELw7fuEQiSZx4",
+    "fileUrl":  "https://www.figma.com/design/6CTrBXEZcELw7fuEQiSZx4",
+    "flowMapUrl":  "https://www.figma.com/board/dkCXhGLsIC06vcHUgcz2wB",
+    "account":  "Vidalyze",
+    "phase":  "prototype-main-flows-wired-quota-blocked-layout-fix",
+    "coverId":  "6:2",
+    "homeReferenceId":  "2:2",
+    "screens":  [
+                    {
+                        "id":  "7:2",
+                        "name":  "01 — Login",
+                        "path":  "/",
+                        "note":  "ผู้ใช้: ยังไม่ล็อกอิน\nหน้าที่: เข้าสู่ระบบด้วย email/password\nปุ่ม: Login → ปลายทางตาม role\nRegister → 02 · Forgot → 03\nสถานะ: ว่าง / validation / invalid login",
+                        "captureVerified":  true,
+                        "annotationId":  "27:2",
+                        "visualReviewed":  true
+                    },
+                    {
+                        "id":  "8:2",
+                        "name":  "02 — Register",
+                        "path":  "/register",
+                        "note":  "ผู้ใช้: ผู้สมัครใหม่\nหน้าที่: ลงทะเบียนบัญชี VIA\nช่อง: User ID, พนักงาน, email, password\nสำเร็จ → ยืนยัน email / กลับ Login\nสถานะ: validation / success / error",
+                        "captureVerified":  true,
+                        "annotationId":  "27:3",
+                        "visualReviewed":  false
+                    },
+                    {
+                        "id":  "10:2",
+                        "name":  "03 — Forgot Password",
+                        "path":  "/forgot-password",
+                        "note":  "ผู้ใช้: ผู้ขอกู้บัญชี\nหน้าที่: ขอ recovery email\nส่งลิงก์ → email → 04 Reset\nกลับหน้า Login → 01\nสถานะ: ส่งแล้ว / cooldown / error",
+                        "captureVerified":  true,
+                        "annotationId":  "27:4",
+                        "visualReviewed":  false
+                    },
+                    {
+                        "id":  "11:2",
+                        "name":  "04 — Reset Password",
+                        "path":  "/reset-password",
+                        "note":  "ผู้ใช้: ผู้เปิด recovery link\nหน้าที่: ตั้งรหัสผ่านใหม่\nภาพนี้: ลิงก์ไม่ถูกต้องหรือหมดอายุ\nขอลิงก์ใหม่ → 03\nลิงก์ถูกต้อง: password + confirm → Login",
+                        "captureVerified":  true,
+                        "annotationId":  "27:5",
+                        "visualReviewed":  false
+                    },
+                    {
+                        "id":  "12:2",
+                        "name":  "05 — Home",
+                        "path":  "/home",
+                        "note":  "ผู้ใช้: ทุก role ที่ล็อกอิน\nหน้าที่: จุดเริ่มต้นของระบบ\nเริ่มประเมิน → 06 (editor/admin)\nดูผล → 08 · กลุ่มวิดีโอ → 11\nเมนู profile เชื่อมหน้าทั่วระบบ",
+                        "captureVerified":  true,
+                        "annotationId":  "27:6",
+                        "visualReviewed":  true
+                    },
+                    {
+                        "id":  "13:2",
+                        "name":  "06 — Form Submit",
+                        "path":  "/form-submit",
+                        "note":  "ผู้ใช้: editor / admin\nหน้าที่: ประเมิน 9 หมวด 45 ข้อ\nเลือก data-only หรือแนบวิดีโอ\nส่ง → ยืนยัน → evaluation → n8n\nCallback → 09 My Forms → 10 Preview\n?caseId= ผูกกับ shared case เดิม",
+                        "captureVerified":  true,
+                        "annotationId":  "27:7",
+                        "visualReviewed":  false
+                    },
+                    {
+                        "id":  "15:2",
+                        "name":  "07 — Profile",
+                        "path":  "/profile",
+                        "note":  "ผู้ใช้: เจ้าของบัญชี\nหน้าที่: ดูและแก้ข้อมูลตนเอง\nแก้ไข → บันทึก / ยกเลิก\nAvatar: เลือกรูปและบันทึก\nภาพใช้ข้อมูลตัวอย่างทั้งหมด",
+                        "captureVerified":  true,
+                        "annotationId":  "27:8",
+                        "visualReviewed":  false
+                    },
+                    {
+                        "id":  "18:2",
+                        "name":  "08 — Dashboard",
+                        "path":  "/dashboard",
+                        "note":  "ผู้ใช้: ทุก role ที่ล็อกอิน\nหน้าที่: สรุป evaluations ที่ RLS อนุญาต\nเลือกหมวด → ดูสถิติของหมวด\nสลับ Bar / Donut\nตัวอย่าง: 2 evaluations คะแนน 1 และ 5",
+                        "captureVerified":  true,
+                        "annotationId":  "27:9",
+                        "visualReviewed":  false
+                    },
+                    {
+                        "id":  "16:2",
+                        "name":  "09 — My Forms",
+                        "path":  "/my-forms",
+                        "note":  "ผู้ใช้: เจ้าของ evaluations\nหน้าที่: เอกสาร individual ของตน\nค้นหา / กรองสถานะ\nPreview → 10 · สร้างใหม่ → 06\nReady: ดาวน์โหลด PDF / DOCX\nภาพนี้: pending 2 รายการ",
+                        "captureVerified":  true,
+                        "annotationId":  "27:10",
+                        "visualReviewed":  false
+                    },
+                    {
+                        "id":  "17:2",
+                        "name":  "10 — Individual Preview",
+                        "path":  "/preview/235",
+                        "note":  "ผู้ใช้: ผู้มีสิทธิ์อ่าน evaluation\nRoute docId คือ evaluation ID\nภาพนี้: เอกสารกำลังประมวลผล\nReady: Preview + PDF / DOCX\nกลับรายการ → 09\nลบ: ต้องยืนยันและผ่านสิทธิ์ server",
+                        "captureVerified":  true,
+                        "annotationId":  "27:11",
+                        "visualReviewed":  false
+                    },
+                    {
+                        "id":  "20:2",
+                        "name":  "11 — Video Cases",
+                        "path":  "/video-cases",
+                        "note":  "ผู้ใช้: ผู้ล็อกอิน ตามสิทธิ์ backend\nหน้าที่: สร้างหรือเข้าร่วม shared case\nรหัสเคส + ชื่อ → resolve membership\nรายละเอียด → 12 · ประเมิน → 06\nเลือกเคส → ดูข้อมูลและ history",
+                        "captureVerified":  true,
+                        "annotationId":  "27:12",
+                        "visualReviewed":  false
+                    },
+                    {
+                        "id":  "21:2",
+                        "name":  "12 — Case Detail",
+                        "path":  "/video-cases/00000000-0000-4000-8000-000000000010",
+                        "note":  "ผู้ใช้: member / leader / admin\nMember: ดู evaluations + history\nLeader/admin: เลือก sources → รวม → 13\nลบ aggregate: ยืนยันเฉพาะรายการ\nห้ามสับสนกับลบ source evaluation\nแยก case role จาก global role",
+                        "captureVerified":  true,
+                        "annotationId":  "27:13",
+                        "visualReviewed":  true
+                    },
+                    {
+                        "id":  "23:2",
+                        "name":  "13 — Aggregate Summary",
+                        "path":  "/video-cases/00000000-0000-4000-8000-000000000010/summaries/00000000-0000-4000-8000-000000000020",
+                        "note":  "ผู้ใช้: ผู้มีสิทธิ์อ่าน case\nหน้าที่: ตรวจผลรวมก่อนส่งเอกสาร\nSources + ค่าเฉลี่ย + AI summary\nส่งสร้างเอกสาร → n8n / callback\naggregate_id แยกจาก evaluation_id\nตรวจสถานะเอกสาร → 14",
+                        "captureVerified":  true,
+                        "annotationId":  "27:14",
+                        "visualReviewed":  false
+                    },
+                    {
+                        "id":  "22:2",
+                        "name":  "14 — Aggregate Preview",
+                        "path":  "/video-cases/00000000-0000-4000-8000-000000000010/summaries/00000000-0000-4000-8000-000000000020/preview",
+                        "note":  "ผู้ใช้: ผู้มีสิทธิ์อ่าน aggregate\nหน้าที่: เปิดเอกสารผลรวม\nภาพนี้: pending; ตรวจใหม่ทุก 5 วินาที\nReady: PDF Preview / PDF / DOCX\nกลับ summary → 13 · case → 12",
+                        "captureVerified":  true,
+                        "annotationId":  "27:15",
+                        "visualReviewed":  false
+                    },
+                    {
+                        "id":  "24:2",
+                        "name":  "15 — Admin",
+                        "path":  "/admin",
+                        "note":  "ผู้ใช้: admin เท่านั้น\nหน้าที่: สถิติและจัดการผู้ใช้\nค้นหา / กรอง role / บันทึก role\nลบผู้ใช้: confirmation + backend guard\nคำขอสิทธิ์ → 16\nภาพใช้บัญชีจำลอง 2 บัญชี",
+                        "captureVerified":  true,
+                        "annotationId":  "27:16",
+                        "visualReviewed":  true
+                    },
+                    {
+                        "id":  "25:2",
+                        "name":  "16 — Role Requests",
+                        "path":  "/role-requests?role=user",
+                        "note":  "ผู้ใช้: user / editor / admin\nUser: ขอ editor, ดู/ยกเลิกคำขอ\nAdmin: อนุมัติ / ปฏิเสธคำขอ\nภาพนี้: user มีคำขอ pending\nสถานะ: pending / approved / rejected",
+                        "captureVerified":  true,
+                        "annotationId":  "27:17",
+                        "visualReviewed":  false
+                    }
+                ],
+    "variants":  [
+                     {
+                         "name":  "Case Detail / Member",
+                         "nodeId":  "29:2",
+                         "labeled":  true,
+                         "visualReviewed":  false
+                     },
+                     {
+                         "name":  "Role Requests / Admin",
+                         "nodeId":  "30:2",
+                         "labeled":  true,
+                         "visualReviewed":  false
+                     }
+                 ],
+    "remaining":  [
+                      "Add return links from FigJam map to screens",
+                      "Inspect remaining screenshots",
+                      "Verify FigJam rendered diagram",
+                      "Capture ready document states"
+                  ],
+    "completed":  false,
+    "navigation":  {
+                       "indexIds":  [
+                                        "43:2",
+                                        "43:11",
+                                        "43:36"
+                                    ],
+                       "totalLinks":  66,
+                       "brokenNodeTargets":  0,
+                       "verification":  "Plugin API target resolution; two index screenshots reviewed; browser click-through not tested"
+                   },
+    "prototype":  {
+                      "startNode":  "7:2",
+                      "individualConfirm":  "49:2",
+                      "individualPending":  "17:2",
+                      "individualReady":  "47:2",
+                      "aggregateConfirm":  "49:190",
+                      "aggregatePending":  "22:2",
+                      "aggregateReady":  "49:101",
+                      "downloadFeedback":  "49:290",
+                      "verification":  "11 key reactions read back, start point verified, individual ready and confirm screenshots inspected",
+                      "browserClickTested":  false,
+                      "knownIssue":  "Ready result text overflows its status container; attempted resize was rejected by quota. Mock primary buttons still use captured red delete-button styling.",
+                      "limitations":  [
+                                          "Preset demo data; fields and rubric inputs not wired",
+                                          "Not all page controls have prototype interactions",
+                                          "No real PDF/DOCX generation or download",
+                                          "Ready page is a simplified mock result, not a PDF viewer"
+                                      ]
+                  }
+}

@@ -319,6 +319,9 @@ export default function VideoCaseSummaryDocumentPreviewPage() {
           </section>
         ) : artifactUrls?.pdfUrl ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <p className="border-b border-slate-200 px-4 py-3 text-sm text-slate-500">
+              หากตัวอย่าง PDF ไม่แสดง ให้กด “ดาวน์โหลด PDF” ด้านบนเพื่อเปิดไฟล์ในเครื่อง
+            </p>
             <iframe
               title="Video case summary document preview"
               src={artifactUrls.pdfUrl}

@@ -13,6 +13,9 @@ export type VideoCaseRow = {
   id: string;
   case_key: string;
   case_title: string;
+  description?: string | null;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
   source_file_name: string | null;
   video_object_key: string | null;
   created_by: string;
@@ -124,7 +127,7 @@ async function getCurrentUserEmployeeNumber(): Promise<string | null> {
 }
 
 function getUploadApiBaseUrl() {
-  const configured = import.meta.env.VITE_UPLOAD_VIDEO_API_URL as string | undefined;
+  const configured = (import.meta.env.VITE_VIDEO_CASE_API_URL || import.meta.env.VITE_UPLOAD_VIDEO_API_URL) as string | undefined;
   const url = new URL(configured || window.location.origin);
   return url.toString().replace(/\/$/, "");
 }
@@ -186,7 +189,7 @@ export async function resolveVideoCaseMembership(
   options?: {
     orderNumber?: string;
     subjectName?: string;
-    shortCode?: string;
+    videoCaseId?: string;
     caseKey?: string;
     caseTitle?: string;
     sourceFileName?: string | null;
@@ -199,15 +202,16 @@ export async function resolveVideoCaseMembership(
     throw new Error("Authentication required.");
   }
 
-  const rpcArgs = options?.orderNumber && options?.subjectName && options?.shortCode
+  const byIdentity = Boolean(options?.orderNumber && options?.subjectName);
+  const rpcArgs = byIdentity
     ? {
-        p_order_number: options.orderNumber,
-        p_subject_name: options.subjectName,
-        p_short_code: options.shortCode,
-        p_case_title: options.caseTitle ?? null,
-        p_source_file_name: options.sourceFileName ?? null,
-        p_video_object_key: options.videoObjectKey ?? null,
-        p_member_role: options.memberRole ?? "member",
+        p_order_number: options?.orderNumber,
+        p_subject_name: options?.subjectName,
+        p_video_case_id: options?.videoCaseId ?? null,
+        p_case_title: options?.caseTitle ?? null,
+        p_source_file_name: options?.sourceFileName ?? null,
+        p_video_object_key: options?.videoObjectKey ?? null,
+        p_member_role: options?.memberRole ?? "member",
       }
     : {
         p_case_key: options?.caseKey ?? "",
@@ -217,7 +221,7 @@ export async function resolveVideoCaseMembership(
         p_member_role: options?.memberRole ?? "member",
       };
 
-  const { data, error } = await supabase.rpc("resolve_video_case_membership", rpcArgs);
+  const { data, error } = await supabase.rpc(byIdentity ? "resolve_video_case_by_identity" : "resolve_video_case_membership", rpcArgs);
 
   if (error) {
     throw new Error(error.message);
@@ -226,7 +230,15 @@ export async function resolveVideoCaseMembership(
   return data as VideoCaseRow;
 }
 
-export async function getMyVideoCases(): Promise<VideoCaseRow[]> {
+export async function setVideoCaseTrashed(id: string, trashed: boolean): Promise<VideoCaseRow> {
+  const { data, error } = await supabase.rpc("set_video_case_trashed", {
+    p_video_case_id: id, p_trashed: trashed,
+  });
+  if (error) throw new Error(error.message);
+  return data as VideoCaseRow;
+}
+
+export async function getMyVideoCases(options?: { trashed?: boolean }): Promise<VideoCaseRow[]> {
   const { data: userData, error: authError } = await supabase.auth.getUser();
   if (authError || !userData.user) {
     throw new Error("Authentication required.");
@@ -243,10 +255,11 @@ export async function getMyVideoCases(): Promise<VideoCaseRow[]> {
   }
 
   if (normalizeRole(roleData?.role) === "admin") {
-    const { data, error } = await supabase
+    const query = supabase
       .from("video_cases")
-      .select("id, case_key, case_title, source_file_name, video_object_key, created_by, created_at, updated_at")
+      .select("id, case_key, case_title, description, deleted_at, deleted_by, source_file_name, video_object_key, created_by, created_at, updated_at")
       .order("created_at", { ascending: false });
+    const { data, error } = await (options?.trashed ? query.not("deleted_at", "is", null) : query.is("deleted_at", null));
 
     if (error) {
       throw new Error(error.message);
@@ -270,11 +283,12 @@ export async function getMyVideoCases(): Promise<VideoCaseRow[]> {
     return [];
   }
 
-  const { data, error } = await supabase
+  const query = supabase
     .from("video_cases")
-    .select("id, case_key, case_title, source_file_name, video_object_key, created_by, created_at, updated_at")
+    .select("id, case_key, case_title, description, deleted_at, deleted_by, source_file_name, video_object_key, created_by, created_at, updated_at")
     .in("id", caseIds)
     .order("created_at", { ascending: false });
+  const { data, error } = await (options?.trashed ? query.not("deleted_at", "is", null) : query.is("deleted_at", null));
 
   if (error) {
     throw new Error(error.message);
@@ -569,7 +583,7 @@ export async function sendVideoCaseAggregateToN8nWithPrompt(
 
   if (documentError) {
     const message = documentError.message || "Failed to start aggregate document generation.";
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("video_case_aggregates")
       .update({ document_status: "failed", document_error: message })
       .eq("id", aggregate.id)
@@ -580,7 +594,7 @@ export async function sendVideoCaseAggregateToN8nWithPrompt(
       throw new Error(error.message);
     }
 
-    return data as VideoCaseAggregateRow;
+    throw new Error(message);
   }
 
   const latestAggregate = await getVideoCaseAggregate(aggregate.id);

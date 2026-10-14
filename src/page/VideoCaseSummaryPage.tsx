@@ -1,14 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { SectionCard } from "../components/SectionCard";
 import MainNavbar from "../components/MainNavbar";
 import { getSections, type LikertValue } from "../config/sections";
 import { useLanguage } from "../i18n/useLanguage";
-import { supabase } from "../lib/supabaseClient";
 import { buildVideoCaseSummaryDocumentPreviewPath } from "../services/videoCaseSummaryDocumentPreviewCore";
 import {
-  buildVideoCaseSummaryPayload,
   getVideoCaseAnalyses,
   getVideoCaseAggregate,
   getVideoCaseAggregateSourceIds,
@@ -50,9 +48,9 @@ export default function VideoCaseSummaryPage() {
   const [aggregate, setAggregate] = useState<VideoCaseAggregateRow | null>(null);
   const [caseAnalyses, setCaseAnalyses] = useState<VideoCaseEvaluationRow[]>([]);
   const [sourceEvaluationIds, setSourceEvaluationIds] = useState<number[]>([]);
-  const [currentEmployeeNumber, setCurrentEmployeeNumber] = useState<string | null>(null);
   const [overallSuggestion, setOverallSuggestion] = useState("");
   const [sending, setSending] = useState(false);
+  const submittingRef = useRef(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -73,7 +71,7 @@ export default function VideoCaseSummaryPage() {
             : [],
         );
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Failed to load summary preview.");
+        setErrorMessage(error instanceof Error ? error.message : "Failed to load summary.");
       } finally {
         setLoading(false);
       }
@@ -81,35 +79,6 @@ export default function VideoCaseSummaryPage() {
 
     void load();
   }, [summaryKey]);
-
-  useEffect(() => {
-    const loadEmployeeNumber = async () => {
-      const { data: userData, error: authError } = await supabase.auth.getUser();
-      if (authError || !userData.user) {
-        setCurrentEmployeeNumber(null);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("user_information")
-        .select("employee_number")
-        .eq("auth_user_id", userData.user.id)
-        .maybeSingle();
-
-      if (error) {
-        setCurrentEmployeeNumber(null);
-        return;
-      }
-
-      setCurrentEmployeeNumber(
-        typeof data?.employee_number === "string" && data.employee_number.trim()
-          ? data.employee_number.trim()
-          : null,
-      );
-    };
-
-    void loadEmployeeNumber();
-  }, []);
 
   useEffect(() => {
     const loadCaseAnalyses = async () => {
@@ -172,26 +141,17 @@ export default function VideoCaseSummaryPage() {
         order_number: analysis.order_number,
       }));
   }, [caseAnalyses, sourceEvaluationIds, sourceRuns]);
-  const summaryPreview = useMemo(() => {
-    if (!aggregate) {
-      return null;
-    }
-
-    return buildVideoCaseSummaryPayload({
-      aggregate,
-      requestedByEmployeeNumber: currentEmployeeNumber,
-      combinePrompt:
-        typeof overallSuggestion === "string" && overallSuggestion.trim()
-          ? overallSuggestion.trim()
-          : null,
-    });
-  }, [aggregate, currentEmployeeNumber, overallSuggestion]);
-
   async function handleSendSummary() {
-    if (!aggregate) {
+    if (!aggregate || submittingRef.current) {
       return;
     }
 
+    if (!overallSuggestion.trim()) {
+      setSendError(language === "th" ? "กรุณากรอกข้อเสนอแนะโดยรวม" : "Please enter an overall suggestion.");
+      return;
+    }
+
+    submittingRef.current = true;
     try {
       setSending(true);
       setSendError(null);
@@ -207,6 +167,7 @@ export default function VideoCaseSummaryPage() {
     } catch (error) {
       setSendError(error instanceof Error ? error.message : "Failed to send summary.");
     } finally {
+      submittingRef.current = false;
       setSending(false);
     }
   }
@@ -261,12 +222,12 @@ export default function VideoCaseSummaryPage() {
       <main className="mx-auto max-w-7xl px-4 py-6 md:py-8">
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">Summary preview</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">Summary</p>
             <h1 className="mt-2 text-2xl font-bold text-slate-900">
               {snapshot.case_title || "Summary analysis"}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Review the combined scores, AI summary, and the exact payload that would be sent later.
+              Review the combined scores and enter your overall suggestion, then submit to start processing.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -298,14 +259,21 @@ export default function VideoCaseSummaryPage() {
 
         {loading ? (
           <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
-            Loading summary preview...
+            Loading summary...
           </section>
         ) : !aggregate ? (
           <section className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-sm text-red-700 shadow-sm">
             Summary not found.
           </section>
         ) : (
-          <div className="space-y-6">
+          <form
+            className="space-y-6"
+            aria-busy={sending}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSendSummary();
+            }}
+          >
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-col gap-5 p-5 md:flex-row md:items-start md:justify-between md:p-6">
                 <div>
@@ -316,7 +284,7 @@ export default function VideoCaseSummaryPage() {
                     {snapshot.case_title || "Summary analysis"}
                   </h2>
                   <p className="mt-2 max-w-2xl text-sm text-slate-500">
-                    This draft combines selected evaluation results so they can be reviewed before any future send.
+                    Review the combined evaluation results and complete your overall suggestion before submitting.
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2 text-xs">
                     <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700">
@@ -355,7 +323,7 @@ export default function VideoCaseSummaryPage() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-900">Combined rubric preview</h3>
+                  <h3 className="text-lg font-semibold text-slate-900">Combined rubric</h3>
                   <p className="mt-1 text-sm text-slate-500">
                     Prefilled with the average score of each question from the selected evaluations.
                   </p>
@@ -376,11 +344,13 @@ export default function VideoCaseSummaryPage() {
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-800">
+                <label htmlFor="overall-suggestion" className="text-sm font-semibold text-slate-800">
                   ข้อเสนอแนะโดยรวม <span className="text-red-500">*</span>
                 </label>
                 <p className="text-xs text-slate-500">สรุปประเด็นสำคัญ จุดเด่น และข้อเสนอแนะเพื่อปรับปรุง</p>
                 <textarea
+                  id="overall-suggestion"
+                  disabled={sending}
                   value={overallSuggestion}
                   onChange={(event) => setOverallSuggestion(event.target.value)}
                   rows={4}
@@ -394,7 +364,7 @@ export default function VideoCaseSummaryPage() {
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="text-lg font-semibold text-slate-900">Source analyses</h3>
               <p className="mt-1 text-sm text-slate-500">
-                These are the selected evaluations that will be used to build the preview payload.
+                These are the selected evaluations used in this summary.
               </p>
               <div className="mt-4 overflow-x-auto">
                 <table className="min-w-full border-separate border-spacing-0 text-sm">
@@ -449,45 +419,19 @@ export default function VideoCaseSummaryPage() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900">JSON preview</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    This is the exact payload that would be sent later. Sending is disabled in v4 for now.
-                  </p>
-                </div>
-                <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                  Preview only
-                </span>
-              </div>
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <pre className="overflow-x-auto text-xs leading-5 text-slate-800">
-                  {JSON.stringify(summaryPreview, null, 2)}
-                </pre>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-900">Preview status</h3>
-              <p className="mt-2 text-sm text-slate-600">
-                V4 shows the combined payload and lets you send it to n8n for testing.
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="submit" className="btn-primary" disabled={sending}>
+                {sending
+                  ? (language === "th" ? "กำลังส่งข้อมูล..." : "Submitting...")
+                  : (language === "th" ? "ส่งข้อมูล" : "Submit data")}
+              </button>
+              <p className="text-sm text-slate-500" role="status">
+                {language === "th"
+                  ? "ระบบจะเริ่มประมวลผลและสร้างเอกสารเมื่อส่งข้อมูล"
+                  : "Submitting starts processing and document generation."}
               </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => void handleSendSummary()}
-                  disabled={sending}
-                >
-                  {sending ? "Sending..." : "Send to n8n"}
-                </button>
-                <Link to={`/video-cases/${videoCaseId}`} className="btn-secondary">
-                  Back to video case
-                </Link>
-              </div>
-            </section>
-          </div>
+            </div>
+          </form>
         )}
       </main>
     </div>

@@ -5,6 +5,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
 import { useLanguage } from "../i18n/useLanguage";
 import { supabase } from "../lib/supabaseClient";
+import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
 
 const DOCUMENTS_BUCKET = "evaluation-documents";
 
@@ -230,7 +231,7 @@ export default function PreviewPage() {
                 <>
                   {artifactUrls.docxUrl && (
                     <a
-                      href={artifactUrls.docxUrl}
+                      href={buildDocumentDownloadUrl(artifactUrls.docxUrl, record.subject_name, "docx", `evaluation-${record.id}`)}
                       target="_blank"
                       rel="noreferrer"
                       className="btn-primary text-center"
@@ -240,7 +241,7 @@ export default function PreviewPage() {
                   )}
                   {artifactUrls.pdfUrl && (
                     <a
-                      href={artifactUrls.pdfUrl}
+                      href={buildDocumentDownloadUrl(artifactUrls.pdfUrl, record.subject_name, "pdf", `evaluation-${record.id}`)}
                       target="_blank"
                       rel="noreferrer"
                       className="btn-secondary text-center"

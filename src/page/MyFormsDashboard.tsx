@@ -5,6 +5,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
 import { useLanguage } from "../i18n/useLanguage";
 import { supabase } from "../lib/supabaseClient";
+import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
 
 const DOCUMENTS_BUCKET = "evaluation-documents";
 
@@ -111,7 +112,8 @@ export default function MyFormsDashboard() {
         throw new Error(t("myForms.noArtifact", { format: format.toUpperCase() }));
       }
 
-      window.open(await createDocumentSignedUrl(path), "_blank", "noopener,noreferrer");
+      const url = await createDocumentSignedUrl(path);
+      window.open(buildDocumentDownloadUrl(url, item.subject_name, format, `evaluation-${item.id}`), "_blank", "noopener,noreferrer");
     } catch (error) {
       console.error(`Failed to download ${format}:`, error);
       setErrorMessage(error instanceof Error ? error.message : t("myForms.downloadFailed", { format: format.toUpperCase() }));

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 
 import MainNavbar from "../components/MainNavbar";
+import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
 import {
   getVideoCaseAggregate,
   getVideoCaseAggregateDocumentUrls,
@@ -256,7 +257,7 @@ export default function VideoCaseSummaryDocumentPreviewPage() {
             <div className="flex flex-col gap-2 sm:flex-row">
               {artifactUrls?.docxUrl && (
                 <a
-                  href={artifactUrls.docxUrl}
+                  href={buildDocumentDownloadUrl(artifactUrls.docxUrl, aggregate?.source_snapshot?.case_title, "docx", `summary-${summaryId}`)}
                   target="_blank"
                   rel="noreferrer"
                   className="btn-primary text-center"
@@ -266,7 +267,7 @@ export default function VideoCaseSummaryDocumentPreviewPage() {
               )}
               {artifactUrls?.pdfUrl && (
                 <a
-                  href={artifactUrls.pdfUrl}
+                  href={buildDocumentDownloadUrl(artifactUrls.pdfUrl, aggregate?.source_snapshot?.case_title, "pdf", `summary-${summaryId}`)}
                   target="_blank"
                   rel="noreferrer"
                   className="btn-secondary text-center"

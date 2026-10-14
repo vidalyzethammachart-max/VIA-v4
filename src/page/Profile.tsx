@@ -23,7 +23,7 @@ const PROFILE_AVATAR_BUCKET = "profile-avatars";
 const PROFILE_QUERY_TIMEOUT_MS = 8000;
 const PROFILE_SELECT_COLUMNS = "user_id, email, auth_user_id, full_name, employee_number, gender, avatar_url";
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> {
   return Promise.race([
     promise,
     new Promise<never>((_, reject) => {

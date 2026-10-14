@@ -106,6 +106,11 @@ function signR2Url({ method, objectKey, expiresSeconds }) {
   return `https://${config.host}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
 }
 
+export function createR2DownloadUrl(objectKey) {
+  if (typeof objectKey !== "string" || !objectKey.startsWith("video-submissions/") || objectKey.includes("..")) throw new Error("Invalid video object key.");
+  return signR2Url({ method: "GET", objectKey, expiresSeconds: getR2Config().getExpiresSeconds });
+}
+
 export function buildVideoObjectKey({ fileName, userId, evaluationId }) {
   const safeFileName = sanitizeFileName(fileName);
   const extension = getExtension(safeFileName) || ".mp4";

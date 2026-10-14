@@ -29,7 +29,7 @@ Video Intelligence & Analytics web application for evaluation form submission, r
   - employee number
   - gender
   - avatar upload
-- Video file upload to n8n webhook
+- Durable queue for evaluation and summary processing, including uploaded video
 - Admin dashboard
   - user search/filter
   - role update
@@ -55,7 +55,6 @@ Video Intelligence & Analytics web application for evaluation form submission, r
 Create a `.env` file:
 
 ```env
-VITE_N8N_WEBHOOK_URL=YOUR_N8N_WEBHOOK_URL
 VITE_SUPABASE_URL=YOUR_SUPABASE_URL
 VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 N8N_WEBHOOK_URL=YOUR_N8N_WEBHOOK_URL
@@ -71,7 +70,10 @@ Video submissions use Cloudflare R2 direct upload to avoid request body limits o
 
 1. The frontend calls `POST /api/r2-presign-upload` on the upload backend.
 2. The browser uploads the video directly to R2 with the returned signed `uploadUrl`.
-3. The frontend sends the evaluation payload to `N8N_WEBHOOK_URL` with `video.downloadUrl`.
+3. The frontend calls the authenticated `forward-to-n8n` Edge Function, which authorizes and saves the document request to the queue (HTTP 202).
+4. The server-only worker claims one job at a time, refreshes the R2 download URL, and dispatches the existing n8n workflow. The document callback determines readiness.
+
+Run the worker with `npm run start:queue`. Configure `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `N8N_WEBHOOK_URL` in the gitignored `.env.queue.local`; video processing also needs the R2 credentials above. See [worker setup, health alerts, and recovery](docs/queue-worker-operations.md). An online worker is required for queued jobs to progress.
 
 n8n should download the video from `payload[0].video.downloadUrl` instead of expecting a multipart binary field. Do not send large video binaries through `/api/n8n-webhook`; that proxy accepts JSON payloads only.
 

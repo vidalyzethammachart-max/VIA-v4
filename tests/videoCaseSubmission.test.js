@@ -53,6 +53,7 @@ function setup({ dispatchError = null, callbackReady = false, pendingError = nul
       if (name === "../lib/roles") return {};
       if (name === "./videoCaseSummaryPayloadCore.js") return payloadCore;
       if (name === "./videoCaseSourceIds.js") return sourceIds;
+      if (name === "./aggregateStatistics.js") return {};
       throw new Error(`Unexpected dependency: ${name}`);
     },
   });

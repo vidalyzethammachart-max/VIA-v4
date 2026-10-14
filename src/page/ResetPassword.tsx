@@ -239,9 +239,7 @@ export default function ResetPassword() {
     setMessage("");
     setModalError("");
     setStatusMessage("");
-    if (recoveryState !== "expired") {
-      setPageError("");
-    }
+    setPageError("");
 
     const validationErrors = validatePasswordReset(password, confirmPassword);
     const nextFieldErrors: {

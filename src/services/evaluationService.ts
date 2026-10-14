@@ -8,6 +8,7 @@ export type RubricPayload = {
 };
 
 export interface EvaluationPayload {
+  video_case_id?: string | null;
   user_id: string;
   order_number?: string | null;
   subject_name: string;

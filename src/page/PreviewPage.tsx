@@ -294,6 +294,9 @@ export default function PreviewPage() {
           </section>
         ) : artifactUrls?.previewUrl ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <p className="border-b border-slate-200 px-4 py-3 text-sm text-slate-500">
+              {t("preview.pdfFallback")}
+            </p>
             <iframe
               title="Generated document preview"
               src={artifactUrls.previewUrl}

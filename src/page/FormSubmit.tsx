@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import MainNavbar from "../components/MainNavbar";
@@ -14,7 +14,7 @@ import type { EvaluationPayload, Rubric } from "../services/evaluationService";
 
 const MAX_VIDEO_SIZE_BYTES = 1024 * 1024 * 1024;
 const MAX_LEGACY_VIDEO_SIZE_BYTES = 500 * 1024 * 1024;
-const WEBHOOK_URL = "/api/n8n-webhook";
+
 const VIDEO_UPLOAD_API_URL = import.meta.env.VITE_UPLOAD_VIDEO_API_URL;
 const VIDEO_UPLOAD_MODE = (import.meta.env.VITE_VIDEO_UPLOAD_MODE || "r2").toLowerCase();
 const IS_LEGACY_UPLOAD_MODE = VIDEO_UPLOAD_MODE === "legacy";
@@ -105,20 +105,6 @@ function getR2PresignUrl() {
   uploadUrl.pathname = "/api/r2-presign-upload";
   uploadUrl.search = "";
   return uploadUrl.toString();
-}
-
-function getLegacyUploadUrl() {
-  const uploadUrl = new URL(VIDEO_UPLOAD_API_URL, window.location.origin);
-  uploadUrl.pathname = "/api/upload-video";
-  uploadUrl.search = "";
-  return uploadUrl.toString();
-}
-
-function getVideoAnalysisUrl() {
-  const analysisUrl = new URL(VIDEO_UPLOAD_API_URL, window.location.origin);
-  analysisUrl.pathname = "/api/analyze-video";
-  analysisUrl.search = "";
-  return analysisUrl.toString();
 }
 
 function readJsonError(responseText: string) {
@@ -329,7 +315,7 @@ function FormSubmit() {
     return rubric;
   };
 
-  const validateForm = (): string | null => {
+  const validateForm = useCallback((): string | null => {
     if (videoCaseId && loadedCaseId !== videoCaseId) return "กรุณารอโหลดข้อมูลเคสให้เรียบร้อยก่อนส่ง";
     if (!authUserId) {
       return t("form.sessionNotReady");
@@ -370,7 +356,7 @@ function FormSubmit() {
     }
 
     return null;
-  };
+  }, [videoCaseId, loadedCaseId, authUserId, orderNumber, subjectName, sections, answers, comment, submissionMode, selectedVideoFile, t]);
 
   const buildPayload = (): EvaluationPayload | null => {
     if (!authUserId) {
@@ -425,6 +411,7 @@ function FormSubmit() {
     selectedVideoFile,
     showValidation,
     language,
+    validateForm,
   ]);
 
   const handleSubmissionModeChange = (mode: "data_only" | "with_video") => {
@@ -528,26 +515,6 @@ function FormSubmit() {
     ];
   };
 
-  const readWebhookResponse = async (response: Response) => {
-    const responseText = await response.text().catch(() => "");
-    if (!response.ok) {
-      const detail = readJsonError(responseText);
-      throw new Error(
-        `n8n JSON webhook failed: ${response.status}${detail ? ` ${detail}` : ""}`,
-      );
-    }
-
-    if (!responseText) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(responseText);
-    } catch {
-      return responseText;
-    }
-  };
-
   const createR2Presign = async (
     videoFile: File,
     evaluationId: number | string,
@@ -580,39 +547,6 @@ function FormSubmit() {
       return presign;
     } catch {
       throw new Error("Upload URL request returned an invalid response.");
-    }
-  };
-
-  const uploadLegacyVideo = async (
-    payload: N8nEvaluationPayload[],
-    videoFile: File,
-    evaluationId: number,
-    onUploadProgress?: (percent: number) => void,
-  ) => {
-    const formData = new FormData();
-    formData.append("payload", JSON.stringify(payload));
-    formData.append("video", videoFile);
-    formData.append("evaluation_id", String(evaluationId));
-
-    const response = await fetch(getLegacyUploadUrl(), {
-      method: "POST",
-      body: formData,
-    });
-
-    const responseText = await response.text().catch(() => "");
-    if (!response.ok) {
-      const detail = readJsonError(responseText);
-      throw new Error(
-        `Legacy video upload failed: ${response.status}${detail ? ` ${detail}` : ""}`,
-      );
-    }
-
-    onUploadProgress?.(100);
-
-    try {
-      return responseText ? JSON.parse(responseText) : null;
-    } catch {
-      return responseText || null;
     }
   };
 
@@ -669,46 +603,12 @@ function FormSubmit() {
     onUploadProgress?: (percent: number) => void,
     preUploadedVideo?: R2UploadedVideo | null,
   ) => {
-    if (IS_LEGACY_UPLOAD_MODE && videoFile) {
-      if (!evaluationId) {
-        throw new Error("evaluationId is required for legacy video upload.");
-      }
-
-      return uploadLegacyVideo(webhookPayload, videoFile, evaluationId, onUploadProgress);
-    }
-
-    if (!videoFile) {
-      const response = await fetch(WEBHOOK_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(webhookPayload),
-      });
-
-      return readWebhookResponse(response);
-    }
-
-    if (!evaluationId) {
-      throw new Error("evaluationId is required for video upload.");
-    }
-
-    const uploadedVideo = preUploadedVideo || await uploadVideoToR2(videoFile, evaluationId, onUploadProgress);
-    const payloadWithVideo = webhookPayload.map((item) => ({
-      ...item,
-      hasVideo: true,
-      video: uploadedVideo,
-    }));
-
-    const response = await fetch(WEBHOOK_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payloadWithVideo),
-    });
-
-    return readWebhookResponse(response);
+    if (IS_LEGACY_UPLOAD_MODE && videoFile) throw new Error("Queued video processing requires R2 upload mode.");
+    const uploadedVideo = videoFile ? preUploadedVideo || await uploadVideoToR2(videoFile, evaluationId || "pending", onUploadProgress) : null;
+    const body = uploadedVideo ? webhookPayload.map(item => ({ ...item, hasVideo:true, video:uploadedVideo })) : webhookPayload;
+    const { data, error } = await supabase.functions.invoke("forward-to-n8n", { body });
+    if (error || !data?.ok) throw new Error(data?.error || error?.message || "Could not enqueue evaluation.");
+    return data;
   };
 
   const submitForm = async () => {
@@ -737,7 +637,7 @@ function FormSubmit() {
       const videoFile = submissionMode === "with_video" ? selectedVideoFile : null;
       let videoCaseId: string | null = null;
       let uploadedVideo: R2UploadedVideo | null = null;
-      let individualAnalysis: Record<string, unknown> | null = null;
+
 
       if (submissionMode === "with_video") {
         if (!videoFile) {
@@ -798,36 +698,15 @@ function FormSubmit() {
         label: videoCaseUi.analyzing,
         });
 
-        const analysisResponse = await fetch(getVideoAnalysisUrl(), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            fileName: uploadedVideo.fileName,
-            fileUrl: uploadedVideo.downloadUrl,
-          }),
-        });
+        // Video AI runs inside the queued n8n workflow after upload.
 
-        const analysisText = await analysisResponse.text().catch(() => "");
-        if (!analysisResponse.ok) {
-          throw new Error(
-            `Video analysis failed: ${analysisResponse.status}${analysisText ? ` ${analysisText}` : ""}`,
-          );
-        }
-
-        try {
-          individualAnalysis = analysisText ? (JSON.parse(analysisText) as Record<string, unknown>) : null;
-        } catch {
-          individualAnalysis = { rawText: analysisText };
-        }
       }
 
       const evaluationId = await saveEvaluation(payload, {
         videoCaseId,
-        analysisAiModel: typeof individualAnalysis?.model === "string" ? individualAnalysis.model : null,
-        analysisAiOutput: individualAnalysis,
-        analysisAiRawText: typeof individualAnalysis?.rawText === "string" ? individualAnalysis.rawText : null,
+        analysisAiModel: null,
+        analysisAiOutput: null,
+        analysisAiRawText: null,
       });
 
       setSubmissionProgress({

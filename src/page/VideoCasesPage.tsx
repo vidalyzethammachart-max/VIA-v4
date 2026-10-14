@@ -1,3 +1,4 @@
+import { getAnalysisMatrix } from "../services/aggregateStatistics.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
@@ -14,7 +15,6 @@ import {
   getVideoCaseAggregates,
   getVideoCaseAnalyses,
   getVideoCaseMembership,
-  resolveVideoCaseMembership,
   setVideoCaseTrashed,
   type VideoCaseAggregateRow,
   type VideoCaseEvaluationRow,
@@ -22,64 +22,10 @@ import {
   type VideoCaseRow,
 } from "../services/videoCaseService";
 
-function getAiSummary(output: unknown, rawText: string | null): string {
-  if (typeof output === "string" && output.trim()) return output;
-  if (!output || typeof output !== "object") return rawText || "No AI analysis available.";
-
-  const record = output as Record<string, unknown>;
-  const preferredKeys = [
-    "summary",
-    "overall_summary",
-    "overallSummary",
-    "executive_summary",
-    "executiveSummary",
-    "final_report",
-    "finalReport",
-    "report",
-    "feedback",
-  ];
-  for (const key of preferredKeys) {
-    if (typeof record[key] === "string" && record[key].trim()) return record[key];
-  }
-
-  for (const nestedKey of ["analysis", "result", "data"]) {
-    const nested = record[nestedKey];
-    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
-      const summary = getAiSummary(nested, null);
-      if (summary !== "No AI analysis available.") return summary;
-    }
-  }
-
-  return rawText || "Structured AI analysis is available. Open details to inspect it.";
-}
-
-function getAiOutputText(run: VideoCaseEvaluationRow): string {
-  return getAiSummary(run.analysis_ai_output, run.analysis_ai_raw_text);
-}
-
-function getEvaluationAverage(run: VideoCaseEvaluationRow): number | null {
-  const scores = Object.values(run.rubric || {})
-    .flatMap((section) =>
-      section && typeof section === "object" && !Array.isArray(section)
-        ? Object.values(section)
-        : [],
-    )
-    .map((value) => (typeof value === "string" ? Number(value) : value))
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-
-  if (scores.length === 0) {
-    return null;
-  }
-
-  const total = scores.reduce((sum, score) => sum + score, 0);
-  return total / scores.length;
-}
-
 export default function VideoCasesPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedCaseId = searchParams.get("caseId")?.trim() || "";
-  const requestedSummaryId = searchParams.get("summaryId")?.trim() || searchParams.get("aggregateId")?.trim() || "";
   const [loading, setLoading] = useState(true);
   const [appRole, setAppRole] = useState<AppRole>("user");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -97,13 +43,9 @@ export default function VideoCasesPage() {
   const [aggregates, setAggregates] = useState<VideoCaseAggregateRow[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [caseKey, setCaseKey] = useState("");
-  const [caseTitle, setCaseTitle] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [prompt] = useState("");
   const [combining, setCombining] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [showCreateValidation, setShowCreateValidation] = useState(false);
   const [selectedAnalysisIds, setSelectedAnalysisIds] = useState<number[]>([]);
   const [evaluationToDelete, setEvaluationToDelete] = useState<VideoCaseEvaluationRow | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -115,13 +57,10 @@ export default function VideoCasesPage() {
 
   const effectiveCaseRole: VideoCaseMemberRole =
     appRole === "admin" ? "leader" : (selectedRole ?? "member");
-  const canCombine = effectiveCaseRole === "leader";
   const selectedAnalyses = useMemo(
     () => analyses.filter((run) => selectedAnalysisIds.includes(run.id)),
     [analyses, selectedAnalysisIds],
   );
-  const isCaseKeyInvalid = showCreateValidation && !caseKey.trim();
-  const isCaseTitleInvalid = showCreateValidation && !caseTitle.trim();
 
   const loadCases = useCallback(async () => {
     const request = ++listRequest.current;
@@ -181,7 +120,8 @@ export default function VideoCasesPage() {
 
   useEffect(() => {
     void loadCases();
-    return () => { listRequest.current++; };
+    const activeRequest = listRequest;
+    return () => { activeRequest.current++; };
   }, [loadCases]);
 
   useEffect(() => {
@@ -201,7 +141,8 @@ export default function VideoCasesPage() {
     }
 
     void loadCaseData(selectedCaseId);
-    return () => { detailsRequest.current++; };
+    const activeRequest = detailsRequest;
+    return () => { activeRequest.current++; };
   }, [loadCaseData, selectedCaseId]);
 
   function switchCaseList(trashed: boolean) {
@@ -237,43 +178,6 @@ export default function VideoCasesPage() {
     }
   }
 
-  async function handleResolveCase() {
-    if (!caseKey.trim()) {
-      setShowCreateValidation(true);
-      setErrorMessage("กรุณาระบุรหัสเคสและชื่อเคส");
-      return;
-    }
-    if (!caseTitle.trim()) {
-      setShowCreateValidation(true);
-      setErrorMessage("กรุณาระบุรหัสเคสและชื่อเคส");
-      return;
-    }
-
-    try {
-      setCreating(true);
-      setShowCreateValidation(false);
-      setErrorMessage(null);
-      const resolved = await resolveVideoCaseMembership({
-        caseKey: caseKey.trim(),
-        caseTitle: caseTitle.trim() || null,
-        sourceFileName: null,
-        videoObjectKey: null,
-        memberRole: "member",
-      });
-
-      setSuccessMessage(`Case ${resolved.case_key} is ready.`);
-      setSelectedCaseId(resolved.id);
-      setCaseKey("");
-      setCaseTitle("");
-      await loadCases();
-      await loadCaseData(resolved.id);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to resolve case.");
-    } finally {
-      setCreating(false);
-    }
-  }
-
   async function handleCombine() {
     if (!selectedCase) {
       setErrorMessage("Select a case first.");
@@ -298,10 +202,7 @@ export default function VideoCasesPage() {
           evaluation_id: run.id,
           run_kind: run.analysis_kind,
           rubric: run.rubric,
-          matrix:
-            ((run.analysis_ai_output as Record<string, unknown> | null)?.analysis as Record<string, unknown> | undefined)?.quality_scores ||
-            (run.analysis_ai_output as Record<string, unknown> | null)?.quality_scores ||
-            {},
+          matrix: getAnalysisMatrix(run.analysis_ai_output),
           ai_output: run.analysis_ai_output,
           ai_raw_text: run.analysis_ai_raw_text,
           notes: run.overall_suggestion,

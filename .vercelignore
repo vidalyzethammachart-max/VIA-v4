@@ -1,0 +1,11 @@
+.env*
+.figma-capture/
+logs/
+.git/
+.supabase/
+node_modules/
+dist/
+tests/
+supabase/
+scripts/
+docs/

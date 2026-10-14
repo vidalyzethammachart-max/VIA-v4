@@ -1,3 +1,4 @@
+import { combineAggregateStatistics } from "./aggregateStatistics.js";
 import { supabase } from "../lib/supabaseClient";
 import { normalizeRole } from "../lib/roles";
 import { buildVideoCaseSummaryPayload } from "./videoCaseSummaryPayloadCore.js";
@@ -56,21 +57,6 @@ export type VideoCaseAggregateRow = {
   updated_at: string;
 };
 
-type SummarySourceRun = {
-  id: number | null;
-  analyst_user_id: string | null;
-  evaluation_id: number | null;
-  employee_number: string | null;
-  run_kind: string;
-  rubric: Record<string, unknown>;
-  matrix: Record<string, unknown>;
-  ai_output: Record<string, unknown> | null;
-  ai_raw_text: string | null;
-  notes: string | null;
-  created_at: string | null;
-  order_number: string | null;
-};
-
 export type VideoCaseEvaluationRow = {
   id: number;
   user_id: string | null;
@@ -92,19 +78,6 @@ export type VideoCaseEvaluationRow = {
   created_at: string;
 };
 
-type AggregateApiResponse = {
-  status: "analyzed";
-  caseId: string;
-  caseTitle: string;
-  sourceRunCount: number;
-  aggregatedScores: Record<string, unknown>;
-  sectionAverages: Record<string, unknown>;
-  aggregatedMatrix: Record<string, unknown>;
-  model: string;
-  analysis: Record<string, unknown> | string;
-  rawText?: string;
-};
-
 async function getCurrentUserEmployeeNumber(): Promise<string | null> {
   const { data: userData, error: authError } = await supabase.auth.getUser();
   if (authError || !userData.user) {
@@ -124,65 +97,6 @@ async function getCurrentUserEmployeeNumber(): Promise<string | null> {
   return typeof data?.employee_number === "string" && data.employee_number.trim()
     ? data.employee_number.trim()
     : null;
-}
-
-function getUploadApiBaseUrl() {
-  const configured = (import.meta.env.VITE_VIDEO_CASE_API_URL || import.meta.env.VITE_UPLOAD_VIDEO_API_URL) as string | undefined;
-  const url = new URL(configured || window.location.origin);
-  return url.toString().replace(/\/$/, "");
-}
-
-function buildApiUrl(pathname: string) {
-  const base = new URL(getUploadApiBaseUrl());
-  base.pathname = pathname;
-  base.search = "";
-  return base.toString();
-}
-
-function toSummarySourceRun(run: Record<string, unknown>, index: number): SummarySourceRun {
-  return {
-    id: typeof run.id === "number" ? run.id : index + 1,
-    analyst_user_id: typeof run.analyst_user_id === "string" ? run.analyst_user_id : null,
-    evaluation_id: typeof run.evaluation_id === "number" ? run.evaluation_id : null,
-    employee_number: typeof run.employee_number === "string" && run.employee_number.trim()
-      ? run.employee_number.trim()
-      : null,
-    run_kind: typeof run.run_kind === "string" && run.run_kind.trim() ? run.run_kind.trim() : "human",
-    rubric: isRecord(run.rubric) ? run.rubric : {},
-    matrix: isRecord(run.matrix) ? run.matrix : {},
-    ai_output: isRecord(run.ai_output) ? run.ai_output : null,
-    ai_raw_text: typeof run.ai_raw_text === "string" && run.ai_raw_text.trim() ? run.ai_raw_text : null,
-    notes: typeof run.notes === "string" && run.notes.trim() ? run.notes : null,
-    created_at: typeof run.created_at === "string" && run.created_at.trim() ? run.created_at : null,
-    order_number: typeof run.order_number === "string" && run.order_number.trim()
-      ? run.order_number.trim()
-      : null,
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-async function readErrorMessage(response: Response): Promise<string> {
-  const text = await response.text().catch(() => "");
-  if (!text) {
-    return response.statusText || "Request failed.";
-  }
-
-  try {
-    const payload = JSON.parse(text) as { error?: unknown; message?: unknown };
-    if (typeof payload.error === "string" && payload.error) {
-      return payload.error;
-    }
-    if (typeof payload.message === "string" && payload.message) {
-      return payload.message;
-    }
-  } catch {
-    // Use raw text below.
-  }
-
-  return text;
 }
 
 export async function resolveVideoCaseMembership(
@@ -468,37 +382,10 @@ export async function combineVideoCaseAnalyses(params: {
   }>;
   prompt?: string;
 }): Promise<VideoCaseAggregateRow> {
-  const apiResponse = await fetch(buildApiUrl("/api/analyze-video-case"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      caseId: params.videoCaseId,
-      caseTitle: params.caseTitle,
-      sourceRuns: params.sourceRuns.map((run) => ({
-        id: run.id,
-        analyst_user_id: run.user_id,
-        employee_number: run.employee_number ?? null,
-        evaluation_id: run.evaluation_id,
-        run_kind: run.run_kind || "human",
-        rubric: run.rubric || {},
-        matrix: run.matrix || {},
-        ai_output: run.ai_output || null,
-        ai_raw_text: run.ai_raw_text || null,
-        notes: run.notes || null,
-        created_at: run.created_at || null,
-      })),
-      prompt: params.prompt || null,
-    }),
-  });
-
-  if (!apiResponse.ok) {
-    throw new Error(await readErrorMessage(apiResponse));
-  }
-
-  const result = (await apiResponse.json()) as AggregateApiResponse;
-
+  if (!params.sourceRuns.length) throw new Error("Select at least one evaluation.");
+  const stats = combineAggregateStatistics(params.sourceRuns);
+  const result = { ...stats, caseId:params.videoCaseId, caseTitle:params.caseTitle, sourceRunCount:params.sourceRuns.length, model:null, analysis:null, rawText:null };
+  // The report submission queues AI; combining scores does not call Gemini twice.
   const { data: userData, error: authError } = await supabase.auth.getUser();
   if (authError || !userData.user) {
     throw new Error("Authentication required.");
@@ -553,6 +440,8 @@ export async function sendVideoCaseAggregateToN8nWithPrompt(
   if (!aggregate) {
     throw new Error("Aggregate not found.");
   }
+
+  if (aggregate.document_status === "ready") return aggregate;
 
   const requestedByEmployeeNumber = await getCurrentUserEmployeeNumber();
   const sourceSnapshot = (aggregate.source_snapshot || {}) as Record<string, unknown>;

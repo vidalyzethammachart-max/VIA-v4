@@ -1,3 +1,4 @@
+import { getAnalysisMatrix } from "../services/aggregateStatistics.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
@@ -179,10 +180,7 @@ export default function VideoCaseDetailPage() {
           evaluation_id: run.id,
           run_kind: run.analysis_kind,
           rubric: run.rubric,
-          matrix:
-            ((run.analysis_ai_output as Record<string, unknown> | null)?.analysis as Record<string, unknown> | undefined)?.quality_scores ||
-            (run.analysis_ai_output as Record<string, unknown> | null)?.quality_scores ||
-            {},
+          matrix: getAnalysisMatrix(run.analysis_ai_output),
           ai_output: run.analysis_ai_output,
           ai_raw_text: run.analysis_ai_raw_text,
           notes: run.overall_suggestion,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import MainNavbar from "../components/MainNavbar";
@@ -54,11 +54,8 @@ export default function AdminDashboard() {
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
-  useEffect(() => {
-    void loadDashboard();
-  }, []);
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -144,7 +141,11 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate, t]);
+
+  useEffect(() => {
+    void loadDashboard();
+  }, [loadDashboard]);
 
   const filteredUsers = users.filter((row) => {
     const matchesRole = roleFilter === "all" || row.role === roleFilter;

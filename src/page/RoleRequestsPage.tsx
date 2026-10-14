@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import ConfirmModal from "../components/ConfirmModal";
@@ -26,16 +26,13 @@ export default function RoleRequestsPage() {
   const [error, setError] = useState<string | null>(null);
   const [cancelRequestId, setCancelRequestId] = useState<string | null>(null);
 
-  useEffect(() => {
-    void loadPage();
-  }, []);
 
   const pendingRequest = useMemo(
     () => requests.find((request) => request.status === "pending"),
     [requests],
   );
 
-  const loadPage = async () => {
+  const loadPage = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -83,7 +80,11 @@ export default function RoleRequestsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate, t]);
+
+  useEffect(() => {
+    void loadPage();
+  }, [loadPage]);
 
   const handleRequestEditorRole = async () => {
     setSubmitting(true);

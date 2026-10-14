@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import ConfirmModal from "../components/ConfirmModal";
@@ -43,9 +43,6 @@ export default function MyFormsDashboard() {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
 
-  useEffect(() => {
-    void loadMyForms();
-  }, []);
 
   function formatDate(dateString: string) {
     return new Intl.DateTimeFormat(language === "th" ? "th-TH" : "en-US", {
@@ -54,7 +51,7 @@ export default function MyFormsDashboard() {
     }).format(new Date(dateString));
   }
 
-  const loadMyForms = async () => {
+  const loadMyForms = useCallback(async () => {
     try {
       const {
         data: { user },
@@ -83,7 +80,11 @@ export default function MyFormsDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate, t]);
+
+  useEffect(() => {
+    void loadMyForms();
+  }, [loadMyForms]);
 
   const createDocumentSignedUrl = async (path: string) => {
     const { data, error } = await supabase.storage

@@ -180,10 +180,10 @@ export default function VideoCaseSummaryPage() {
     setOverallSuggestion(initialSuggestion);
   }, [snapshot.combine_prompt]);
 
-  const questionAverages = (snapshot.question_averages_by_section ||
+  const questionAverages = useMemo(() => (snapshot.question_averages_by_section ||
     snapshot.question_averages ||
     aggregate?.combined_scores ||
-    {}) as Record<string, Record<string, unknown>>;
+    {}) as Record<string, Record<string, unknown>>, [snapshot.question_averages_by_section, snapshot.question_averages, aggregate?.combined_scores]);
   const prefilledAnswers = useMemo(
     () =>
       sections.reduce<Record<string, Record<string, LikertValue | undefined>>>((acc, section) => {
@@ -288,10 +288,10 @@ export default function VideoCaseSummaryPage() {
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2 text-xs">
                     <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700">
-                      Order no.: {summaryOrderNumber || "-"}
+                      Order no.: {String(summaryOrderNumber || "-")}
                     </span>
                     <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700">
-                      Subject: {summarySubjectName || "-"}
+                      Subject: {String(summarySubjectName || "-")}
                     </span>
                     <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700">
                       Source evaluations: {aggregate.source_count}
@@ -402,7 +402,7 @@ export default function VideoCaseSummaryPage() {
                               ? run.ai_output
                               : typeof run.ai_raw_text === "string"
                                 ? run.ai_raw_text
-                                : run.notes || "No AI text available."}
+                                : typeof run.notes === "string" && run.notes.trim() ? run.notes : "No AI text available."}
                           </p>
                         </td>
                       </tr>

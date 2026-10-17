@@ -1,4 +1,18 @@
-# VIA V4 n8n Code node patch — applied and read back
+# VIA V4 n8n Code node patches
+
+## Local OpenAI migration changes (2026-10-17, NOT applied to production)
+
+`transform-via-payload.js.txt` now retains `videoEvaluation` and `ai_video_metadata`; `assemble-final-evaluation-context.js.txt` passes metadata onward. These local changes must be reviewed against a fresh workflow export before deployment. The live API export attempt returned 401; the full current workflow and Apps Script source are not available in this checkout.
+
+Importable optional sub-workflow: `workflows/via-openai-video-adapter.json`. It is inactive, has no public webhook, and contains no credentials. Configure its HTTP node's backend HTTPS URL and a **Header Auth** credential named `Authorization` with value `Bearer <ANALYSIS_API_TOKEN>`. Call it with an Execute Sub-workflow node **only on the with-video branch** and wait for completion. It accepts existing `video.downloadUrl`/`video.fileName` or direct `fileUrl`/`fileName` plus the original analysis prompt. It returns the backend result with target identity preserved; retain the main workflow's existing merge with human evaluation data.
+
+Alternatively keep the original Analyze Video HTTP node and configure its URL and Header Auth directly; the sub-workflow is optional, not a new required processing lane. Set failure retry off on the analysis node; queue handling and completed-result reuse control retries. Do not use n8n Cloud's `localhost` as the backend URL. Never activate this file, patch the main workflow, send real jobs, or replace existing Gemini report-generation nodes as an automatic consequence of import.
+
+For document-only retry, resume a verified failed report node with previously saved context in n8n. Full workflow replay can still repeat the Gemini text-report steps; this patch caches the migrated OpenAI video/audio and aggregate steps only. Apps Script idempotency cannot be guaranteed without its source. See `docs/openai-migration-audit-2026-10-17.md` for limits.
+
+## Historical deployment evidence (2026-09-20)
+
+The history below predates the local changes above. It does not prove these new files are deployed.
 
 These are replacement **Code node bodies**, not a complete importable workflow.
 All three have been applied to the active workflow through the public API. Do not upload these files as

@@ -1,3 +1,4 @@
+import { requireAnalysisAccess } from "./analysisControls.js";
 import "./loadEnv.js";
 import express from "express";
 import fs from "node:fs";
@@ -23,6 +24,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 
 const app = express();
+app.use(["/api/analyze-video", "/api/analyze-video-case", "/api/analyze-video-aggregate"], (req,res,next) => req.method === "OPTIONS" ? next() : requireAnalysisAccess(req,res,next));
 const upload = multer({
   storage: multer.diskStorage({
     destination: os.tmpdir(),
@@ -162,8 +164,9 @@ app.post("/api/analyze-video", express.json({ limit: "1mb" }), async (req, res) 
     const result = await analyzeVideoFromUrl({ fileName, fileUrl, prompt });
     res.status(200).json(result);
   } catch (error) {
-    console.error("[cloud-run-upload] analysis failed", error);
-    res.status(502).json({
+    console.error("[cloud-run-upload] analysis failed", { message: error instanceof Error ? error.message : "Analysis failed" });
+    res.status(error.status || 502).json({
+      code: error.code || "analysis_failed",
       error: error instanceof Error ? error.message : "Video analysis failed.",
     });
   }
@@ -181,7 +184,7 @@ app.post("/api/analyze-video-case", express.json({ limit: "2mb" }), async (req, 
 
     res.status(200).json(result);
   } catch (error) {
-    console.error("[cloud-run-upload] case aggregation failed", error);
+    console.error("[cloud-run-upload] case aggregation failed", { message: error instanceof Error ? error.message : "Analysis failed" });
     res.status(502).json({
       error: error instanceof Error ? error.message : "Video case aggregation failed.",
     });
@@ -200,7 +203,7 @@ app.post("/api/analyze-video-aggregate", express.json({ limit: "2mb" }), async (
 
     res.status(200).json(result);
   } catch (error) {
-    console.error("[cloud-run-upload] aggregate analysis failed", error);
+    console.error("[cloud-run-upload] aggregate analysis failed", { message: error instanceof Error ? error.message : "Analysis failed" });
     res.status(502).json({
       error: error instanceof Error ? error.message : "Aggregate video analysis failed.",
     });
@@ -218,7 +221,7 @@ app.post("/api/analyze-video-case", express.json({ limit: "2mb" }), async (req, 
     });
     res.status(200).json(result);
   } catch (error) {
-    console.error("[cloud-run-upload] case analysis failed", error);
+    console.error("[cloud-run-upload] case analysis failed", { message: error instanceof Error ? error.message : "Analysis failed" });
     res.status(502).json({
       error: error instanceof Error ? error.message : "Video case analysis failed.",
     });

@@ -1,3 +1,4 @@
+import { requireAnalysisAccess } from "./server/analysisControls.js";
 import "./server/loadEnv.js";
 import axios from "axios";
 import cors from "cors";
@@ -21,6 +22,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 
 const app = express();
+app.use(["/api/analyze-video", "/api/analyze-video-case", "/api/analyze-video-aggregate"], (req,res,next) => req.method === "OPTIONS" ? next() : requireAnalysisAccess(req,res,next));
 
 function resolveCorsOrigin(origin, callback) {
   const allowedOrigins = [
@@ -94,8 +96,9 @@ app.post("/api/analyze-video", express.json({ limit: "1mb" }), async (req, res) 
 
     res.status(200).json(result);
   } catch (error) {
-    console.error("[upload-api] analysis failed", error);
-    res.status(502).json({
+    console.error("[upload-api] analysis failed", { message: error instanceof Error ? error.message : "Analysis failed" });
+    res.status(error.status || 502).json({
+      code: error.code || "analysis_failed",
       error: error instanceof Error ? error.message : "Video analysis failed.",
     });
   }
@@ -113,7 +116,7 @@ app.post("/api/analyze-video-case", express.json({ limit: "2mb" }), async (req, 
 
     res.status(200).json(result);
   } catch (error) {
-    console.error("[upload-api] case aggregation failed", error);
+    console.error("[upload-api] case aggregation failed", { message: error instanceof Error ? error.message : "Analysis failed" });
     res.status(502).json({
       error: error instanceof Error ? error.message : "Video case aggregation failed.",
     });
@@ -132,7 +135,7 @@ app.post("/api/analyze-video-aggregate", express.json({ limit: "2mb" }), async (
 
     res.status(200).json(result);
   } catch (error) {
-    console.error("[upload-api] aggregate analysis failed", error);
+    console.error("[upload-api] aggregate analysis failed", { message: error instanceof Error ? error.message : "Analysis failed" });
     res.status(502).json({
       error: error instanceof Error ? error.message : "Aggregate video analysis failed.",
     });
@@ -151,7 +154,7 @@ app.post("/api/analyze-video-case", express.json({ limit: "2mb" }), async (req, 
 
     res.status(200).json(result);
   } catch (error) {
-    console.error("[upload-api] case analysis failed", error);
+    console.error("[upload-api] case analysis failed", { message: error instanceof Error ? error.message : "Analysis failed" });
     res.status(502).json({
       error: error instanceof Error ? error.message : "Video case analysis failed.",
     });

@@ -1,15 +1,4 @@
-const DEFAULT_AGGREGATE_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-
-function getRequiredGeminiEnv() {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error("Missing required environment variable: GEMINI_API_KEY");
-  }
-
-  return {
-    apiKey: process.env.GEMINI_API_KEY,
-    model: process.env.GEMINI_MODEL || DEFAULT_AGGREGATE_MODEL,
-  };
-}
+import { generateOpenAiAnalysis } from "./openAiAnalysis.js";
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -191,88 +180,10 @@ ${JSON.stringify(
 `;
 }
 
-function parseModelJson(outputText) {
-  if (!outputText) {
-    return null;
-  }
-
-  const cleaned = outputText
-    .trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/, "");
-
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    return null;
-  }
-}
-
-async function analyzeTextWithGemini({
-  caseTitle,
-  caseId,
-  sourceRuns,
-  prompt,
-  questionAveragesBySection,
-  questionAverages,
-  sectionAverages,
-  aggregatedMatrix,
-}) {
-  const env = getRequiredGeminiEnv();
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.model)}:generateContent?key=${encodeURIComponent(env.apiKey)}`;
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: buildAggregatePrompt({
-                caseTitle,
-                caseId,
-                sourceRuns,
-                questionAveragesBySection,
-                questionAverages,
-                sectionAverages,
-                aggregatedMatrix,
-                prompt,
-              }),
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.2,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Gemini API request failed: ${response.status} ${errorText}`);
-  }
-
-  const payload = await response.json();
-  const outputText = payload?.candidates?.[0]?.content?.parts
-    ?.filter((part) => typeof part?.text === "string")
-    .map((part) => part.text)
-    .join("\n")
-    .trim();
-
-  if (!outputText) {
-    throw new Error("Gemini API returned an empty response.");
-  }
-
-  return {
-    model: env.model,
-    outputText,
-    parsed: parseModelJson(outputText),
-  };
+async function analyzeTextWithOpenAi(options) {
+  return generateOpenAiAnalysis({ prompt: buildAggregatePrompt({
+    ...options, questionAverages: options.questionAveragesBySection,
+  }) });
 }
 
 export function combineAggregateStatistics(sourceRuns) {
@@ -300,7 +211,7 @@ export async function aggregateVideoCaseAnalyses({
 
   const { questionAveragesBySection, aggregatedScores, sectionAverages, aggregatedMatrix } =
     combineAggregateStatistics(sourceRuns);
-  const analysis = await analyzeTextWithGemini({
+  const analysis = await analyzeTextWithOpenAi({
     caseTitle,
     caseId,
     sourceRuns,
@@ -321,6 +232,11 @@ export async function aggregateVideoCaseAnalyses({
     sectionAverages,
     aggregatedMatrix,
     model: analysis.model,
+    provider: analysis.provider,
+    promptVersion: analysis.promptVersion,
+    usage: analysis.usage,
+    cache: analysis.cache,
+    estimatedCostUsd: analysis.estimatedCostUsd,
     analysis: analysis.parsed || analysis.outputText,
     rawText: analysis.parsed ? undefined : analysis.outputText,
   };

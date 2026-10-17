@@ -21,3 +21,10 @@ test('only transient server errors are retried and provider delay is never short
   assert.equal(retryDecision({status:503,attempt:1,retryAfter:'600',now:0}).delayMs,600000);
   assert.equal(retryDecision({status:429,attempt:1,body:'"retryDelay":"90s"',now:0}).delayMs,90000);
 });
+
+test('provider billing failures and ambiguous analysis deliveries are not replayed', () => {
+  assert.equal(retryDecision({status:502,attempt:1,body:'credit_balance_exhausted'}).state,'failed');
+  assert.equal(retryDecision({status:500,attempt:1,body:'project_spend_limit_exceeded'}).state,'failed');
+  assert.equal(retryDecision({status:409,attempt:1,body:'analysis_pending'}).state,'attention');
+  assert.equal(retryDecision({status:502,attempt:1,body:'OpenAI request outcome unknown'}).state,'attention');
+});

@@ -84,6 +84,7 @@ return [
         input.stats || {},
 
       manualEvaluation,
+      ai_video_metadata: input.ai_video_metadata ?? null,
       videoEvaluation
     }
   }

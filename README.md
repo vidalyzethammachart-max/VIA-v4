@@ -157,12 +157,23 @@ The Cloud Run backend also exposes `POST /api/analyze-video` for n8n. It accepts
 }
 ```
 
-It downloads the video, extracts sample frames with ffmpeg, sends those frames to Gemini vision, and returns a structured analysis. Set:
+It downloads the video and extracts sample frames and audio with ffmpeg. OpenAI evaluates the audio separately, then combines that evidence with the frames to return the existing structured analysis contract. It samples visual frames; it does not inspect every frame of the complete video. Set these **server-only** variables:
 
 ```env
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY
-GEMINI_MODEL=gemini-1.5-flash
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_AUDIO_MODEL=gpt-audio-mini
 ```
+
+Both aggregate analysis endpoints also use OpenAI. There is no automatic fallback to Gemini. An audio API failure fails the request instead of silently scoring audio from images. API credentials and inference credit are separate from a ChatGPT subscription. Keep keys out of `VITE_*`, version control, images, and logs; configure them separately on the deployed backend.
+
+Verify model access with `node scripts/check-openai.mjs`. Run `node scripts/check-openai.mjs --generate` for a small, billable synthetic JSON request that does not send user data. Restart the local upload API after changing server code or environment values.
+
+Analysis endpoints now require `Authorization: Bearer <ANALYSIS_API_TOKEN>` from the calling service. Set the server token and the matching n8n **Header Auth** credential before restarting. Do not expose this token in the website. Missing configuration returns 503; invalid credentials return 401. Upload-presign and existing health endpoints are unchanged.
+
+See [the migration audit and setup guide](docs/openai-migration-audit-2026-10-17.md) and the [inactive, credential-free n8n video adapter](n8n/workflows/via-openai-video-adapter.json). The main production workflow has not been changed. Video/aggregate results are cached in `AI_ANALYSIS_CACHE_DIR` (default `logs/analysis-cache`); retain this directory on persistent storage to reuse results after replacing a host. Cache hits reuse original usage records and do not represent newly charged tokens. The provider does not return a dollar cost, so `estimatedCostUsd` is null rather than an invented estimate. An unknown delivery holds a `.lock` for inspection; do not remove it and replay blindly. Live smoke checks can hit cache and are not proof of fresh provider availability.
+
+Changing AI providers does not repair a hosting outage: n8n still calls its configured analysis backend URL. If that Cloud Run project's billing is disabled, restore hosting or deploy this backend to a reachable host before retrying the workflow. Never point n8n Cloud at `localhost`, and inspect an existing execution before retrying an ambiguous queue job.
 
 ## Local Development
 

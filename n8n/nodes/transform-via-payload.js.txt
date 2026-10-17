@@ -166,6 +166,19 @@ const output = {
 
   hasVideo: Boolean(basePayload.hasVideo),
   video: basePayload.video ?? null,
+  // Preserve existing aliases and the backend's OpenAI result separately from rubric.
+  videoEvaluation: basePayload.videoEvaluation ?? basePayload.videoanalysis ??
+    basePayload.videoAnalysis ?? basePayload.ai_video_analysis ??
+    (basePayload.status === 'analyzed' ? basePayload.analysis : null) ?? {},
+  ai_video_metadata: basePayload.ai_video_metadata ?? (basePayload.status === 'analyzed' ? {
+    provider: basePayload.provider ?? null,
+    model: basePayload.model ?? null,
+    audioModel: basePayload.audioModel ?? null,
+    promptVersion: basePayload.promptVersion ?? null,
+    usage: basePayload.usage ?? null,
+    cache: basePayload.cache ?? null,
+    estimatedCostUsd: basePayload.estimatedCostUsd ?? null,
+  } : null),
 
   source_evaluation_ids:
     basePayload.source_evaluation_ids ?? [],

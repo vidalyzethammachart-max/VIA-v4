@@ -4,73 +4,71 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { pipeline } from "stream/promises";
 import { spawn } from "child_process";
+import { Transform } from 'node:stream';
 import axios from "axios";
 import ffmpegPath from "ffmpeg-static";
 
-const DEFAULT_ANALYSIS_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+import { generateOpenAiAnalysis, getOpenAiConfig } from "./openAiAnalysis.js";
+import { validateVideoSource, parseMediaDuration, validationError } from './analysisControls.js';
+
 const DEFAULT_FRAME_COUNT = 6;
 
-function getRequiredGeminiEnv() {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error("Missing required environment variable: GEMINI_API_KEY");
-  }
-
-  return {
-    apiKey: process.env.GEMINI_API_KEY,
-    model: process.env.GEMINI_MODEL || DEFAULT_ANALYSIS_MODEL,
-  };
-}
-
 async function downloadVideo(fileUrl, targetPath) {
+  validateVideoSource(fileUrl);
   const response = await axios.get(fileUrl, {
     responseType: "stream",
     timeout: 10 * 60 * 1000,
+    signal: AbortSignal.timeout(10 * 60 * 1000),
     maxBodyLength: Infinity,
     maxContentLength: Infinity,
+    maxRedirects: 0,
+    proxy: false,
   });
-
-  await pipeline(response.data, createWriteStream(targetPath));
-
-  const contentLength = Number(response.headers["content-length"] || 0);
-  if (Number.isFinite(contentLength) && contentLength > 0) {
-    return contentLength;
-  }
+  let received = 0;
+  const bound = new Transform({ transform(chunk,_encoding,callback) {
+    received += chunk.length;
+    callback(received > 1024*1024*1024 ? validationError('Video file must be 1GB or smaller.') : null,chunk);
+  }});
+  await pipeline(response.data, bound, createWriteStream(targetPath));
 
   const fileStats = await stat(targetPath);
   return fileStats.size;
 }
 
-function runFfmpeg(args) {
+function runFfmpeg(args, {probe=false}={}) {
   return new Promise((resolve, reject) => {
     const child = spawn(ffmpegPath, args, {
       windowsHide: true,
     });
     let stderr = "";
+    const timer = setTimeout(() => { child.kill(); }, 120000);
 
     child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
+      stderr = (stderr + chunk.toString()).slice(-16000);
     });
 
-    child.on("error", reject);
+    child.on("error", () => {clearTimeout(timer);reject(validationError('Unable to start media processing.'));});
     child.on("close", (code) => {
+      clearTimeout(timer);
+      if(probe) { resolve(stderr); return; }
       if (code === 0) {
         resolve();
         return;
       }
 
-      reject(new Error(stderr || `ffmpeg exited with code ${code}`));
+      reject(validationError('Media processing failed or exceeded the time limit.'));
     });
   });
 }
 
-async function extractFrames(videoPath, frameDir, frameCount = DEFAULT_FRAME_COUNT) {
+async function extractFrames(videoPath, frameDir, duration, frameCount = DEFAULT_FRAME_COUNT) {
   const framePattern = join(frameDir, "frame-%02d.jpg");
   await runFfmpeg([
     "-y",
     "-i",
     videoPath,
     "-vf",
-    `fps=1/10,scale=1024:-1`,
+    `fps=${frameCount / duration},scale=1024:-1`,
     "-frames:v",
     String(frameCount),
     "-q:v",
@@ -166,25 +164,7 @@ Return JSON only:
 Scoring: 1 = poor, 5 = excellent.
 Base your answer only on the provided frames and extracted audio. If inputs are insufficient, say what is missing.`;
 
-  return `${promptText}\n\nAdditional context:\n- You are receiving sampled video frames and an extracted audio track from the same source video.\n- Use the audio track to judge narration, speaking clarity, pacing, and audible quality.\n- Use the frames to judge camera work, sequencing, and graphics.\n- If a category cannot be judged confidently, say so explicitly rather than guessing.`;
-}
-
-function parseModelJson(outputText) {
-  if (!outputText) {
-    return null;
-  }
-
-  const cleaned = outputText
-    .trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/, "");
-
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    return null;
-  }
+  return `${promptText}\n\nAdditional context:\n- You receive sampled video frames and, when available, a separate assessment of actual audio.\n- Use audio evidence to judge narration, speaking clarity, pacing, and audible quality.\n- Use the sampled frames to judge camera work and graphics; do not claim a complete frame-by-frame review.\n- If audio is unavailable, audio_quality and narration_quality must be null with an explicit limitation. Never infer sound quality from images or a transcript alone.\n- Human rubric scores are separate evidence and must never be overwritten or averaged with AI scores.\n- If a category cannot be judged confidently, say so explicitly rather than guessing.`;
 }
 
 function toFiniteNumber(value) {
@@ -285,124 +265,16 @@ Base the response on the supplied analyses and averages only.`;
   return `${promptText}\n\nAveraged rubric:\n${JSON.stringify(averageRubric, null, 2)}\n\nIndividual analyses:\n${JSON.stringify(analysisSnapshots, null, 2)}`;
 }
 
-async function analyzeAggregateWithGemini({ caseKey, caseTitle, analyses, prompt }) {
-  const env = getRequiredGeminiEnv();
+async function analyzeAggregateWithOpenAi({ caseKey, caseTitle, analyses, prompt }) {
   const averageRubric = computeAverageRubric(analyses);
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.model)}:generateContent?key=${encodeURIComponent(env.apiKey)}`;
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: buildAggregatePrompt({
-                caseKey,
-                caseTitle,
-                analyses,
-                averageRubric,
-                prompt,
-              }),
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.2,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Gemini aggregate request failed: ${response.status} ${errorText}`);
-  }
-
-  const payload = await response.json();
-  const outputText = payload?.candidates?.[0]?.content?.parts
-    ?.filter((part) => typeof part?.text === "string")
-    .map((part) => part.text)
-    .join("\n")
-    .trim();
-
-  if (!outputText) {
-    throw new Error("Gemini aggregate response was empty.");
-  }
-
-  return {
-    model: env.model,
-    averageRubric,
-    outputText,
-    parsed: parseModelJson(outputText),
-  };
+  const result = await generateOpenAiAnalysis({ prompt: buildAggregatePrompt({ caseKey, caseTitle, analyses, averageRubric, prompt }) });
+  return { ...result, averageRubric };
 }
 
-async function analyzeMediaWithGemini({ fileName, fileUrl, frames, audio, prompt }) {
-  const env = getRequiredGeminiEnv();
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.model)}:generateContent?key=${encodeURIComponent(env.apiKey)}`;
-  const contents = [
-    {
-      role: "user",
-      parts: [
-        { text: buildAnalysisPrompt({ fileName, fileUrl, prompt }) },
-        ...(audio
-          ? [
-              {
-                inlineData: {
-                  mimeType: audio.mimeType,
-                  data: audio.base64,
-                },
-              },
-            ]
-          : []),
-        ...frames.map((frame) => ({
-          inlineData: {
-            mimeType: "image/jpeg",
-            data: frame.base64,
-          },
-        })),
-      ],
-    },
-  ];
-
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      contents,
-      generationConfig: {
-        temperature: 0.2,
-      },
-    }),
+async function analyzeMediaWithOpenAi({ fileName, frames, audio, prompt }) {
+  return generateOpenAiAnalysis({
+    prompt: buildAnalysisPrompt({ fileName, fileUrl: "[stored video; sampled evidence supplied]", prompt }), frames, audio,
   });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Gemini API request failed: ${response.status} ${errorText}`);
-  }
-
-  const payload = await response.json();
-  const outputText = payload?.candidates?.[0]?.content?.parts
-    ?.filter((part) => typeof part?.text === "string")
-    .map((part) => part.text)
-    .join("\n")
-    .trim();
-
-  if (!outputText) {
-    throw new Error("Gemini API returned an empty response.");
-  }
-
-  return {
-    model: env.model,
-    outputText,
-    parsed: parseModelJson(outputText),
-  };
 }
 
 export async function analyzeVideoFromUrl({ fileName, fileUrl, prompt }) {
@@ -410,13 +282,18 @@ export async function analyzeVideoFromUrl({ fileName, fileUrl, prompt }) {
     throw new Error("fileUrl is required.");
   }
 
+  getOpenAiConfig(); // Fail before downloading media if credentials are missing.
   const workspace = await mkdtemp(join(tmpdir(), "via-video-analysis-"));
   const videoPath = join(workspace, "source-video");
   const audioPath = join(workspace, "audio.mp3");
 
   try {
     const downloadedBytes = await downloadVideo(fileUrl, videoPath);
-    const frames = await extractFrames(videoPath, workspace);
+    const metadata = await runFfmpeg(['-hide_banner','-i',videoPath], {probe:true});
+    const durationSeconds = parseMediaDuration(metadata);
+    const configuredFrames = Number(process.env.VIDEO_ANALYSIS_FRAME_COUNT || DEFAULT_FRAME_COUNT);
+    const frameCount = Number.isInteger(configuredFrames) ? Math.min(12,Math.max(3,configuredFrames)) : DEFAULT_FRAME_COUNT;
+    const frames = await extractFrames(videoPath, workspace, durationSeconds, frameCount);
     let audio = null;
 
     try {
@@ -433,11 +310,11 @@ export async function analyzeVideoFromUrl({ fileName, fileUrl, prompt }) {
       }
     } catch (audioError) {
       console.warn("[video-analysis] audio extraction failed, continuing without audio", {
-        message: audioError instanceof Error ? audioError.message : String(audioError),
+        message: 'Audio evidence unavailable; do not score audio from images.',
       });
     }
 
-    const analysis = await analyzeMediaWithGemini({
+    const analysis = await analyzeMediaWithOpenAi({
       fileName,
       fileUrl,
       frames,
@@ -450,9 +327,16 @@ export async function analyzeVideoFromUrl({ fileName, fileUrl, prompt }) {
       fileName,
       fileUrl,
       downloadedBytes,
+      durationSeconds,
       frameCount: frames.length,
       audioBytes: audio?.byteLength || 0,
       model: analysis.model,
+      audioModel: analysis.audioModel,
+      provider: analysis.provider,
+      promptVersion: analysis.promptVersion,
+      usage: analysis.usage,
+      cache: analysis.cache,
+      estimatedCostUsd: analysis.estimatedCostUsd,
       analysis: analysis.parsed || analysis.outputText,
       rawText: analysis.parsed ? undefined : analysis.outputText,
     };
@@ -470,7 +354,7 @@ export async function analyzeVideoCaseAggregate({ caseKey, caseTitle, analyses, 
     throw new Error("At least one analysis is required.");
   }
 
-  const aggregate = await analyzeAggregateWithGemini({
+  const aggregate = await analyzeAggregateWithOpenAi({
     caseKey,
     caseTitle,
     analyses,
@@ -483,6 +367,11 @@ export async function analyzeVideoCaseAggregate({ caseKey, caseTitle, analyses, 
     sourceCount: analyses.length,
     averageRubric: aggregate.averageRubric,
     model: aggregate.model,
+    provider: aggregate.provider,
+    promptVersion: aggregate.promptVersion,
+    usage: aggregate.usage,
+    cache: aggregate.cache,
+    estimatedCostUsd: aggregate.estimatedCostUsd,
     analysis: aggregate.parsed || aggregate.outputText,
     rawText: aggregate.parsed ? undefined : aggregate.outputText,
   };

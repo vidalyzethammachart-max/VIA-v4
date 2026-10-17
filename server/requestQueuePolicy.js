@@ -6,6 +6,8 @@ export function classifyWorkflowResponse({ status, documentReady }) {
 
 export function retryDecision({ status, attempt, retryAfter, body = '', now = Date.now() }) {
   if (!status) return { state: 'attention', delayMs: 0, reason: 'Delivery outcome unknown; inspect execution before retrying.' };
+  if (/analysis_pending|OpenAI request outcome unknown/i.test(body)) return {state:'attention',delayMs:0,reason:'Analysis delivery needs inspection; automatic replay stopped.'};
+  if (/credit_balance_exhausted|insufficient_quota|project_spend_limit_exceeded|organization_usage_limit_exceeded/i.test(body)) return {state:'failed',delayMs:0,reason:'AI billing or usage allowance requires account-owner action; automatic retry stopped.'};
   if (attempt >= 5 || !(status === 429 || status === 408 || status >= 500)) {
     return { state: 'failed', delayMs: 0, reason: `Request failed (HTTP ${status}); retry limit or permanent error.` };
   }

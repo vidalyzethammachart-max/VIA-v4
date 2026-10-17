@@ -1,0 +1,48 @@
+{
+  "name": "VIA - OpenAI video adapter (configure before use)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "via-video-input",
+      "name": "Video Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "parameters": { "inputSource": "passthrough" }
+    },
+    {
+      "id": "via-video-analyze",
+      "name": "Analyze Video via Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [280, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_ANALYSIS_BACKEND.example.invalid/api/analyze-video",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { fileUrl: $json.fileUrl ?? $json.video?.downloadUrl, fileName: $json.fileName ?? $json.video?.fileName, prompt: $json.prompt } }}",
+        "options": { "timeout": 600000 }
+      }
+    },
+    {
+      "id": "via-video-identity",
+      "name": "Retain Target Identity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 0],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const source = $('Video Input').item.json;\nif (source.evaluation_id && source.aggregate_id) throw new Error('Ambiguous document target');\nconst result = { ...$json };\nfor (const key of ['document_type', 'evaluation_id', 'aggregate_id', 'video_case_id']) {\n  if (source[key] !== undefined) result[key] = source[key];\n}\nreturn { json: result };"
+      }
+    }
+  ],
+  "connections": {
+    "Video Input": { "main": [[{ "node": "Analyze Video via Backend", "type": "main", "index": 0 }]] },
+    "Analyze Video via Backend": { "main": [[{ "node": "Retain Target Identity", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

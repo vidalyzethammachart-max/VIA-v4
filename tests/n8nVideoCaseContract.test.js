@@ -92,6 +92,27 @@ test("n8n context keeps individual identity and parses manual analysis", () => {
   assert.deepEqual(result.manualEvaluation, { summary: "Individual analysis" });
 });
 
+test('OpenAI video evidence survives transform and context without changing human scores', () => {
+  const analysis={summary:'Thai audio and visual evidence',overall_score:5};
+  const transformed=runNode('transform-via-payload',{
+    evaluation_id:1001,hasVideo:true,status:'analyzed',analysis,
+    model:'gpt-4.1-mini',promptVersion:'test',usage:{vision:{input_tokens:100}},
+    rubric:[{scores:[1,2,3,4,5]}],
+  });
+  assert.deepEqual(transformed.videoEvaluation,analysis);
+  assert.equal(transformed.rubric[0].scores[0],1);
+  const context=runNode('assemble-final-evaluation-context',transformed);
+  assert.deepEqual(context.videoEvaluation,analysis);
+  assert.equal(context.evaluation_id,1001);
+  assert.equal(context.ai_video_metadata.model,'gpt-4.1-mini');
+});
+
+test('data-only submission does not invent video analysis', () => {
+  const transformed=runNode('transform-via-payload',{evaluation_id:1001,hasVideo:false,rubric:[{scores:[1,2,3,4,5]}]});
+  const context=runNode('assemble-final-evaluation-context',transformed);
+  assert.deepEqual(context.videoEvaluation,{});
+});
+
 function buildDocument(normalized, transformed) {
   return runNode("build-final-appscript-body", { summary: "Parsed AI report" }, {
     "Normalize Incoming Payload": normalized,

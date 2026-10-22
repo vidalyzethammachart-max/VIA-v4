@@ -81,7 +81,7 @@ app.options("/api/analyze-video-aggregate", (_req, res) => {
   res.status(204).end();
 });
 
-app.get("/healthz", (_req, res) => {
+app.get(["/", "/health", "/healthz"], (_req, res) => {
   res.status(200).json({ ok: true });
 });
 

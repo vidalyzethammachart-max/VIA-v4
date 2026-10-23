@@ -13,7 +13,7 @@ const compiled = ts.transpileModule(
   { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
 ).outputText;
 
-function setup({ dispatchError = null, callbackReady = false, pendingError = null } = {}) {
+function setup({ dispatchError = null, callbackReady = false, dispatchData = {ok:true,status:'pending'} } = {}) {
   const row = {
     id: "aggregate-1", video_case_id: "case-1", source_evaluation_ids: [101, 102],
     source_count: 2, source_snapshot: { case_title: "Video 001" },
@@ -26,9 +26,6 @@ function setup({ dispatchError = null, callbackReady = false, pendingError = nul
     from(table) {
       let patch;
       const result = () => {
-        if (patch?.document_status === "pending" && pendingError) {
-          return { data: null, error: { message: pendingError } };
-        }
         if (patch) Object.assign(row, patch);
         return { data: table === "user_information" ? { employee_number: "E001" } : { ...row }, error: null };
       };
@@ -42,7 +39,8 @@ function setup({ dispatchError = null, callbackReady = false, pendingError = nul
     functions: { async invoke(name, { body }) {
       requests.push({ name, body, statusAtDispatch: row.document_status });
       if (callbackReady) row.document_status = "ready";
-      return { data: null, error: dispatchError ? { message: dispatchError } : null };
+      else if (!dispatchError && dispatchData?.ok) row.document_status = "pending";
+      return { data: dispatchData, error: dispatchError ? { message: dispatchError } : null };
     } },
   };
   const exports = {};
@@ -67,7 +65,7 @@ test("summary submission dispatches the entered suggestion and selected sources 
   assert.equal(row.document_error, null);
   assert.equal(requests.length, 1);
   assert.equal(requests[0].name, "forward-to-n8n");
-  assert.equal(requests[0].statusAtDispatch, "pending");
+  assert.equal(requests[0].statusAtDispatch, null);
   assert.equal(requests[0].body.combine_prompt, "Improve pacing");
   assert.equal(requests[0].body.aggregate_id, "aggregate-1");
   assert.deepEqual(requests[0].body.source_evaluation_ids, [101, 102]);
@@ -76,8 +74,8 @@ test("summary submission dispatches the entered suggestion and selected sources 
 test("failed dispatch rejects submission so the form cannot navigate as a success", async () => {
   const { submit, row } = setup({ dispatchError: "Workflow unavailable" });
   await assert.rejects(submit("aggregate-1", "Suggestion"), /Workflow unavailable/);
-  assert.equal(row.document_status, "failed");
-  assert.equal(row.document_error, "Workflow unavailable");
+  assert.equal(row.document_status, null);
+  assert.equal(row.document_error, null);
 });
 
 test("submission preserves a callback that completes before dispatch returns", async () => {
@@ -85,8 +83,14 @@ test("submission preserves a callback that completes before dispatch returns", a
   assert.equal((await submit("aggregate-1", "Suggestion")).document_status, "ready");
 });
 
-test("submission does not dispatch when saving its pending status fails", async () => {
-  const { submit, requests } = setup({ pendingError: "Permission denied" });
-  await assert.rejects(submit("aggregate-1", "Suggestion"), /Permission denied/);
-  assert.equal(requests.length, 0);
+test("late dispatch error cannot overwrite a completed callback", async () => {
+  const {submit,row}=setup({callbackReady:true,dispatchError:'Late network error'});
+  const result=await submit('aggregate-1','Suggestion');
+  assert.equal(result.document_status,'ready');
+  assert.equal(row.document_status,'ready');
+});
+
+test("a server refusal in a successful HTTP response still rejects submission", async () => {
+  const {submit}=setup({dispatchData:{ok:false,error:'Delivery needs inspection'}});
+  await assert.rejects(submit('aggregate-1','Suggestion'),/Delivery needs inspection/);
 });

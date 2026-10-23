@@ -603,11 +603,11 @@ function FormSubmit() {
     onUploadProgress?: (percent: number) => void,
     preUploadedVideo?: R2UploadedVideo | null,
   ) => {
-    if (IS_LEGACY_UPLOAD_MODE && videoFile) throw new Error("Queued video processing requires R2 upload mode.");
+    if (IS_LEGACY_UPLOAD_MODE && videoFile) throw new Error("Video processing requires R2 upload mode.");
     const uploadedVideo = videoFile ? preUploadedVideo || await uploadVideoToR2(videoFile, evaluationId || "pending", onUploadProgress) : null;
     const body = uploadedVideo ? webhookPayload.map(item => ({ ...item, hasVideo:true, video:uploadedVideo })) : webhookPayload;
     const { data, error } = await supabase.functions.invoke("forward-to-n8n", { body });
-    if (error || !data?.ok) throw new Error(data?.error || error?.message || "Could not enqueue evaluation.");
+    if (error || !data?.ok) throw new Error(data?.error || error?.message || "Could not start evaluation processing.");
     return data;
   };
 
@@ -632,6 +632,7 @@ function FormSubmit() {
       return;
     }
 
+    let savedEvaluationId: number | null = null;
     try {
       const submissionId = createSubmissionId();
       const videoFile = submissionMode === "with_video" ? selectedVideoFile : null;
@@ -698,7 +699,7 @@ function FormSubmit() {
         label: videoCaseUi.analyzing,
         });
 
-        // Video AI runs inside the queued n8n workflow after upload.
+        // Video AI starts in n8n immediately after upload and document dispatch.
 
       }
 
@@ -709,6 +710,7 @@ function FormSubmit() {
         analysisAiRawText: null,
       });
 
+      savedEvaluationId = evaluationId;
       setSubmissionProgress({
         percent: 78,
         label: t("form.progressSending"),
@@ -743,7 +745,15 @@ function FormSubmit() {
       });
     } catch (error) {
       console.error("Error while saving:", error);
-      setSubmitErrorMessage(error instanceof Error ? error.message : t("form.submitFailed"));
+      if (savedEvaluationId) {
+        // Keep the saved identity visible; submitting the entire form again would
+        // create a second evaluation rather than retry this document.
+        navigate(`/preview/${savedEvaluationId}`, { replace: true, state: {
+          dispatchError: error instanceof Error ? error.message : t("form.submitFailed"),
+        } });
+      } else {
+        setSubmitErrorMessage(error instanceof Error ? error.message : t("form.submitFailed"));
+      }
       setSubmissionProgress(null);
     } finally {
       submittingRef.current = false;

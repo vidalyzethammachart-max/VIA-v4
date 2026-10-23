@@ -8,7 +8,8 @@ import { Transform } from 'node:stream';
 import axios from "axios";
 import ffmpegPath from "ffmpeg-static";
 
-import { generateOpenAiAnalysis, getOpenAiConfig } from "./openAiAnalysis.js";
+import { generateOpenAiAnalysis } from "./openAiAnalysis.js";
+import { generateVideoAnalysis, getVideoAnalysisConfig } from "./videoAnalysisProvider.js";
 import { validateVideoSource, parseMediaDuration, validationError } from './analysisControls.js';
 
 const DEFAULT_FRAME_COUNT = 6;
@@ -271,8 +272,8 @@ async function analyzeAggregateWithOpenAi({ caseKey, caseTitle, analyses, prompt
   return { ...result, averageRubric };
 }
 
-async function analyzeMediaWithOpenAi({ fileName, frames, audio, prompt }) {
-  return generateOpenAiAnalysis({
+async function analyzeMedia({ fileName, frames, audio, prompt }) {
+  return generateVideoAnalysis({
     prompt: buildAnalysisPrompt({ fileName, fileUrl: "[stored video; sampled evidence supplied]", prompt }), frames, audio,
   });
 }
@@ -282,7 +283,7 @@ export async function analyzeVideoFromUrl({ fileName, fileUrl, prompt }) {
     throw new Error("fileUrl is required.");
   }
 
-  getOpenAiConfig(); // Fail before downloading media if credentials are missing.
+  getVideoAnalysisConfig(); // Fail before downloading media if credentials are missing.
   const workspace = await mkdtemp(join(tmpdir(), "via-video-analysis-"));
   const videoPath = join(workspace, "source-video");
   const audioPath = join(workspace, "audio.mp3");
@@ -314,7 +315,7 @@ export async function analyzeVideoFromUrl({ fileName, fileUrl, prompt }) {
       });
     }
 
-    const analysis = await analyzeMediaWithOpenAi({
+    const analysis = await analyzeMedia({
       fileName,
       fileUrl,
       frames,

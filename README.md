@@ -29,7 +29,7 @@ Video Intelligence & Analytics web application for evaluation form submission, r
   - employee number
   - gender
   - avatar upload
-- Durable queue for evaluation and summary processing, including uploaded video
+- Immediate authenticated n8n dispatch for evaluations and summaries, including uploaded video
 - Admin dashboard
   - user search/filter
   - role update
@@ -70,10 +70,12 @@ Video submissions use Cloudflare R2 direct upload to avoid request body limits o
 
 1. The frontend calls `POST /api/r2-presign-upload` on the upload backend.
 2. The browser uploads the video directly to R2 with the returned signed `uploadUrl`.
-3. The frontend calls the authenticated `forward-to-n8n` Edge Function, which authorizes and saves the document request to the queue (HTTP 202).
-4. The server-only worker claims one job at a time, refreshes the R2 download URL, and dispatches the existing n8n workflow. The document callback determines readiness.
+3. The frontend calls the authenticated `forward-to-n8n` Edge Function, which authorizes the document and immediately dispatches it to n8n. HTTP 202 means n8n accepted the request.
+4. n8n processes the video and creates the documents. The existing callback marks the document ready after PDF/DOCX storage paths are available. The website can be closed after acknowledgement; no personal computer worker is needed.
 
-Run the worker with `npm run start:queue`. Configure `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `N8N_WEBHOOK_URL` in the gitignored `.env.queue.local`; video processing also needs the R2 credentials above. See [worker setup, health alerts, and recovery](docs/queue-worker-operations.md). An online worker is required for queued jobs to progress.
+Configure `N8N_WEBHOOK_URL` in the **Supabase Edge Function secrets**, along with the built-in Supabase URL/anon/service credentials. Configure the n8n webhook to respond immediately on receipt; AI/document processing continues asynchronously through the callback. No queue worker or scheduled Windows task is used. See [direct dispatch setup and delivery recovery](docs/direct-document-dispatch.md).
+
+Each document has an atomic duplicate guard; different documents start independently. A timeout or ambiguous upstream failure does not automatically replay a request that might already have started. Inspect its n8n execution before recovery. Historical queue records are retained and are not automatically replayed.
 
 n8n should download the video from `payload[0].video.downloadUrl` instead of expecting a multipart binary field. Do not send large video binaries through `/api/n8n-webhook`; that proxy accepts JSON payloads only.
 
@@ -173,7 +175,7 @@ Analysis endpoints now require `Authorization: Bearer <ANALYSIS_API_TOKEN>` from
 
 See [the migration audit and setup guide](docs/openai-migration-audit-2026-10-17.md) and the [inactive, credential-free n8n video adapter](n8n/workflows/via-openai-video-adapter.json). The main production workflow has not been changed. Video/aggregate results are cached in `AI_ANALYSIS_CACHE_DIR` (default `logs/analysis-cache`); retain this directory on persistent storage to reuse results after replacing a host. Cache hits reuse original usage records and do not represent newly charged tokens. The provider does not return a dollar cost, so `estimatedCostUsd` is null rather than an invented estimate. An unknown delivery holds a `.lock` for inspection; do not remove it and replay blindly. Live smoke checks can hit cache and are not proof of fresh provider availability.
 
-Changing AI providers does not repair a hosting outage: n8n still calls its configured analysis backend URL. If that Cloud Run project's billing is disabled, restore hosting or deploy this backend to a reachable host before retrying the workflow. Never point n8n Cloud at `localhost`, and inspect an existing execution before retrying an ambiguous queue job.
+Changing AI providers does not repair a hosting outage: n8n still calls its configured analysis backend URL. If that Cloud Run project's billing is disabled, restore hosting or deploy this backend to a reachable host before retrying the workflow. Never point n8n Cloud at `localhost`, and inspect an existing execution before retrying an ambiguous delivery.
 
 ## Local Development
 

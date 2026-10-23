@@ -44,6 +44,7 @@ export default function PreviewPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const dispatchError = (location.state as { dispatchError?: string } | null)?.dispatchError;
   const hasStorageArtifact = Boolean(record?.pdf_storage_path || record?.docx_storage_path);
 
   useEffect(() => {
@@ -287,6 +288,11 @@ export default function PreviewPage() {
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-8 shadow-sm">
             <h3 className="text-base font-semibold text-amber-900">{t("preview.processingTitle")}</h3>
             <p className="mt-2 text-sm text-amber-800">{t("preview.processingDesc")}</p>
+            {(record?.document_error || dispatchError) && (
+              <p role="alert" className="mt-3 text-sm text-amber-900">
+                {record?.document_error || dispatchError}
+              </p>
+            )}
             {record?.document_status === "ready" && !hasStorageArtifact && (
               <p className="mt-3 text-xs text-amber-700">
                 Document status is ready, but pdf_storage_path and docx_storage_path are still empty.

@@ -1,3 +1,15 @@
+# Retired queue worker (historical operations)
+
+The active application now dispatches directly to n8n. Do not install or start the
+old worker. See [direct dispatch setup](direct-document-dispatch.md). Historical
+queue migrations/records remain for audit; the direct-dispatch migration disables
+legacy enqueue/retry and stops workers from claiming new work.
+
+The notes below describe the retired deployment only. Their scripts and npm
+startup command have been removed.
+
+---
+
 # Queue worker operations
 
 The queue is durable in Supabase. An online worker dispatches one document request at a time. A queued acknowledgement does not mean a document is ready; the authenticated document callback must store at least one artifact.

@@ -55,6 +55,14 @@ test("empty dashboard does not invent analyses or downloadable files", () => {
   assert.equal(model.readyDocumentCount, 0);
   assert.equal(model.recent.length, 0);
 });
+test("document state is independent of stale legacy queue status", () => {
+  const model=service().buildDashboardModel({cases:[],aggregates:[],evaluations:[
+    {id:1,video_case_id:null,rubric:{},document_status:'pending',queue_status:'queued'},
+    {id:2,video_case_id:null,rubric:{},document_status:'failed',queue_status:'running'},
+  ]});
+  assert.equal(model.recent.find(r=>r.id==='evaluation-1').documentStatus,'pending');
+  assert.equal(model.recent.find(r=>r.id==='evaluation-2').documentStatus,'failed');
+});
 test("dashboard loads beyond the API page limit and propagates query errors", async () => {
   const calls = [];
   const supabase = { from(table) { return {

@@ -1,5 +1,4 @@
-import { queueStatusLabel } from "../services/queueStatus";
-import RequestQueuePanel from "../components/RequestQueuePanel";
+import { documentStatusLabel } from "../services/documentStatus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildDashboardModel, buildDashboardStats, loadDashboardData, type DashboardData } from "../services/dashboardService";
 import { Link, useNavigate } from "react-router-dom";
@@ -122,7 +121,6 @@ export default function Dashboard() {
         </div>}
 
         {model && <>
-          <RequestQueuePanel />
           <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
             {[
               [th ? "Video Case ที่ใช้งาน" : "Active video cases", model.caseCount],
@@ -161,7 +159,7 @@ export default function Dashboard() {
                       <td className="px-3 py-3">{row.kind === "aggregate" ? (th ? `ผลรวม ${row.sourceCount} รายการ` : `${row.sourceCount} evaluations combined`) : (th ? "รายบุคคล" : "Individual")}</td>
                       <td className="px-3 py-3">{new Date(row.createdAt).toLocaleString(language === "th" ? "th-TH" : "en-US")}</td>
                       <td className="px-3 py-3 font-semibold">{row.average === null ? "—" : row.average.toFixed(2)}</td>
-                      <td className="px-3 py-3">{row.documentPath ? (th ? "พร้อมเปิด" : "Ready") : queueStatusLabel(row.documentStatus, th)}</td>
+                      <td className="px-3 py-3">{row.documentPath ? (th ? "พร้อมเปิด" : "Ready") : documentStatusLabel(row.documentStatus, th)}</td>
                       <td className="px-3 py-3"><div className="flex flex-wrap gap-2">
                         <Link to={row.resultPath} className="btn-secondary whitespace-nowrap text-xs">{th ? "ดูผล" : "View result"}</Link>
                         {row.documentPath && <Link to={row.documentPath} className="btn-primary whitespace-nowrap text-xs">PDF / DOCX</Link>}

@@ -117,7 +117,7 @@ serve(async (req) => {
           docx_storage_path: docxPath,
         };
 
-    if (!isFailed && !docId && !pdfPath && !docxPath) {
+    if (!isFailed && !pdfPath && !docxPath) {
       return new Response(JSON.stringify({ ok: false, error: "At least one document artifact is required for ready status" }), {
         status: 400,
         headers: {

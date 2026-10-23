@@ -385,7 +385,7 @@ export async function combineVideoCaseAnalyses(params: {
   if (!params.sourceRuns.length) throw new Error("Select at least one evaluation.");
   const stats = combineAggregateStatistics(params.sourceRuns);
   const result = { ...stats, caseId:params.videoCaseId, caseTitle:params.caseTitle, sourceRunCount:params.sourceRuns.length, model:null, analysis:null, rawText:null };
-  // The report submission queues AI; combining scores does not call Gemini twice.
+  // The report submission starts the n8n workflow; combining scores does not call Gemini twice.
   const { data: userData, error: authError } = await supabase.auth.getUser();
   if (authError || !userData.user) {
     throw new Error("Authentication required.");
@@ -456,40 +456,19 @@ export async function sendVideoCaseAggregateToN8nWithPrompt(
     combinePrompt,
   });
 
-  // Set pending before dispatch so an n8n callback cannot be overwritten after it marks ready.
-  const { error: pendingError } = await supabase
-    .from("video_case_aggregates")
-    .update({ document_status: "pending", document_error: null })
-    .eq("id", aggregate.id);
-
-  if (pendingError) {
-    throw new Error(pendingError.message);
-  }
-
-  const { error: documentError } = await supabase.functions.invoke("forward-to-n8n", {
+  // The server atomically owns dispatch/pending state and duplicate prevention.
+  const { data: documentData, error: documentError } = await supabase.functions.invoke("forward-to-n8n", {
     body: summary,
   });
 
-  if (documentError) {
-    const message = documentError.message || "Failed to start aggregate document generation.";
-    const { error } = await supabase
-      .from("video_case_aggregates")
-      .update({ document_status: "failed", document_error: message })
-      .eq("id", aggregate.id)
-      .select("*")
-      .single();
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    throw new Error(message);
-  }
-
+  // A callback can arrive even when the browser loses the delivery response.
   const latestAggregate = await getVideoCaseAggregate(aggregate.id);
+  if (latestAggregate?.document_status === "ready") return latestAggregate;
+  if (documentError || !documentData?.ok) {
+    throw new Error(documentData?.error || documentError?.message || "Failed to start aggregate document generation. Inspect its status before resubmitting.");
+  }
   if (!latestAggregate) {
     throw new Error("Aggregate disappeared after document dispatch.");
   }
-
   return latestAggregate;
 }

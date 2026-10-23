@@ -2,7 +2,7 @@ import { supabase } from "../lib/supabaseClient";
 import type { Section } from "../config/sections";
 
 type Scores = Record<string, Record<string, unknown>>;
-type DocumentRow = { queue_status?: string | null; document_status?: string | null; pdf_storage_path?: string | null; docx_storage_path?: string | null };
+type DocumentRow = { document_status?: string | null; pdf_storage_path?: string | null; docx_storage_path?: string | null };
 export type DashboardEvaluation = DocumentRow & {
   id: number; video_case_id: string | null; analysis_kind?: string | null;
   subject_name?: string | null; order_number?: string | null; rubric: Scores | null; created_at: string;
@@ -37,8 +37,8 @@ async function readAll<T>(table: string, columns: string, signal?: AbortSignal):
 export async function loadDashboardData(signal?: AbortSignal): Promise<DashboardData> {
   const [cases, evaluations, aggregates] = await Promise.all([
     readAll<DashboardCase>("video_cases", "id, case_key, case_title, deleted_at", signal),
-    readAll<DashboardEvaluation>("evaluations", "id, video_case_id, analysis_kind, subject_name, order_number, rubric, created_at, queue_status, document_status, pdf_storage_path, docx_storage_path", signal),
-    readAll<DashboardAggregate>("video_case_aggregates", "id, video_case_id, source_count, status, combined_scores, created_at, queue_status, document_status, pdf_storage_path, docx_storage_path", signal),
+    readAll<DashboardEvaluation>("evaluations", "id, video_case_id, analysis_kind, subject_name, order_number, rubric, created_at, document_status, pdf_storage_path, docx_storage_path", signal),
+    readAll<DashboardAggregate>("video_case_aggregates", "id, video_case_id, source_count, status, combined_scores, created_at, document_status, pdf_storage_path, docx_storage_path", signal),
   ]);
   return { cases, evaluations, aggregates };
 }
@@ -64,14 +64,14 @@ export function buildDashboardModel(data: DashboardData) {
       id: `evaluation-${row.id}`, kind: "evaluation" as const,
       title: cases.get(row.video_case_id || "")?.case_title || row.subject_name || row.order_number || `#${row.id}`,
       videoCaseId: row.video_case_id, createdAt: row.created_at, average: averageScores(row.rubric), sourceCount: 1,
-      documentStatus: documentReady(row) ? "ready" : row.queue_status || row.document_status || "pending", resultPath: `/preview/${row.id}`,
+      documentStatus: documentReady(row) ? "ready" : row.document_status || "pending", resultPath: `/preview/${row.id}`,
       documentPath: documentReady(row) ? `/preview/${row.id}` : null,
     })),
     ...aggregates.map(row => ({
       id: `aggregate-${row.id}`, kind: "aggregate" as const,
       title: cases.get(row.video_case_id)?.case_title || cases.get(row.video_case_id)?.case_key || row.id,
       videoCaseId: row.video_case_id, createdAt: row.created_at, average: averageScores(row.combined_scores), sourceCount: row.source_count,
-      documentStatus: documentReady(row) ? "ready" : row.queue_status || row.document_status || "pending",
+      documentStatus: documentReady(row) ? "ready" : row.document_status || "pending",
       resultPath: `/video-cases/${encodeURIComponent(row.video_case_id)}/summaries/${encodeURIComponent(row.id)}`,
       documentPath: documentReady(row) ? `/video-cases/${encodeURIComponent(row.video_case_id)}/summaries/${encodeURIComponent(row.id)}/preview` : null,
     })),

@@ -4,8 +4,8 @@ import { getGeminiConfig, generateGeminiAnalysis } from '../server/geminiAnalysi
 try {
   const config = getGeminiConfig();
   if (process.argv.includes('--generate')) {
-    const result = await generateGeminiAnalysis({ prompt: 'Synthetic connectivity check. Return JSON only: {"ok":true}.' });
-    const ok = result.parsed.ok === true;
+    const result = await generateGeminiAnalysis({ prompt: 'Synthetic connectivity check. No video or audio is supplied. Return all six evaluation categories with null ratings and explain the missing evidence.' });
+    const ok = Object.values(result.parsed.evaluation).every(item => item.rating === null);
     console.log(JSON.stringify({ ok, model: result.model, cacheHit: result.cache.visionHit,
       note: 'Text check only. A cache hit does not prove fresh provider availability or remaining quota.' }));
     if (!ok) process.exitCode = 1;

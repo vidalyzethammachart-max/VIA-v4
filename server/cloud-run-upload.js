@@ -5,6 +5,7 @@ import fs from "node:fs";
 import { unlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import axios from "axios";
 import FormData from "form-data";
 import multer from "multer";
@@ -279,7 +280,12 @@ app.post("/api/upload-video", upload.single("video"), async (req, res) => {
   }
 });
 
-const port = Number(process.env.PORT || 8080);
-app.listen(port, () => {
-  console.log(`[cloud-run-upload] listening on ${port}`);
-});
+export { app };
+
+// Importing the app does not start a listener; the production entrypoint still does.
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  const port = Number(process.env.PORT || 8080);
+  app.listen(port, () => {
+    console.log(`[cloud-run-upload] listening on ${port}`);
+  });
+}

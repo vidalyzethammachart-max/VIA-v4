@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { unavailableEvaluation } from './helpers/videoEvaluationFixture.js';
 import { generateVideoAnalysis } from '../server/videoAnalysisProvider.js';
 import { analyzeVideoFromUrl, analyzeVideoCaseAggregate } from '../server/videoAnalysisCore.js';
 
@@ -31,18 +32,18 @@ test('Gemini video provider consumes supplied JPEG and MP3 together and caches o
       { inlineData: { mimeType: 'audio/mpeg', data: 'YXVkaW8=' } },
     ]);
     calls++;
-    return Response.json(completed('{"summary":"Visual and acoustic evidence"}'));
+    return Response.json(completed(JSON.stringify(unavailableEvaluation())));
   });
   const input = { prompt: 'Return JSON.', frames: [{ base64: 'aW1hZ2U=' }], audio: { base64: 'YXVkaW8=' } };
   const result = await generateVideoAnalysis(input);
   assert.equal(result.provider, 'gemini');
   assert.equal(result.audioModel, 'gemini-3.8-flash');
-  assert.deepEqual(result.parsed, { summary: 'Visual and acoustic evidence' });
+  assert.deepEqual(result.parsed, unavailableEvaluation());
   assert.equal(result.usage.vision.totalTokenCount, 30);
   assert.equal((await generateVideoAnalysis(input)).cache.visionHit, true);
   assert.equal(calls, 1);
   process.env.GEMINI_API_KEY = 'another-account-key';
-  t.mock.method(globalThis, 'fetch', async () => { calls++; return Response.json(completed('{"summary":"New account"}')); });
+  t.mock.method(globalThis, 'fetch', async () => { calls++; return Response.json(completed(JSON.stringify(unavailableEvaluation()))); });
   assert.equal((await generateVideoAnalysis(input)).cache.visionHit, false);
   assert.equal(calls, 2);
 });
@@ -68,7 +69,7 @@ test('blocked, truncated, thought-only and malformed Gemini results never become
   for (let i = 0; i < fixtures.length; i++) {
     t.mock.method(globalThis, 'fetch', async () => Response.json(fixtures[i]));
     await assert.rejects(generateVideoAnalysis({ prompt: `JSON ${i}` }), /Gemini analysis/);
-    t.mock.method(globalThis, 'fetch', async () => Response.json(completed('{"ok":true}')));
+    t.mock.method(globalThis, 'fetch', async () => Response.json(completed(JSON.stringify(unavailableEvaluation()))));
     assert.equal((await generateVideoAnalysis({ prompt: `JSON ${i}` })).cache.visionHit, false);
   }
 });
@@ -106,7 +107,7 @@ test('Gemini missing audio is explicit and the aggregate step still uses its exi
   t.mock.method(globalThis, 'fetch', async (_url, options) => {
     const body = JSON.parse(options.body);
     assert.match(body.contents[0].parts[0].text, /No audio.*Do not infer/s);
-    return Response.json(completed('{"summary":"Images only"}'));
+    return Response.json(completed(JSON.stringify(unavailableEvaluation())));
   });
   assert.equal((await generateVideoAnalysis({ prompt: 'JSON' })).audioModel, null);
   process.env.OPENAI_API_KEY = 'existing-provider-key';
@@ -115,4 +116,77 @@ test('Gemini missing audio is explicit and the aggregate step still uses its exi
     return Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: '{}' }] }] });
   });
   assert.equal((await analyzeVideoCaseAggregate({ caseKey: 'case', analyses: [{ rubric: {} }] })).provider, 'openai');
+});
+
+
+test('Gemini rejects invalid evaluation categories, rating ranges/types and explanations before caching', async t => {
+  await setup(t);
+  const cases = [
+    value => { delete value.evaluation.audio; },
+    value => { value.evaluation.audio.rating = 0; },
+    value => { value.evaluation.audio.rating = 6; },
+    value => { value.evaluation.audio.rating = '3'; },
+    value => { value.evaluation.audio.rating = 2.5; },
+    value => { value.evaluation.audio.comment = ' '; },
+    value => { value.evaluation.overall_impression.summary = null; },
+    value => { value.evaluation.camera_angles = []; },
+    value => { value.evaluation.unexpected = { rating: 3, comment: 'extra' }; },
+    value => { value.summary = 'legacy extra shape'; },
+  ];
+  for (let i = 0; i < cases.length; i++) {
+    const value = unavailableEvaluation();
+    cases[i](value);
+    t.mock.method(globalThis, 'fetch', async () => Response.json(completed(JSON.stringify(value))));
+    await assert.rejects(generateVideoAnalysis({ prompt: `schema ${i}`, frames: [{base64:'YQ=='}], audio:{base64:'YQ=='} }), error => error.code === 'invalid_ai_response');
+  }
+});
+
+test('Gemini cannot return audio scores when audio extraction is unavailable', async t => {
+  await setup(t);
+  for (const category of ['audio', 'script_narration']) {
+    const value = unavailableEvaluation();
+    value.evaluation[category].rating = 4;
+    t.mock.method(globalThis, 'fetch', async () => Response.json(completed(JSON.stringify(value))));
+    await assert.rejects(generateVideoAnalysis({ prompt: category, frames: [{base64:'YQ=='}] }), /unavailable audio/i);
+  }
+});
+
+test('Gemini cannot invent visual scores without frames', async t => {
+  await setup(t);
+  const value = unavailableEvaluation();
+  value.evaluation.camera_angles.rating = 4;
+  t.mock.method(globalThis, 'fetch', async () => Response.json(completed(JSON.stringify(value))));
+  await assert.rejects(generateVideoAnalysis({prompt:'No image',audio:{base64:'YQ=='}}), /unavailable visual/i);
+});
+
+test('Gemini sends an authoritative evaluation schema even for a custom legacy prompt', async t => {
+  await setup(t);
+  const value = unavailableEvaluation();
+  value.evaluation.audio = { rating: 1, comment: 'Clipped and noisy.' };
+  value.evaluation.graphics = { rating: 5, comment: 'Readable text.' };
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    const body = JSON.parse(options.body);
+    const schema = body.generationConfig.responseJsonSchema;
+    assert.deepEqual(schema.required, ['evaluation']);
+    assert.equal(schema.properties.evaluation.properties.audio.properties.rating.minimum, 1);
+    assert.equal(schema.properties.evaluation.properties.audio.properties.rating.maximum, 5);
+    assert.match(body.systemInstruction.parts[0].text, /1.*5/);
+    return Response.json(completed(JSON.stringify(value)));
+  });
+  const result = await generateVideoAnalysis({prompt:'Return legacy summary only',frames:[{base64:'YQ=='}],audio:{base64:'YQ=='}});
+  assert.equal(result.parsed.evaluation.audio.rating, 1);
+  assert.equal(result.parsed.evaluation.graphics.rating, 5);
+});
+
+test('Gemini classifies billing, authentication and quota errors without exposing provider text', async t => {
+  await setup(t);
+  for (const [status, code, expected] of [[401,'ai_auth_failed',502],[403,'ai_auth_failed',502],[402,'ai_billing_required',503],[429,'ai_quota_exceeded',503]]) {
+    t.mock.method(globalThis, 'fetch', async () => new Response('private-test-key', {status}));
+    await assert.rejects(generateVideoAnalysis({prompt:`status ${status}`}), error => {
+      assert.equal(error.code, code);
+      assert.equal(error.status, expected);
+      assert.doesNotMatch(error.message, /private-test-key/);
+      return true;
+    });
+  }
 });

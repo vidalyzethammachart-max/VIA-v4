@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
+import { unavailableEvaluation } from './helpers/videoEvaluationFixture.js';
 
 const nodeNames = {
   "transform-via-payload": "Transform VIA Payload",
@@ -111,6 +112,23 @@ test('data-only submission does not invent video analysis', () => {
   const transformed=runNode('transform-via-payload',{evaluation_id:1001,hasVideo:false,rubric:[{scores:[1,2,3,4,5]}]});
   const context=runNode('assemble-final-evaluation-context',transformed);
   assert.deepEqual(context.videoEvaluation,{});
+});
+
+test('Gemini evaluation structure and null evidence survive downstream code without changing human ratings', () => {
+  const analysis = unavailableEvaluation();
+  analysis.evaluation.graphics = { rating: 5, comment: 'Readable graphics in sampled frames.' };
+  const transformed = runNode('transform-via-payload', {
+    evaluation_id: 1001, hasVideo: true, status: 'analyzed', provider: 'gemini',
+    model: 'gemini-3.8-flash', analysis, rubric: [{ scores: [1, 2, 3, 4, 5] }],
+  });
+  const context = runNode('assemble-final-evaluation-context', transformed);
+  assert.deepEqual(context.videoEvaluation, analysis);
+  assert.equal(context.videoEvaluation.evaluation.audio.rating, null);
+  assert.equal(context.videoEvaluation.evaluation.graphics.rating, 5);
+  assert.deepEqual(context.rubric[0].scores, [1, 2, 3, 4, 5]);
+  assert.equal(context.ai_video_metadata.provider, 'gemini');
+  const document = buildDocument({document_type:'evaluation',evaluation_id:1001}, transformed);
+  assert.equal(document.evaluation_id, 1001);
 });
 
 function buildDocument(normalized, transformed) {

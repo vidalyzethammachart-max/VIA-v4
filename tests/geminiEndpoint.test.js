@@ -12,7 +12,7 @@ import { unavailableEvaluation } from './helpers/videoEvaluationFixture.js';
 test('Cloud Run endpoint keeps its envelope with real generated media and safe Gemini failures', async t => {
   const saved = {...process.env};
   const directory = await mkdtemp(join(tmpdir(), 'via-endpoint-gemini-'));
-  Object.assign(process.env, { VIDEO_ANALYSIS_PROVIDER:'gemini', GEMINI_API_KEY:'test-not-real', GEMINI_MODEL:'gemini-3.8-flash',
+  Object.assign(process.env, { VIDEO_ANALYSIS_PROVIDER:'gemini', GEMINI_API_KEY:'test-not-real', GEMINI_MODEL:'gemini-2.5-flash',
     VIDEO_ALLOW_LOCAL_TEST_URLS:'true', ANALYSIS_API_TOKEN:'test-service-token', AI_ANALYSIS_CACHE_DIR:directory });
   t.after(async () => { process.env=saved; await rm(directory,{recursive:true,force:true}); });
   const run = promisify(execFile);
@@ -59,7 +59,7 @@ test('Cloud Run endpoint keeps its envelope with real generated media and safe G
     assert.equal(payload.fileName,file);
     assert.equal(payload.frameCount,6);
     assert.equal(payload.provider,'gemini');
-    assert.equal(payload.model,'gemini-3.8-flash');
+    assert.equal(payload.model,'gemini-2.5-flash');
     assert.equal(payload.analysis.evaluation.graphics.rating,5);
     assert.equal(payload.analysis.evaluation.audio.rating,file==='sound.mp4'?3:null);
     assert.equal(payload.analysis.evaluation.script_narration.rating,null);
@@ -68,12 +68,19 @@ test('Cloud Run endpoint keeps its envelope with real generated media and safe G
     assert.ok(payload.downloadedBytes>0);
     assert.equal(payload.usage.vision.totalTokenCount,10);
   }
-  upstreamStatus=402;
-  const failure=await send('sound.mp4',true,'Different request; billing test');
-  assert.equal(failure.status,503);
-  const error=await failure.json();
-  assert.equal(error.code,'ai_billing_required');
-  assert.match(error.error,/402/);
-  assert.doesNotMatch(JSON.stringify(error),/private provider content|test-not-real/);
-  assert.equal(calls,3);
+  for (const [status, code, backendStatus] of [
+    [402, 'ai_billing_required', 503], [429, 'ai_quota_exceeded', 503],
+    [401, 'ai_auth_failed', 502], [403, 'ai_auth_failed', 502],
+  ]) {
+    upstreamStatus=status;
+    const before=calls;
+    const failure=await send('sound.mp4',true,`Different request; rejection ${status}`);
+    assert.equal(failure.status,backendStatus);
+    const error=await failure.json();
+    assert.equal(error.code,code);
+    assert.match(error.error,new RegExp(String(status)));
+    assert.equal(error.analysis,undefined);
+    assert.doesNotMatch(JSON.stringify(error),/private provider content|test-not-real/);
+    assert.equal(calls,before+1,'A rejection must stop after one Gemini call');
+  }
 });

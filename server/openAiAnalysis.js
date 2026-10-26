@@ -31,12 +31,21 @@ async function request(path, body, config) {
   if (!response.ok) {
     let code;
     try { code = (await response.json()).error?.code; } catch { /* Keep provider body private. */ }
+    let error;
     if (code === 'credit_balance_exhausted') {
-      throw new Error(`OpenAI request failed (HTTP ${response.status}). credit_balance_exhausted: API credit balance is exhausted. The API account owner must restore credit in OpenAI Platform Billing before retrying.`);
+      error = new Error(`OpenAI request failed (HTTP ${response.status}). credit_balance_exhausted: API credit balance is exhausted. The API account owner must restore credit in OpenAI Platform Billing before retrying.`);
+      error.code = 'ai_billing_required';
+    } else {
+      const known = ['insufficient_quota', 'rate_limit_exceeded', 'invalid_api_key', 'model_not_found'];
+      const reason = known.includes(code) ? ` ${code}.` : '';
+      error = new Error(`OpenAI request failed (HTTP ${response.status}).${reason} Check API billing, model access, and quota.`);
+      error.code = code === 'insufficient_quota' ? 'ai_quota_exceeded'
+        : code === 'rate_limit_exceeded' ? 'ai_rate_limited'
+        : code === 'invalid_api_key' || [401, 403].includes(response.status) ? 'ai_auth_failed'
+        : code === 'model_not_found' ? 'ai_model_unavailable' : 'ai_request_rejected';
     }
-    const known = ['insufficient_quota', 'rate_limit_exceeded', 'invalid_api_key', 'model_not_found'];
-    const reason = known.includes(code) ? ` ${code}.` : '';
-    throw new Error(`OpenAI request failed (HTTP ${response.status}).${reason} Check API billing, model access, and quota.`);
+    error.status = ['ai_billing_required', 'ai_quota_exceeded', 'ai_rate_limited'].includes(error.code) ? 503 : 502;
+    throw error;
   }
   return response.json();
 }

@@ -1,0 +1,8 @@
+{
+  "on_http_request": [
+    {
+      "expressions": ["req.url.path != '/api/analyze-video' || req.method != 'POST'"],
+      "actions": [{ "type": "deny" }]
+    }
+  ]
+}

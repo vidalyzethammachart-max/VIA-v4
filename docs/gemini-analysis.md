@@ -11,7 +11,7 @@ Set only server-side values:
 ```dotenv
 VIDEO_ANALYSIS_PROVIDER=gemini
 GEMINI_API_KEY=<key from the intended account/project>
-GEMINI_MODEL=gemini-3.8-flash
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
 No VITE-prefixed key. Keep it in ignored `.env` locally and secrets/environment on the deployed analysis backend. Existing n8n credentials are neither copied nor changed. Choose another compatible model explicitly through GEMINI_MODEL if this one is unavailable; do not cycle providers/models automatically after errors.
@@ -28,7 +28,7 @@ Errors keep the existing `{code,error}` response shape: `ai_auth_failed` maps pr
 
 The latest screenshot identifies VIA-v4 (`via-v4-512506`), showing Tier 1 / Prepay. It does not establish that the local key belongs to the separate VIDA project mentioned in the task, nor prove a usable prepaid balance or free quota. A single deliberate synthetic recheck after that screenshot again returned HTTP 402; no media was sent and billing was not changed. Do not keep retrying inference until the owner verifies the intended project's billing and quota.
 
-Current model: gemini-3.8-flash, supporting image/video/audio input and structured output. Standard pricing checked 2026-10-23: $0.75 per million input tokens and $3.75 per million output tokens including thinking, through 2026-12-31. Free Tier is listed for the model, subject to actual project eligibility and active limits. Costs may include Cloud Run CPU/RAM and network, build/image storage and secret access in addition to Gemini. No assumption of a free deployment is made.
+Historical model checked on 2026-10-23: gemini-3.8-flash. That earlier project's HTTP 402 result does not describe the separate Free Tier project verified below. Costs may include Cloud Run CPU/RAM and network, build/image storage and secret access in addition to Gemini. No assumption of a free deployment is made.
 
 Run `node --test tests/geminiAnalysis.test.js tests/geminiEndpoint.test.js tests/n8nVideoCaseContract.test.js` and then `npm test`, `npm run lint`, `npm run build`. The endpoint test uses actual generated MP4/JPEG/MP3 with external inference mocked. It checks both audio and silent clips, service authentication and billing errors. The n8n contract test executes repository Code node scripts; it does not establish that a live published workflow has identical code or that its report-generation model produces the intended report. A fresh read-only workflow export is still needed for live parity.
 
@@ -36,8 +36,64 @@ The server app is importable for local endpoint verification; direct execution t
 
 ## Deployment state
 
+**Update 2026-10-25:** The user selected a zero-additional-hosting-cost local
+backend through ngrok Free. The parent workflow now uses a directly connected
+HTTP Analyze Video node. Its request mapping was corrected to read
+`video.downloadUrl` and `video.fileName` from the normalized parent payload,
+then saved and exported for verification.
+See [local runtime and acceptance](local-gemini-analysis.md).
+The Cloud Run revision described below was not migrated or rebuilt.
+
 The frontend currently uses a remote backend. Local `.env` changes do not switch that remote backend. Deploy server files and configure the selected provider/key on the revision used by n8n Analyze Video before retrying a real evaluation. Preserve existing R2 and analysis-token settings. No production traffic switch, payment activation or retry of evaluation #261 is performed by this code change. Existing case aggregation still uses OpenAI, per the user's limited scope.
 
 Transport errors, broken HTTP success bodies and upstream 5xx outcomes retain duplicate guards for inspection. Explicit quota/auth failures are sanitized. There are no automatic retries or provider fallbacks.
+
+## Free Tier migration — 2026-10-24
+
+The user approved the video-only Free Tier design. The adapter now defaults to
+`gemini-2.5-flash`; an explicit `GEMINI_MODEL` still overrides it. Configure both
+`VIDEO_ANALYSIS_PROVIDER=gemini` and `GEMINI_MODEL=gemini-2.5-flash` explicitly on
+the deployment. A model ID alone cannot enforce a free billing tier.
+
+Read-only API Keys lookup linked the existing local Gemini key to project
+`gen-lang-client-0749209595`. Cloud Billing returned `billingEnabled=false`.
+Service Usage reported these free-tier effective limits for the selected model:
+5 requests/minute, 20 requests/day and 250000 input tokens/minute. Model metadata
+read returned HTTP 200. These are configuration limits, not remaining quota.
+No project, key, billing account, permission or quota was created or changed.
+
+One fresh local multimodal check then succeeded using only generated blue frames
+and a synthetic tone: provider/model Gemini / gemini-2.5-flash, 6 frames,
+72940 MP3 bytes, valid `analysis.evaluation`, and both cache-hit flags false.
+Usage included TEXT, IMAGE and AUDIO input. This establishes actual provider
+access with synthetic media; it does not establish real evaluation/report quality
+or Cloud Run deployment acceptance. The input contained no evaluation or user media.
+
+Local checks: 162/162 tests; 26/26 targeted Gemini/media/n8n tests; 12/12 contract
+tests against the workflow export read back after the Webhook fix. Endpoint tests
+cover 402/429/401/403 with one rejected provider call and no success analysis.
+
+Hosting review found an already-built image of current HEAD
+`d5dcca142ce97b825aaa1b2da1c2b957fd80e59b`, digest
+`sha256:4d3adc647df6b7ec091a2bd61507cece22e11388881af976ab3f0a536333f79f`.
+It includes the Gemini adapter; explicit model configuration makes rebuilding
+just to change the default unnecessary. Revision 00027 is retired, not currently
+serving the n8n tag, and has no Gemini key/provider configured. The n8n
+`openai-check` tag still targets revision 00024.
+
+Artifact Registry currently stores about 1995MB. Adding images is not established
+to be free. Project Cloud Run monitoring for October 1–24 showed approximately
+800 vCPU-seconds, 1165 GiB-seconds and 87 requests, but this does not establish the
+remaining free allowance shared across its billing account, or free internet
+egress in Singapore. No build, new cloud revision, tag/traffic change or real
+submission was made by this migration session. The next production action remains
+gated by the user's no-additional-spend constraint.
+
+An alternative minimal source context is prepared under ignored
+`logs/gemini-free-deploy-20261024/` from the deployed revision 00024 source. It
+changes only the video-provider core and adds its required provider modules;
+upload/callback/aggregate handlers and OpenAI implementation stay byte-identical
+to that baseline. It contains no environment files, credentials, logs or media.
+Do not run a new build just because the context exists.
 
 References: [generateContent API](https://ai.google.dev/api/generate-content), [audio](https://ai.google.dev/gemini-api/docs/audio), [pricing](https://ai.google.dev/gemini-api/docs/pricing).

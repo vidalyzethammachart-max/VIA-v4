@@ -163,10 +163,37 @@ test('exhausted API credit is reported distinctly without exposing provider deta
   await assert.rejects(generateOpenAiAnalysis({prompt:'JSON'}), error => {
     assert.match(error.message, /credit_balance_exhausted/);
     assert.match(error.message, /API credit balance is exhausted/);
+    assert.equal(error.code, 'ai_billing_required');
+    assert.equal(error.status, 503);
     assert.doesNotMatch(error.message, /private billing/);
     return true;
   });
 });
+
+for (const [upstreamStatus, providerCode, expectedCode, expectedStatus] of [
+  [429, 'insufficient_quota', 'ai_quota_exceeded', 503],
+  [429, 'rate_limit_exceeded', 'ai_rate_limited', 503],
+  [401, 'invalid_api_key', 'ai_auth_failed', 502],
+  [403, null, 'ai_auth_failed', 502],
+  [404, 'model_not_found', 'ai_model_unavailable', 502],
+  [400, 'private-unknown-code', 'ai_request_rejected', 502],
+]) {
+  test(`OpenAI ${upstreamStatus}/${providerCode} has a safe distinct backend error`, async t => {
+    configure(t);
+    let calls = 0;
+    t.mock.method(globalThis, 'fetch', async () => {
+      calls++;
+      return Response.json({ error: { code: providerCode, message: 'private signed URL and credentials' } }, { status: upstreamStatus });
+    });
+    await assert.rejects(generateOpenAiAnalysis({ prompt: 'JSON', audio: { base64: 'YQ==' } }), error => {
+      assert.equal(error.code, expectedCode);
+      assert.equal(error.status, expectedStatus);
+      assert.doesNotMatch(error.message, /private|credentials/);
+      return true;
+    });
+    assert.equal(calls, 1, 'A rejected audio request must not retry or proceed to vision');
+  });
+}
 
 test('real ffmpeg extraction feeds OpenAI and retains the video endpoint contract', async t => {
   configure(t);

@@ -8,7 +8,7 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/';
 export function getGeminiConfig() {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error('Missing required environment variable: GEMINI_API_KEY');
-  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.8-flash';
+  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
   if (!/^gemini-[a-z0-9.-]+$/.test(model)) throw new Error('Invalid GEMINI_MODEL configuration. Use a Gemini model ID.');
   return { apiKey, model };
 }

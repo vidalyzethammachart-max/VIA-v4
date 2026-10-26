@@ -19,6 +19,28 @@ async function setup(t) {
 const completed = text => ({ candidates: [{ content: { role: 'model', parts: [{ text }] }, finishReason: 'STOP' }],
   usageMetadata: { promptTokenCount: 20, candidatesTokenCount: 10, totalTokenCount: 30 } });
 
+for (const setting of [undefined, '   ']) {
+  test(`Gemini default model handles ${setting === undefined ? 'missing' : 'blank'} configuration consistently for media and metadata`, async t => {
+    await setup(t);
+    if (setting === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = setting;
+    let calls = 0;
+    let requestedUrl, sentParts;
+    t.mock.method(globalThis, 'fetch', async (url, options) => {
+      calls++;
+      requestedUrl = url;
+      sentParts = JSON.parse(options.body).contents[0].parts;
+      return Response.json(completed(JSON.stringify(unavailableEvaluation())));
+    });
+    const result = await generateVideoAnalysis({ prompt: 'Synthetic JSON', frames: [{ base64: 'YQ==' }], audio: { base64: 'YQ==' } });
+    assert.equal(requestedUrl, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
+    assert.equal(sentParts.length, 3);
+    assert.equal(result.model, 'gemini-2.5-flash');
+    assert.equal(result.audioModel, 'gemini-2.5-flash');
+    assert.equal(calls, 1);
+  });
+}
+
 test('Gemini video provider consumes supplied JPEG and MP3 together and caches only validated JSON', async t => {
   await setup(t);
   let calls = 0;

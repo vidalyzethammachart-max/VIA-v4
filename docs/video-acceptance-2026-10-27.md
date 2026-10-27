@@ -96,9 +96,10 @@ limitations, and its parse step was exercised. The initial PDF/DOCX downloads
 were archived; those initial artifacts predate this context correction.
 
 On October 28 the user authorized pushing, merging into main and testing on
-the production site. That production acceptance result must be recorded
-separately; the initial 3078 success alone does not validate the corrected
-report all the way through a fresh document generation.
+the production site. The corrected pipeline subsequently completed evaluation
+292 in execution 3081 with both artifact formats. See the separate
+[production acceptance](production-gemini-acceptance-2026-10-28.md) for the
+fresh result; the initial 3078 success alone did not validate this correction.
 
 ## Verification
 

@@ -17,7 +17,9 @@ objects and prefers canonical evidence. Saved version is
 
 The earlier current-state and verification entries below describe the October
 25 setup checkpoint. They are retained as history, not the latest acceptance
-result. A production acceptance test after main integration is still pending.
+result. After main integration, production evaluation 292 and execution 3081
+completed with real PDF/DOCX artifacts. See the
+[production acceptance result](production-gemini-acceptance-2026-10-28.md).
 
 ## Current state — 2026-10-25
 

@@ -97,3 +97,18 @@ to that baseline. It contains no environment files, credentials, logs or media.
 Do not run a new build just because the context exists.
 
 References: [generateContent API](https://ai.google.dev/api/generate-content), [audio](https://ai.google.dev/gemini-api/docs/audio), [pricing](https://ai.google.dev/gemini-api/docs/pricing).
+
+## Production acceptance - 2026-10-28
+
+The local Gemini changes and the empty-video-alias fix were pushed and
+fast-forward merged into main at source commit `8cee64b`. Vercel deployment
+succeeded. One explicitly authorized video submission from the production
+site created evaluation 292 and execution 3081; it succeeded in 1m 3.294s and
+stored both PDF and DOCX. The real report context contained all six video
+evidence categories, while all 45 human scores stayed at 3 (average 3.00).
+Validated cached video evidence was reused; no extra video inference is claimed.
+
+All 166 tests, lint and build passed. The production PDF opened and rendered
+on all six pages; the DOCX structure and score cells were verified. See
+[the complete production result and cost boundary](production-gemini-acceptance-2026-10-28.md).
+This synthetic test verifies the pipeline, not real teaching-video quality.

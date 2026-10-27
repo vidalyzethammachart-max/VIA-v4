@@ -25,12 +25,15 @@ try {
 // ===============================
 // Video Evaluation
 // ===============================
-const videoEvaluation =
-  input.videoanalysis ||
-  input.videoAnalysis ||
-  input.ai_video_analysis ||
-  input.videoEvaluation ||
-  {};
+// Empty legacy aliases may be added by Calculate Evaluation Stats. They must
+// not mask the canonical provider result passed to the final report prompt.
+const videoEvaluation = [
+  input.videoEvaluation,
+  input.videoanalysis,
+  input.videoAnalysis,
+  input.ai_video_analysis,
+].find((candidate) => candidate &&
+  (typeof candidate !== 'object' || Object.keys(candidate).length > 0)) || {};
 
 // ===============================
 // Clean duplicate rubric

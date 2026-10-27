@@ -1,5 +1,24 @@
 # Local Gemini analysis through ngrok Free
 
+## Follow-up - 2026-10-28
+
+Evaluation 291 reached Gemini and real PDF/DOCX callback completion in execution
+3078 on October 27. A first attempt, 3077, failed with local-process `EACCES`;
+the analysis listener must have outbound access to R2 and Gemini as well as
+inbound loopback access. When starting it from an agent sandbox, use the approved
+network-enabled process context. An ordinary user terminal can run the documented
+start command directly.
+
+Report review found that an empty legacy `videoAnalysis` alias masked canonical
+`videoEvaluation`. The live Assemble Final Evaluation Context now skips empty
+objects and prefers canonical evidence. Saved version is
+`574cc7af-99d4-49ba-972f-546d30c059ef`; human scores are unchanged. See
+[acceptance evidence and limits](video-acceptance-2026-10-27.md).
+
+The earlier current-state and verification entries below describe the October
+25 setup checkpoint. They are retained as history, not the latest acceptance
+result. A production acceptance test after main integration is still pending.
+
 ## Current state — 2026-10-25
 
 The user confirmed that no additional hosting spend is allowed, then explicitly

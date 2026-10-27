@@ -114,6 +114,31 @@ test('data-only submission does not invent video analysis', () => {
   assert.deepEqual(context.videoEvaluation,{});
 });
 
+test('empty legacy video aliases do not hide Gemini evidence before final report generation', () => {
+  const analysis = unavailableEvaluation();
+  analysis.evaluation.graphics = { rating: 1, comment: 'Synthetic moving test pattern.' };
+  const transformed = runNode('transform-via-payload', {
+    evaluation_id: 291, hasVideo: true, status: 'analyzed', provider: 'gemini',
+    model: 'gemini-2.5-flash', analysis, rubric: [{ scores: [3, 3, 3, 3, 3] }],
+  });
+  // Calculate Evaluation Stats adds this empty legacy alias to the canonical result.
+  const context = runNode('assemble-final-evaluation-context', {
+    ...transformed, videoAnalysis: {}, videoanalysis: {}, ai_video_analysis: {},
+  });
+  assert.deepEqual(context.videoEvaluation, analysis);
+  assert.deepEqual(context.rubric[0].scores, [3, 3, 3, 3, 3]);
+  assert.equal(context.evaluation_id, 291);
+  assert.equal(context.ai_video_metadata.model, 'gemini-2.5-flash');
+});
+
+test('empty canonical video evidence still permits a populated legacy alias', () => {
+  const analysis = { summary: 'Legacy video evidence' };
+  const context = runNode('assemble-final-evaluation-context', {
+    evaluation_id: 1001, videoEvaluation: {}, videoanalysis: {}, videoAnalysis: analysis,
+  });
+  assert.deepEqual(context.videoEvaluation, analysis);
+});
+
 test('Gemini evaluation structure and null evidence survive downstream code without changing human ratings', () => {
   const analysis = unavailableEvaluation();
   analysis.evaluation.graphics = { rating: 5, comment: 'Readable graphics in sampled frames.' };

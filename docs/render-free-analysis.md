@@ -2,8 +2,39 @@
 
 วันที่ตรวจข้อมูล: 28 ตุลาคม 2026 (Asia/Bangkok)
 
-สถานะ: ผู้ใช้เลือก Render Free แล้ว เอกสารนี้อธิบายการย้ายและเกณฑ์ทดสอบ
-ยังไม่ได้สร้าง service, deploy หรือเปลี่ยน URL ใน n8n
+สถานะล่าสุด 29 ตุลาคม 2026: สร้างและ deploy Render Free แล้ว ผ่านการวิเคราะห์
+วิดีโอสังเคราะห์และไฟล์ M4V จริงแบบเรียก endpoint โดยตรง ยังรอตรวจรับการสลับ n8n
+และแบบประเมินครบเส้นทาง รายละเอียดด้านล่างเป็นแผนและข้อจำกัดที่ใช้ตรวจรับ
+
+## ผลทดสอบบน Render วันที่ 29 ตุลาคม 2026
+
+- Service: `via-v4-analysis`, ID `srv-dbh8ejm1egvs73eqjueg`, region Singapore
+- Endpoint: `https://via-v4-analysis.onrender.com/api/analyze-video`
+- Health: `GET https://via-v4-analysis.onrender.com/healthz`
+- Free service บน Hobby workspace; ตอนตรวจไม่มี card on file และยอดเดือนนี้ $0
+- Build จาก branch `feat/render-free-analysis`, commit `29160da5be0b51b15516e80a72e2c909d4e9701d`
+  Dockerfile `Dockerfile.analysis`, auto-deploy Off
+- Build แรกเริ่มจาก main เพราะช่องค้น branch ไม่ได้เลือก branch จริง จึงยกเลิกหลัง 9.9 วินาที
+  จากนั้นเลือก branch ผ่าน Settings และ deploy commit ข้างต้นสำเร็จ ไม่ได้สลับ n8n ระหว่าง build
+- Probe ไม่เรียก AI: health 200, ไม่มี token 401, แหล่งวิดีโอไม่อนุญาต 422,
+  API upload และ aggregate 404
+- วิดีโอสังเคราะห์ 12 วินาที: HTTP 200 ใน 12.866 วินาที, 6 ภาพ, เสียง MP3 72,939 ไบต์,
+  Gemini 2.5 Flash, ผลครบ 6 หมวด, cache ทั้งสองเป็น false
+- ไฟล์จริง `035_001_Teaser Academic Resources Guide for Your Enhanced Learning.m4v`:
+  ใช้ object จากรอบทดสอบ 294 ที่เก็บใน R2 อยู่แล้ว ไม่อัปโหลดซ้ำสำหรับ direct probe
+  HTTP 200 ใน 135.868 วินาที, ดาวน์โหลดครบ 76,812,480 ไบต์, ความยาว 65 วินาที,
+  ภาพ 6 เฟรม, เสียง MP3 391,679 ไบต์, Gemini 2.5 Flash, ผลครบ 6 หมวด และไม่ใช้ cache
+- ระหว่าง direct request ไฟล์จริงยังไม่จบ health ตอบ 200 ใน 141 ms
+- หน้า CPU/Memory metrics ต้องอัปเกรดแผน จึงไม่ได้อ่าน peak RAM/CPU และไม่ได้อัปเกรด
+  ผลข้างต้นยืนยันว่าไฟล์นี้ทำงานได้ ไม่ใช่หลักประกันสำหรับทุกไฟล์ที่เว็บรับได้
+- ชุดทดสอบในเครื่องหลังเพิ่ม coverage: 172 ผ่าน; lint/build ผ่านก่อนหน้า โดย build
+  มีคำเตือน bundle ใหญ่กว่า 500 kB เดิม; review ไม่พบ blocking issue
+- สำรอง workflow จาก server ก่อนสลับไว้ใน ignored `logs/n8n-before-render-20261029.local.json`
+  Candidate เพิ่ม readiness GET และปรับ expression ให้อ่านวิดีโอจาก `Has Video?1`
+  โดยรักษา POST retries เป็น Off; contract tests กับ candidate ผ่าน 14/14
+
+ยังไม่ถือว่าผ่าน full acceptance จนกว่าจะอ่าน workflow ที่บันทึกกลับมาได้ตรงกับ candidate,
+ยืนยันไม่มี execution ค้าง และส่งแบบประเมินทดสอบจน callback/PDF/DOCX สำเร็จ
 
 ## เส้นทางที่จะใช้
 

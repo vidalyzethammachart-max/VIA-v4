@@ -36,3 +36,8 @@ Unauthenticated calls must not reserve a slot. Client disconnect must not permit
 - Branch: `feat/render-free-analysis`; work in the supplied checkout without creating another worktree.
 - Docker CLI exists; daemon was not running at initial check.
 - Render Dashboard initially required login; user has now confirmed login.
+- Task 1 complete: dedicated app, Docker config, Free manifest, six targeted HTTP tests; full suite 172 passed, lint/build passed. Fresh review found no blocker; low coverage gaps were filled.
+- Render deployed from commit 29160da, service srv-dbh8ejm1egvs73eqjueg, plan Free. Workspace Hobby, no card, initial unbilled total $0.
+- Hosted route probes passed. Synthetic inference passed fresh in 12.866s; real authorized M4V (76,812,480 bytes, 65s) passed fresh in 135.868s, six frames and 391,679 audio bytes. Health remained available while the real request was running. Paid metrics were not accessed.
+- Ruling: no speculative ffmpeg changes were needed because the actual Free-hosted media request completed successfully; exact peak memory remains unmeasured because Render gates metrics on paid compute.
+- Candidate n8n mapping validated against readiness-only input and existing Code contracts 14/14. File upload to n8n was denied by the browser permission gate; no workaround attempted. User chose to import manually. First fresh server readback still showed the old URL, so full acceptance submission remains pending.

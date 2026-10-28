@@ -18,9 +18,9 @@ async function serve(t, app) {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
-  return (path, { authorized = true, method = 'POST', body = {} } = {}) => fetch(base + path, {
+  return (path, { authorized = true, method = 'POST', body = {}, rawBody } = {}) => fetch(base + path, {
     method, headers: { 'Content-Type': 'application/json', ...(authorized ? { Authorization: 'Bearer synthetic-token' } : {}) },
-    ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
+    ...(method === 'POST' ? { body: rawBody ?? JSON.stringify(body) } : {}),
   });
 }
 
@@ -55,12 +55,13 @@ test('only one media operation runs while health and auth remain available, and 
   const send = await serve(t, createHostedAnalysisApp({ analyze }));
   const first = send('/api/analyze-video', { body: { fileName: 'first.m4v' } });
   await started;
-  assert.equal((await send('/healthz', { method: 'GET' })).status, 200);
-  assert.equal((await send('/api/analyze-video', { authorized: false })).status, 401);
-  const busy = await send('/api/analyze-video');
-  assert.equal(busy.status, 503);
-  assert.equal((await busy.json()).code, 'analysis_busy');
-  finish();
+  try {
+    assert.equal((await send('/healthz', { method: 'GET' })).status, 200);
+    assert.equal((await send('/api/analyze-video', { authorized: false })).status, 401);
+    const busy = await send('/api/analyze-video');
+    assert.equal(busy.status, 503);
+    assert.equal((await busy.json()).code, 'analysis_busy');
+  } finally { finish(); }
   assert.equal((await (await first).json()).fileName, 'first.m4v');
   rejectNext = true;
   assert.equal((await send('/api/analyze-video')).status, 503);
@@ -87,9 +88,6 @@ test('a disconnected client cannot release capacity while its analysis is still 
   let entered, finish;
   const started = new Promise(resolve => { entered = resolve; });
   const pending = new Promise(resolve => { finish = resolve; });
-  const send = await serve(t, createHostedAnalysisApp({ analyze: async () => {
-    entered(); await pending; return { status: 'analyzed' };
-  } }));
   // Abort a real HTTP request after the server has entered the long-running operation.
   const server = createServer(createHostedAnalysisApp({ analyze: async () => {
     entered(); await pending; return { status: 'analyzed' };
@@ -101,12 +99,22 @@ test('a disconnected client cannot release capacity while its analysis is still 
   const request = options => fetch(url, { method: 'POST', headers: { Authorization: 'Bearer synthetic-token', 'Content-Type': 'application/json' }, body: '{}', ...options });
   const abandoned = request({ signal: controller.signal }).catch(error => error.name);
   await started;
-  controller.abort();
-  assert.equal(await abandoned, 'AbortError');
-  assert.equal((await request()).status, 503);
-  finish();
+  try {
+    controller.abort();
+    assert.equal(await abandoned, 'AbortError');
+    assert.equal((await request()).status, 503);
+  } finally { finish(); }
   assert.equal((await request()).status, 200);
-  // The independent listener is not affected by the other listener's reservation.
+});
+
+test('malformed and oversized bodies are rejected safely without occupying capacity', async t => {
+  configure(t);
+  const send = await serve(t, createHostedAnalysisApp({ analyze: async () => ({ status: 'analyzed' }) }));
+  for (const [rawBody, status] of [['{"fileUrl":', 400], [JSON.stringify({ prompt: 'x'.repeat(1024 * 1024) }), 413]]) {
+    const response = await send('/api/analyze-video', { rawBody });
+    assert.equal(response.status, status);
+    assert.equal((await response.json()).code, 'invalid_request');
+  }
   assert.equal((await send('/api/analyze-video')).status, 200);
 });
 
@@ -123,4 +131,11 @@ test('hosted startup fails closed on missing auth, unsafe sources or another pro
   process.env.VIDEO_ANALYSIS_PROVIDER = 'gemini';
   process.env.GEMINI_MODEL = 'gemini-other';
   await assert.rejects(startHostedAnalysisServer({ port: 0 }), /gemini-2.5-flash/);
+  process.env.GEMINI_MODEL = 'gemini-2.5-flash';
+  delete process.env.GEMINI_API_KEY;
+  await assert.rejects(startHostedAnalysisServer({ port: 0 }), /GEMINI_API_KEY/);
+  process.env.GEMINI_API_KEY = 'synthetic-not-real';
+  delete process.env.VIDEO_ALLOWED_HOSTS;
+  delete process.env.R2_ACCOUNT_ID;
+  await assert.rejects(startHostedAnalysisServer({ port: 0 }), /allowed video hosts/);
 });

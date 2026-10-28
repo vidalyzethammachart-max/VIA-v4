@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "start:upload-api": "node upload-api.js",
-    "start:analysis-local": "node server/local-analysis.js"
+    "start:analysis-local": "node server/local-analysis.js",
+    "start:analysis-hosted": "node --max-old-space-size=192 server/hosted-analysis.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.86.0",

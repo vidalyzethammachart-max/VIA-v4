@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: via-v4-analysis
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile.analysis
+    healthCheckPath: /healthz
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: VIDEO_ANALYSIS_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: VIDEO_ALLOW_LOCAL_TEST_URLS
+        value: "false"
+      - key: AI_ANALYSIS_CACHE_DIR
+        value: /tmp/via-analysis-cache
+      - key: VIDEO_ALLOWED_HOSTS
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANALYSIS_API_TOKEN
+        sync: false

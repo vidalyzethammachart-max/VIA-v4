@@ -42,7 +42,8 @@ function runFfmpeg(args, {probe=false}={}) {
       windowsHide: true,
     });
     let stderr = "";
-    const timer = setTimeout(() => { child.kill(); }, 120000);
+    // Allow slow CPU hosts up to ten minutes for each media-processing step.
+    const timer = setTimeout(() => { child.kill(); }, 600000);
 
     child.stderr.on("data", (chunk) => {
       stderr = (stderr + chunk.toString()).slice(-16000);

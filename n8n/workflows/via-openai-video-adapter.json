@@ -24,7 +24,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { fileUrl: $json.fileUrl ?? $json.video?.downloadUrl, fileName: $json.fileName ?? $json.video?.fileName, prompt: $json.prompt } }}",
-        "options": { "timeout": 600000 }
+        "options": { "timeout": 1800000 }
       }
     },
     {

@@ -10,6 +10,22 @@ Alternatively keep the original Analyze Video HTTP node and configure its URL an
 
 For document-only retry, resume a verified failed report node with previously saved context in n8n. Full workflow replay can still repeat the Gemini text-report steps; this patch caches the migrated OpenAI video/audio and aggregate steps only. Apps Script idempotency cannot be guaranteed without its source. See `docs/openai-migration-audit-2026-10-17.md` for limits.
 
+## Media processing timeout adjustment (2026-10-29, local only)
+
+The backend now allows 600000 ms (10 minutes) per ffmpeg process, up from
+120000 ms. The optional adapter allows 1800000 ms (30 minutes) for the complete
+analysis request. For the existing main workflow, set Analyze Video → Options →
+Timeout to 1800000 after deploying the backend change; keep Retry On Fail off.
+Check that any workflow execution timeout also allows this request plus subsequent
+report-generation steps. Changing the HTTP node alone cannot extend ffmpeg's limit.
+
+These are initial trial values for 250–350 MB videos, not a validated size guarantee
+or a worst-case total runtime bound. Downloading, frame extraction, audio extraction
+and AI calls have separate time limits. The existing `invalid_video` message can
+also mean a nonzero ffmpeg exit, so inspect server logs if it persists. No live
+workflow or Render deployment was changed by this local adjustment, and the failed
+342 MB production video has not yet been rerun against it.
+
 ## Historical deployment evidence (2026-09-20)
 
 The history below predates the local changes above. It does not prove these new files are deployed.

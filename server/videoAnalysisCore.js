@@ -36,51 +36,50 @@ async function downloadVideo(fileUrl, targetPath) {
   return fileStats.size;
 }
 
-function runFfmpeg(args, {probe=false}={}) {
+function runFfmpeg(args, {probe=false, timeoutMs=600000}={}) {
   return new Promise((resolve, reject) => {
     const child = spawn(ffmpegPath, args, {
       windowsHide: true,
     });
     let stderr = "";
-    // Allow slow CPU hosts up to ten minutes for each media-processing step.
-    const timer = setTimeout(() => { child.kill(); }, 600000);
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs);
 
     child.stderr.on("data", (chunk) => {
       stderr = (stderr + chunk.toString()).slice(-16000);
     });
 
     child.on("error", () => {clearTimeout(timer);reject(validationError('Unable to start media processing.'));});
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
       clearTimeout(timer);
-      if(probe) { resolve(stderr); return; }
+      // A metadata-only probe normally exits 1 because it has no output file.
+      if(probe && !timedOut && !signal) { resolve(stderr); return; }
       if (code === 0) {
         resolve();
         return;
       }
 
-      reject(validationError('Media processing failed or exceeded the time limit.'));
+      // Keep signed storage URLs and media contents out of logs and responses.
+      console.warn('[video-analysis] ffmpeg failed', { stage: probe ? 'probe' : args.includes('-vn') ? 'audio' : 'frames', code, signal, timedOut });
+      reject(validationError(timedOut ? 'Media processing exceeded the time limit.'
+        : signal ? 'Media processing was terminated by the host.' : 'Media processing failed to decode or extract media.'));
     });
   });
 }
 
-async function extractFrames(videoPath, frameDir, duration, frameCount = DEFAULT_FRAME_COUNT) {
-  const framePattern = join(frameDir, "frame-%02d.jpg");
-  await runFfmpeg([
-    "-y",
-    "-i",
-    videoPath,
-    "-vf",
-    `fps=${frameCount / duration},scale=1024:-1`,
-    "-frames:v",
-    String(frameCount),
-    "-q:v",
-    "3",
-    framePattern,
-  ]);
-
+export async function extractFrames(videoPath, frameDir, duration, frameCount = DEFAULT_FRAME_COUNT) {
   const frames = [];
+  const deadline = Date.now() + 600000;
   for (let i = 1; i <= frameCount; i += 1) {
     const path = join(frameDir, `frame-${String(i).padStart(2, "0")}.jpg`);
+    // Input seeking decodes near each sample instead of the whole clip.
+    // Run sequentially with one decoder/filter thread for small cloud hosts.
+    await runFfmpeg([
+      '-y', '-ss', String((i - 1) * duration / frameCount), '-threads', '1', '-i', videoPath,
+      '-map', '0:V:0', '-an', '-sn', '-filter_threads', '1',
+      '-vf', 'scale=1024:1024:force_original_aspect_ratio=decrease',
+      '-frames:v', '1', '-threads', '1', '-q:v', '3', path,
+    ], { timeoutMs: Math.max(1, deadline - Date.now()) });
     try {
       const buffer = await readFile(path);
       const base64 = buffer.toString("base64");

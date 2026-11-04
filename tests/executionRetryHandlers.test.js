@@ -23,7 +23,7 @@ function execution({ evaluationId = 326, status = "error", message = "The servic
   };
 }
 
-function harness({ isAdmin = true, n8nExecution = execution(), retryStatus = 200, latest = { execution_id: 3150 }, rpcErrors = {} } = {}) {
+function harness({ isAdmin = true, n8nExecution = execution(), retryStatus = 200, latest = { execution_id: 3150 }, rpcErrors = {}, listed = [] } = {}) {
   const rpcCalls = [], fetches = [];
   const client = (key) => ({
     auth: { getUser: async () => ({ data: { user: { id: "admin-user" } }, error: null }) },
@@ -40,6 +40,7 @@ function harness({ isAdmin = true, n8nExecution = execution(), retryStatus = 200
   });
   const fetchImpl = async (url, options = {}) => {
     fetches.push({ url, options });
+    if (url.includes("/executions?")) return Response.json({ data: listed, nextCursor: null });
     if (url.endsWith("/retry")) {
       return retryStatus === 200 ? Response.json({ id: "3160", retryOf: "3150" }) : new Response("busy", { status: retryStatus });
     }
@@ -122,4 +123,22 @@ test("a non-quota failure is refused by the database guard", async () => {
   const response = await retry(post({ evaluation_id: 326 }, { authorization: "Bearer admin" }));
   assert.equal(response.status, 400);
   assert.match((await response.json()).error, /429/);
+});
+
+test("without a recorded failure the retry finds the failed execution in n8n", async () => {
+  const other = { ...execution({ evaluationId: 999 }), id: "3149" };
+  const { retry, rpcCalls, fetches } = harness({ latest: null, listed: [other, execution()] });
+  const response = await retry(post({ evaluation_id: 326 }, { authorization: "Bearer admin" }));
+  assert.equal(response.status, 200);
+  assert.match(fetches[0].url, /\/executions\?status=error&includeData=true/);
+  const recorded = rpcCalls.find((c) => c.name === "record_evaluation_execution_failure");
+  assert.equal(recorded.args.p_execution_id, 3150);
+  assert.ok(fetches.some((f) => f.url.endsWith("/executions/3150/retry")));
+});
+
+test("the retry reports when no failed execution exists for a stuck evaluation", async () => {
+  const { retry, rpcCalls } = harness({ latest: null, listed: [] });
+  const response = await retry(post({ evaluation_id: 326 }, { authorization: "Bearer admin" }));
+  assert.equal(response.status, 404);
+  assert.equal(rpcCalls.some((c) => c.name === "begin_evaluation_retry"), false);
 });

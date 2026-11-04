@@ -150,5 +150,7 @@ the evaluation ID, marks the evaluation failed and records the failure. Admins
 can then press "ลองประเมินใหม่" on `/admin/stuck-jobs`, which calls
 `retry-n8n-execution` → `POST /api/v1/executions/{id}/retry` with
 `loadWorkflow: true`. Retry is limited to quota (HTTP 429) failures and to one
-retry per failed execution; older stuck jobs can be retried by entering their
-execution ID, which is checked against the evaluation before retrying.
+retry per failed execution. For older stuck jobs that n8n never reported, the
+function searches recent failed executions (`status=error`, newest first, up to
+200) for the one carrying that evaluation ID, records it, then retries it. Set
+the optional secret `N8N_WORKFLOW_ID` to limit that search to the VIA-v4 workflow.

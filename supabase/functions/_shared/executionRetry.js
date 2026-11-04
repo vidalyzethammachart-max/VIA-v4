@@ -1,4 +1,4 @@
-import { describeFailure, extractEvaluationId, fetchExecution, retryExecution } from './n8nExecution.js';
+import { describeFailure, extractEvaluationId, fetchExecution, findFailedExecution, retryExecution } from './n8nExecution.js';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -93,7 +93,22 @@ export function createRetryHandler({createClient, env, fetchImpl = globalThis.fe
         .eq('evaluation_id', evaluationId).order('created_at', {ascending: false}).limit(1).maybeSingle();
       if (latest.error) return reply(500, {ok: false, error: latest.error.message});
       executionId = positiveInt(latest.data?.execution_id);
-      if (!executionId) return reply(404, {ok: false, error: 'No failed n8n execution is recorded for this evaluation.'});
+      if (!executionId) {
+        // Failed before the error workflow existed: find the run in n8n and record it.
+        let execution;
+        try { execution = await findFailedExecution({env, fetchImpl, evaluationId}); }
+        catch (error) { return reply(502, {ok: false, error: error.message}); }
+        executionId = positiveInt(execution?.id);
+        if (!executionId) {
+          return reply(404, {ok: false, error: 'No failed n8n execution was found for this evaluation; it may still be running or was deleted.'});
+        }
+        const failure = describeFailure(execution);
+        const recorded = await admin.rpc('record_evaluation_execution_failure', {
+          p_evaluation_id: evaluationId, p_execution_id: executionId, p_workflow_id: String(execution?.workflowId ?? ''),
+          p_failed_node: failure.failedNode, p_error_message: failure.message, p_http_status: failure.httpStatus,
+        });
+        if (recorded.error) return reply(400, {ok: false, error: recorded.error.message});
+      }
     }
 
     const claim = await admin.rpc('begin_evaluation_retry', {

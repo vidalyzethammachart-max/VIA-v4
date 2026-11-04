@@ -58,12 +58,12 @@ async function functionErrorMessage(error: unknown): Promise<string> {
   return error instanceof Error ? error.message : "Retry failed.";
 }
 
-// Admin only: rerun a quota-failed n8n execution. executionId is needed only for
-// older stuck jobs whose failure was never reported back by n8n.
-export async function retryEvaluationExecution(evaluationId: number, executionId?: number): Promise<number | null> {
+// Admin only: rerun a quota-failed n8n execution. The function finds the failed
+// execution itself when n8n never reported it back.
+export async function retryEvaluationExecution(evaluationId: number): Promise<number | null> {
   const { data, error } = await supabase.functions.invoke<{ ok: boolean; retry_execution_id?: number | null; error?: string }>(
     "retry-n8n-execution",
-    { body: { evaluation_id: evaluationId, ...(executionId ? { execution_id: executionId } : {}) } },
+    { body: { evaluation_id: evaluationId } },
   );
   if (error) throw new Error(await functionErrorMessage(error));
   if (!data?.ok) throw new Error(data?.error || "Retry failed.");

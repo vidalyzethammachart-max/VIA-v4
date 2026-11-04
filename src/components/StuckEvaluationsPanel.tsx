@@ -13,11 +13,13 @@ function minutesSince(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 60000));
 }
 
-const canRetryRecorded = (row: StuckEvaluationRow) =>
-  row.document_status === "failed" &&
-  row.failure_http_status === 429 &&
+// Retry shows only on jobs that are still stuck or failed and not already being retried.
+// Jobs without a recorded failure are looked up in n8n by the retry function.
+const canRetry = (row: StuckEvaluationRow) =>
+  row.document_status !== "ready" &&
   !row.retry_claimed_at &&
-  !row.retry_execution_id;
+  !row.retry_execution_id &&
+  (row.document_status === "pending" || row.failure_http_status === 429);
 
 // Admin view of stuck or failed evaluations. Retry reruns the same n8n execution
 // with the saved workflow, and only for quota (429) failures.
@@ -28,7 +30,6 @@ export default function StuckEvaluationsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
-  const [executionInputs, setExecutionInputs] = useState<Record<number, string>>({});
 
   const load = useCallback(async () => {
     try {
@@ -57,12 +58,12 @@ export default function StuckEvaluationsPanel() {
     }
   };
 
-  const retry = async (row: StuckEvaluationRow, executionId?: number) => {
+  const retry = async (row: StuckEvaluationRow) => {
     try {
       setBusyId(row.evaluation_id);
       setError(null);
       setNotice(null);
-      const newExecution = await retryEvaluationExecution(row.evaluation_id, executionId);
+      const newExecution = await retryEvaluationExecution(row.evaluation_id);
       setNotice(t("admin.retryStarted", { id: String(row.evaluation_id), execution: String(newExecution ?? "-") }));
       await load();
     } catch (retryError) {
@@ -73,7 +74,7 @@ export default function StuckEvaluationsPanel() {
   };
 
   const reportedCount = rows.filter((row) => row.report_id).length;
-  const quotaCount = rows.filter(canRetryRecorded).length;
+  const quotaCount = rows.filter((row) => row.document_status === "failed" && row.failure_http_status === 429 && canRetry(row)).length;
 
   const formatWaiting = (minutes: number) => {
     if (minutes < 60) return t("admin.stuckMinutes", { minutes: String(minutes) });
@@ -102,7 +103,7 @@ export default function StuckEvaluationsPanel() {
       <Link to={`/preview/${row.evaluation_id}`} className="btn-secondary text-xs">
         {t("admin.stuckOpen")}
       </Link>
-      {canRetryRecorded(row) && (
+      {canRetry(row) && (
         <button
           type="button"
           onClick={() => void retry(row)}
@@ -111,28 +112,6 @@ export default function StuckEvaluationsPanel() {
         >
           {busyId === row.evaluation_id ? t("admin.retrying") : t("admin.retry")}
         </button>
-      )}
-      {row.document_status === "pending" && !row.retry_execution_id && (
-        <span className="flex items-center gap-1">
-          <input
-            inputMode="numeric"
-            value={executionInputs[row.evaluation_id] ?? ""}
-            onChange={(event) =>
-              setExecutionInputs((current) => ({ ...current, [row.evaluation_id]: event.target.value.replace(/\D/g, "") }))
-            }
-            placeholder={t("admin.executionPlaceholder")}
-            aria-label={t("admin.executionPlaceholder")}
-            className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
-          />
-          <button
-            type="button"
-            onClick={() => void retry(row, Number(executionInputs[row.evaluation_id]))}
-            disabled={busyId === row.evaluation_id || !executionInputs[row.evaluation_id]}
-            className="btn-secondary text-xs"
-          >
-            {t("admin.retry")}
-          </button>
-        </span>
       )}
       {row.report_id && (
         <button

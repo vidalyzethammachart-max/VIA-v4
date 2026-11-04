@@ -63,6 +63,30 @@ export async function fetchExecution({env, fetchImpl, executionId}) {
   return response.json();
 }
 
+// Older stuck jobs have no recorded failure: scan recent failed executions, newest
+// first, for the one that carried this evaluation. Bounded to keep the call fast.
+export async function findFailedExecution({env, fetchImpl, evaluationId, pageSize = 25, maxPages = 8}) {
+  const base = apiBase(env);
+  if (!base) throw new Error('n8n API is not configured.');
+  let cursor = null;
+  for (let page = 0; page < maxPages; page += 1) {
+    const query = new URLSearchParams({status: 'error', includeData: 'true', limit: String(pageSize)});
+    if (env('N8N_WORKFLOW_ID')) query.set('workflowId', env('N8N_WORKFLOW_ID'));
+    if (cursor) query.set('cursor', cursor);
+    const response = await fetchImpl(`${base}/executions?${query}`, {
+      headers: {'X-N8N-API-KEY': env('N8N_API_KEY'), accept: 'application/json'},
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!response.ok) throw new Error(`n8n API returned HTTP ${response.status} while searching executions.`);
+    const body = await response.json();
+    const match = (body?.data || []).find((execution) => extractEvaluationId(execution) === evaluationId);
+    if (match) return match;
+    cursor = body?.nextCursor || null;
+    if (!cursor) break;
+  }
+  return null;
+}
+
 export async function retryExecution({env, fetchImpl, executionId}) {
   const base = apiBase(env);
   if (!base) throw new Error('n8n API is not configured.');

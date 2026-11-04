@@ -87,20 +87,40 @@ export async function findFailedExecution({env, fetchImpl, evaluationId, pageSiz
   return null;
 }
 
-export async function retryExecution({env, fetchImpl, executionId}) {
+// n8n answers the retry call only after the rerun finishes (about 20 seconds when
+// only the report step reruns). Wait well past that, but stay under the Edge
+// Function's 150-second request limit.
+export const RETRY_WAIT_MS = 120000;
+
+// Thrown when n8n accepted the retry but did not answer in time: the rerun is
+// probably still going, so callers must not offer another retry.
+export class RetryStillRunningError extends Error {
+  constructor(executionId) {
+    super(`n8n is still running the retry of execution ${executionId}.`);
+    this.name = 'RetryStillRunningError';
+  }
+}
+
+export async function retryExecution({env, fetchImpl, executionId, timeoutMs = RETRY_WAIT_MS}) {
   const base = apiBase(env);
   if (!base) throw new Error('n8n API is not configured.');
-  const response = await fetchImpl(`${base}/executions/${executionId}/retry`, {
-    method: 'POST',
-    headers: {
-      'X-N8N-API-KEY': env('N8N_API_KEY'),
-      'Content-Type': 'application/json',
-      accept: 'application/json',
-      'Idempotency-Key': `via-retry-${executionId}`,
-    },
-    body: JSON.stringify({loadWorkflow: true}),
-    signal: AbortSignal.timeout(20000),
-  });
+  let response;
+  try {
+    response = await fetchImpl(`${base}/executions/${executionId}/retry`, {
+      method: 'POST',
+      headers: {
+        'X-N8N-API-KEY': env('N8N_API_KEY'),
+        'Content-Type': 'application/json',
+        accept: 'application/json',
+        'Idempotency-Key': `via-retry-${executionId}`,
+      },
+      body: JSON.stringify({loadWorkflow: true}),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    if (error?.name === 'TimeoutError') throw new RetryStillRunningError(executionId);
+    throw error;
+  }
   if (!response.ok) {
     const text = (await response.text().catch(() => '')).slice(0, 300);
     throw new Error(`n8n refused the retry (HTTP ${response.status})${text ? `: ${text}` : ''}`);

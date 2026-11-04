@@ -42,6 +42,7 @@ function harness({ isAdmin = true, n8nExecution = execution(), retryStatus = 200
     fetches.push({ url, options });
     if (url.includes("/executions?")) return Response.json({ data: listed, nextCursor: null });
     if (url.endsWith("/retry")) {
+      if (retryStatus === "timeout") throw new DOMException("Signal timed out.", "TimeoutError");
       return retryStatus === 200 ? Response.json({ id: "3160", retryOf: "3150" }) : new Response("busy", { status: retryStatus });
     }
     return Response.json(n8nExecution);
@@ -141,4 +142,19 @@ test("the retry reports when no failed execution exists for a stuck evaluation",
   const response = await retry(post({ evaluation_id: 326 }, { authorization: "Bearer admin" }));
   assert.equal(response.status, 404);
   assert.equal(rpcCalls.some((c) => c.name === "begin_evaluation_retry"), false);
+});
+
+test("a retry that outlasts the wait is treated as started and stays claimed", async () => {
+  const { retry, rpcCalls, fetches } = harness({ retryStatus: "timeout" });
+  const response = await retry(post({ evaluation_id: 326 }, { authorization: "Bearer admin" }));
+  const body = await response.json();
+  assert.equal(response.status, 202);
+  assert.equal(body.started, true);
+  assert.equal(body.retry_execution_id, null);
+  const finish = rpcCalls.at(-1);
+  assert.equal(finish.name, "finish_evaluation_retry");
+  assert.equal(finish.args.p_ok, true);
+  assert.equal(finish.args.p_new_execution_id, null);
+  const call = fetches.find((item) => item.url.endsWith("/retry"));
+  assert.ok(call.options.signal, "the retry request has a timeout signal");
 });

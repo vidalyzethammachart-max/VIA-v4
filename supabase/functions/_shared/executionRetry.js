@@ -1,4 +1,4 @@
-import { describeFailure, extractEvaluationId, fetchExecution, findFailedExecution, retryExecution } from './n8nExecution.js';
+import { describeFailure, extractEvaluationId, fetchExecution, findFailedExecution, retryExecution, RetryStillRunningError } from './n8nExecution.js';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -120,6 +120,15 @@ export function createRetryHandler({createClient, env, fetchImpl = globalThis.fe
     try {
       newExecutionId = await retryExecution({env, fetchImpl, executionId});
     } catch (error) {
+      if (error instanceof RetryStillRunningError) {
+        // Keep the claim so nobody starts a second, paid rerun; the evaluation goes
+        // back to pending and the n8n error workflow reports if this rerun fails.
+        const started = await admin.rpc('finish_evaluation_retry', {
+          p_execution_id: executionId, p_new_execution_id: null, p_ok: true, p_error: null,
+        });
+        if (started.error) return reply(500, {ok: false, error: started.error.message});
+        return reply(202, {ok: true, started: true, evaluation_id: evaluationId, execution_id: executionId, retry_execution_id: null});
+      }
       await admin.rpc('finish_evaluation_retry', {p_execution_id: executionId, p_new_execution_id: null, p_ok: false, p_error: error.message});
       return reply(502, {ok: false, error: error.message});
     }

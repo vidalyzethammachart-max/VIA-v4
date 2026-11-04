@@ -64,7 +64,9 @@ export default function StuckEvaluationsPanel() {
       setError(null);
       setNotice(null);
       const newExecution = await retryEvaluationExecution(row.evaluation_id);
-      setNotice(t("admin.retryStarted", { id: String(row.evaluation_id), execution: String(newExecution ?? "-") }));
+      setNotice(newExecution
+        ? t("admin.retryStarted", { id: String(row.evaluation_id), execution: String(newExecution) })
+        : t("admin.retryStillRunning", { id: String(row.evaluation_id) }));
       await load();
     } catch (retryError) {
       setError(`#${row.evaluation_id}: ${retryError instanceof Error ? retryError.message : t("admin.retryFailed")}`);
@@ -88,6 +90,9 @@ export default function StuckEvaluationsPanel() {
   const statusCell = (row: StuckEvaluationRow) => {
     if (row.retry_execution_id && row.document_status === "pending") {
       return <span className="text-sky-700">{t("admin.retryRunning", { execution: String(row.retry_execution_id) })}</span>;
+    }
+    if (row.retry_claimed_at && row.document_status === "pending") {
+      return <span className="text-sky-700">{t("admin.retryRunningInN8n")}</span>;
     }
     if (row.document_status === "failed") {
       return (

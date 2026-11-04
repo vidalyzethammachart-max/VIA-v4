@@ -35,7 +35,7 @@ export async function getStuckEvaluationReport(evaluationId: number): Promise<{ 
 }
 
 export async function listStuckEvaluations(): Promise<StuckEvaluationRow[]> {
-  const { data, error } = await supabase.rpc("list_stuck_evaluations");
+  const { data, error } = await supabase.rpc("list_stuck_evaluations_v2");
   if (error) throw new Error(error.message);
   return (data ?? []) as StuckEvaluationRow[];
 }

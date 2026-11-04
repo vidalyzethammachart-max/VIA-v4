@@ -101,9 +101,9 @@ GRANT EXECUTE ON FUNCTION public.record_evaluation_execution_failure(bigint, big
   public.finish_evaluation_retry(bigint, bigint, boolean, text) TO service_role;
 
 -- The admin stuck list now also shows evaluations that failed in n8n and the
--- latest failed execution, so a 429 can be retried from the web.
-DROP FUNCTION public.list_stuck_evaluations();
-CREATE FUNCTION public.list_stuck_evaluations() RETURNS TABLE (
+-- latest failed execution, so a 429 can be retried from the web. A new name avoids
+-- dropping list_stuck_evaluations(), which the previous frontend still calls.
+CREATE FUNCTION public.list_stuck_evaluations_v2() RETURNS TABLE (
   evaluation_id bigint, order_number text, subject_name text, user_id uuid, owner_email text,
   document_status text, document_error text, created_at timestamptz,
   report_id uuid, reported_at timestamptz, report_note text,
@@ -131,5 +131,5 @@ BEGIN
       OR r.id IS NOT NULL
     ORDER BY e.created_at ASC;
 END $$;
-REVOKE ALL ON FUNCTION public.list_stuck_evaluations() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.list_stuck_evaluations() TO authenticated;
+REVOKE ALL ON FUNCTION public.list_stuck_evaluations_v2() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.list_stuck_evaluations_v2() TO authenticated;

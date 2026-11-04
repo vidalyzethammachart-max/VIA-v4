@@ -27,7 +27,7 @@ async function database() {
       (2,'${owner}','002','Done','ready',now()-interval '2 hours'),
       (3,'${owner}','003','Bad video','pending',now()-interval '2 hours');
   `);
-  for (const name of ["20261104003925_stuck_evaluation_reports.sql", "20261105090000_evaluation_execution_retry.sql"]) {
+  for (const name of ["20261104003925_stuck_evaluation_reports.sql", "20261104011538_evaluation_execution_retry.sql"]) {
     await db.exec(await readFile(new URL(name, migrations), "utf8"));
   }
   return db;
@@ -91,13 +91,13 @@ test("admins see failed 429 evaluations in the stuck list with their execution",
   const db = await database();
   await record(db, 1, 3150, 429);
   await db.query("SELECT set_config('request.jwt.claim.sub', $1, false)", [admin]);
-  const listed = await db.query("SELECT * FROM public.list_stuck_evaluations()");
+  const listed = await db.query("SELECT * FROM public.list_stuck_evaluations_v2()");
   const row = listed.rows.find((item) => Number(item.evaluation_id) === 1);
   assert.equal(Number(row.failure_execution_id), 3150);
   assert.equal(row.failure_http_status, 429);
   assert.equal(row.document_status, "failed");
   await db.query("SELECT set_config('request.jwt.claim.sub', $1, false)", [owner]);
-  await assert.rejects(db.query("SELECT * FROM public.list_stuck_evaluations()"), /Forbidden/);
+  await assert.rejects(db.query("SELECT * FROM public.list_stuck_evaluations_v2()"), /Forbidden/);
 });
 
 test("browser roles cannot call the service-only retry functions", async () => {

@@ -6,6 +6,11 @@ import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
 import VideoCaseEditor from "../components/VideoCaseEditor";
 import { buildVideoCaseSummaryDocumentPreviewPath } from "../services/videoCaseSummaryDocumentPreviewCore.js";
+import {
+  getCombinableEvaluationIds,
+  isCombinableEvaluation,
+  keepCombinableSelection,
+} from "../services/videoCaseCombineSelectionCore.js";
 import { normalizeRole, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import {
@@ -81,9 +86,13 @@ export default function VideoCaseDetailPage() {
   const effectiveCaseRole: VideoCaseMemberRole =
     appRole === "admin" ? "leader" : (selectedRole ?? "member");
   const canCombine = effectiveCaseRole === "leader";
-  const selectedAnalyses = useMemo(
-    () => analyses.filter((run) => selectedAnalysisIds.includes(run.id)),
-    [analyses, selectedAnalysisIds],
+  const selectedAnalyses = useMemo(() => {
+    const combinableIds = keepCombinableSelection(analyses, selectedAnalysisIds);
+    return analyses.filter((run) => combinableIds.includes(run.id));
+  }, [analyses, selectedAnalysisIds]);
+  const notReadyCount = useMemo(
+    () => analyses.filter((run) => !isCombinableEvaluation(run)).length,
+    [analyses],
   );
   const latestAggregate = aggregates[0] ?? null;
   const aggregateHistory = useMemo(
@@ -110,7 +119,7 @@ export default function VideoCaseDetailPage() {
     setSelectedRole(membership?.member_role ?? null);
     setAnalyses(analysisRows);
     setAggregates(aggregateRows);
-    setSelectedAnalysisIds(analysisRows.map((run) => run.id));
+    setSelectedAnalysisIds(getCombinableEvaluationIds(analysisRows));
   }, []);
 
   useEffect(() => {
@@ -386,12 +395,17 @@ export default function VideoCaseDetailPage() {
                   <p className="mt-1 text-sm text-slate-500">
                     ตรวจสอบแต่ละแบบประเมินก่อนนำมารวมผลเป็นรายงานสรุปใหม่
                   </p>
+                  {canCombine && notReadyCount > 0 && (
+                    <p className="mt-1 text-sm text-amber-700">
+                      เลือกรวมผลได้เฉพาะแบบประเมินที่พร้อมใช้งาน ({notReadyCount} รายการยังไม่พร้อม)
+                    </p>
+                  )}
                 </div>
                 {canCombine && analyses.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setSelectedAnalysisIds(analyses.map((run) => run.id))}
+                      onClick={() => setSelectedAnalysisIds(getCombinableEvaluationIds(analyses))}
                       className="btn-secondary text-xs"
                     >
                       เลือกทั้งหมด
@@ -423,6 +437,7 @@ export default function VideoCaseDetailPage() {
                     <thead className="bg-slate-50 text-slate-600">
                       <tr>
                         <th className="sticky left-0 z-10 min-w-48 border-b border-slate-200 bg-slate-50 px-4 py-3 font-semibold">แบบประเมิน</th>
+                        <th className="min-w-28 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">สถานะ</th>
                         <th className="min-w-28 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">รหัสพนักงาน</th>
                         <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">คะแนนเฉลี่ย</th>
                         <th className="min-w-80 border-b border-l border-slate-200 px-4 py-3 font-semibold">ข้อเสนอแนะโดยรวม</th>
@@ -434,6 +449,13 @@ export default function VideoCaseDetailPage() {
                     <tbody className="divide-y divide-slate-200 bg-white">
                       {analyses.map((run) => {
                         const overallScore = getEvaluationAverage(run);
+                        const combinable = isCombinableEvaluation(run);
+                        const statusClass =
+                          run.document_status === "ready"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : run.document_status === "failed"
+                              ? "bg-red-50 text-red-700"
+                              : "bg-amber-50 text-amber-700";
 
                         return (
                           <tr key={run.id} className="align-top hover:bg-slate-50/70">
@@ -441,6 +463,11 @@ export default function VideoCaseDetailPage() {
                               <p className="font-semibold text-slate-900">{run.subject_name || "ไม่มีชื่อหัวข้อ"}</p>
                               <p className="mt-1 text-slate-500">แบบประเมิน #{run.id}</p>
                               <p className="mt-1 text-slate-500">{new Date(run.created_at).toLocaleString()}</p>
+                            </td>
+                            <td className="border-l border-slate-200 px-3 py-3 text-center">
+                              <span className={`inline-flex rounded-full px-2 py-1 font-semibold ${statusClass}`}>
+                                {getStatusLabel(run.document_status)}
+                              </span>
                             </td>
                             <td className="border-l border-slate-200 px-3 py-3 text-center text-slate-700">
                               {run.employee_number || "-"}
@@ -465,7 +492,9 @@ export default function VideoCaseDetailPage() {
                               <td className="border-l border-slate-200 px-3 py-3 text-center">
                                 <input
                                   type="checkbox"
-                                  checked={selectedAnalysisIds.includes(run.id)}
+                                  checked={combinable && selectedAnalysisIds.includes(run.id)}
+                                  disabled={!combinable}
+                                  title={combinable ? undefined : "แบบประเมินนี้ยังไม่พร้อม จึงนำมารวมผลไม่ได้"}
                                   onChange={(event) => {
                                     setSelectedAnalysisIds((current) =>
                                       event.target.checked
@@ -474,7 +503,7 @@ export default function VideoCaseDetailPage() {
                                     );
                                   }}
                                   aria-label={`เลือกแบบประเมิน #${run.id} เพื่อรวมผล`}
-                                  className="h-5 w-5 accent-emerald-600"
+                                  className="h-5 w-5 accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
                                 />
                               </td>
                             )}

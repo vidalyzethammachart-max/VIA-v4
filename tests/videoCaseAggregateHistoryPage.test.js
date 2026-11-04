@@ -57,7 +57,9 @@ test("uses Thai evaluation labels and button actions", () => {
     pageSource,
     /ดูสรุปผล<\/th>\s*\{canCombine && <th[^>]*>เลือก<\/th>\}\s*\{canCombine && <th[^>]*>ลบ<\/th>\}/,
   );
-  assert.match(pageSource, /className="h-5 w-5 accent-emerald-600"/);
+  assert.match(pageSource, /className="h-5 w-5 accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"/);
+  assert.match(pageSource, /disabled=\{!combinable\}/);
+  assert.match(pageSource, />สถานะ<\/th>/);
   assert.doesNotMatch(pageSource, />ผลวิเคราะห์ AI<\/th>/);
   assert.doesNotMatch(pageSource, /min-w-40 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">จัดการ<\/th>/);
   assert.doesNotMatch(pageSource, /เลือกเพื่อรวม/);

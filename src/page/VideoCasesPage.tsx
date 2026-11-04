@@ -50,6 +50,14 @@ export default function VideoCasesPage() {
   const [evaluationToDelete, setEvaluationToDelete] = useState<VideoCaseEvaluationRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // On phones the selected-case card sits far above the list, so bring it into view.
+  const selectCase = (caseId: string) => {
+    setSelectedCaseId(caseId);
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      document.getElementById("selected-video-case")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   const selectedCase = useMemo(
     () => cases.find((item) => item.id === selectedCaseId) ?? null,
     [cases, selectedCaseId],
@@ -316,19 +324,19 @@ export default function VideoCasesPage() {
           <button type="button" aria-pressed={showTrash} disabled={changingTrash} className={showTrash ? "btn-primary" : "btn-secondary"} onClick={() => switchCaseList(true)}>ถังขยะ</button>
         </div>
         {showTrash && <p className="mb-4 text-sm text-slate-500">เคสในถังขยะยังเก็บผลประเมิน รายงาน และวิดีโอไว้ ผู้สร้างเคสหรือแอดมินสามารถกู้คืนเพื่อใช้งานต่อได้</p>}
-        <section className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section id="selected-video-case" className="mb-6 scroll-mt-20 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-5 p-5 md:flex-row md:items-start md:justify-between md:p-6">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">Current video case</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">เคสที่เลือก</p>
               <h3 className="mt-2 text-2xl font-bold text-slate-900">
-                {selectedCase?.case_title || selectedCase?.case_key || "No video case selected"}
+                {selectedCase?.case_title || selectedCase?.case_key || "ยังไม่ได้เลือกเคส"}
               </h3>
               <p className="mt-2 text-sm text-slate-500">
-                {selectedCase ? `Case key: ${selectedCase.case_key}` : "Choose a case below to view its reviews and combined analysis."}
+                {selectedCase ? `รหัสเคส: ${selectedCase.case_key}` : "เลือกเคสด้านล่างเพื่อดูแบบประเมินและผลรวม"}
               </p>
               {selectedCase && (
                 <p className="mt-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                  Your role: {effectiveCaseRole}{appRole === "admin" ? " (via system admin)" : ""}
+                  บทบาทของคุณ: {effectiveCaseRole === "leader" ? "หัวหน้าเคส" : "สมาชิก"}{appRole === "admin" ? " (ผู้ดูแลระบบ)" : ""}
                 </p>
               )}
               {selectedCase?.description && (
@@ -350,13 +358,13 @@ export default function VideoCasesPage() {
                   to={`/video-cases/${selectedCase.id}`}
                   className="btn-secondary text-center"
                 >
-                  View details
+                  ดูรายละเอียด
                 </Link>
                 <Link
                   to={`/form-submit?caseId=${selectedCase.id}`}
                   className="btn-primary text-center"
                 >
-                  Submit review
+                  กรอกแบบประเมิน
                 </Link>
               </div>
             )}
@@ -364,21 +372,21 @@ export default function VideoCasesPage() {
               <button type="button" className="btn-primary" disabled={changingTrash} onClick={() => void handleTrashChange(selectedCase, false)}>{changingTrash ? "กำลังกู้คืน..." : "กู้คืนเคส"}</button>
             )}
           </div>
-          <div className="grid border-t border-slate-200 sm:grid-cols-3">
-            <div className="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
-              <p className="text-xs font-medium text-slate-500">Reviews</p>
+          <div className="grid grid-cols-3 border-t border-slate-200">
+            <div className="border-r border-slate-200 p-3 sm:p-4">
+              <p className="text-xs font-medium text-slate-500">แบบประเมิน</p>
               <p className="mt-1 text-2xl font-bold text-slate-900">{analyses.length}</p>
             </div>
-            <div className="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
-              <p className="text-xs font-medium text-slate-500">Reviewers</p>
+            <div className="border-r border-slate-200 p-3 sm:p-4">
+              <p className="text-xs font-medium text-slate-500">ผู้ประเมิน</p>
               <p className="mt-1 text-2xl font-bold text-slate-900">
                 {new Set(analyses.map((analysis) => analysis.user_id).filter(Boolean)).size}
               </p>
             </div>
             <div className="p-4">
-              <p className="text-xs font-medium text-slate-500">Latest AI summary</p>
+              <p className="text-xs font-medium text-slate-500">ผลรวมล่าสุด</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
-                {aggregates[0]?.status || "Not available"}
+                {aggregates[0] ? ({ pending: "กำลังดำเนินการ", ready: "พร้อมใช้งาน", failed: "ไม่สำเร็จ" }[aggregates[0].status] ?? aggregates[0].status) : "ยังไม่มี"}
               </p>
               {selectedCase && !showTrash && aggregates[0]?.document_status === "ready" && (aggregates[0].pdf_storage_path || aggregates[0].docx_storage_path) && (
                 <Link
@@ -395,27 +403,54 @@ export default function VideoCasesPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">{showTrash ? "เคสในถังขยะ" : "Video cases"}</h3>
+              <h3 className="text-lg font-semibold text-slate-900">{showTrash ? "เคสในถังขยะ" : "รายการ Video Case"}</h3>
               <p className="mt-1 text-sm text-slate-500">
                 {showTrash ? "เลือกเคสที่ต้องการกู้คืน" : "เลือกเคสเพื่อดูผลประเมิน แก้ไขข้อมูล หรือย้ายเข้าถังขยะ"}
               </p>
             </div>
-            <p className="text-xs font-medium text-slate-500">{cases.length} case(s)</p>
+            <p className="text-xs font-medium text-slate-500">{cases.length} เคส</p>
           </div>
 
           {loading ? <p className="mt-4 text-sm text-slate-500" role="status">กำลังโหลดเคส...</p> : cases.length === 0 ? (
             <p className="mt-4 text-sm text-slate-500">{showTrash ? "ไม่มีเคสในถังขยะ" : "ยังไม่มีเคสที่ใช้งาน"}</p>
           ) : (
-            <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
+            <>
+            <ul className="mt-4 divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 md:hidden">
+              {cases.map((videoCase) => {
+                const isSelected = videoCase.id === selectedCaseId;
+                return (
+                  <li key={videoCase.id}>
+                    <button
+                      type="button"
+                      onClick={() => selectCase(videoCase.id)}
+                      aria-pressed={isSelected}
+                      className={`flex w-full items-start justify-between gap-3 px-4 py-3 text-left ${isSelected ? "bg-blue-50" : "bg-white"}`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block break-words font-semibold text-slate-900">{videoCase.case_title || "ไม่มีชื่อเคส"}</span>
+                        <span className="mt-1 block break-all text-xs text-slate-500">{videoCase.case_key}</span>
+                        <span className="mt-1 block text-xs text-slate-500">
+                          {new Date((showTrash && videoCase.deleted_at) || videoCase.updated_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
+                        </span>
+                      </span>
+                      <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${isSelected ? "border-[#04418b] bg-[#04418b] text-white" : "border-slate-300 text-slate-700"}`}>
+                        {isSelected ? "เลือกอยู่" : "เลือก"}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-4 hidden overflow-hidden rounded-2xl border border-slate-200 md:block">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-4 py-3 font-medium text-slate-500">Case key</th>
-                      <th className="px-4 py-3 font-medium text-slate-500">Case title</th>
-                      <th className="px-4 py-3 font-medium text-slate-500">Source file</th>
-                      <th className="px-4 py-3 font-medium text-slate-500">{showTrash ? "ย้ายเข้าถังขยะเมื่อ" : "Updated"}</th>
-                      <th className="px-4 py-3 font-medium text-slate-500">Action</th>
+                      <th className="px-4 py-3 font-medium text-slate-500">รหัสเคส</th>
+                      <th className="px-4 py-3 font-medium text-slate-500">ชื่อเคส</th>
+                      <th className="px-4 py-3 font-medium text-slate-500">ไฟล์วิดีโอ</th>
+                      <th className="px-4 py-3 font-medium text-slate-500">{showTrash ? "ย้ายเข้าถังขยะเมื่อ" : "แก้ไขล่าสุด"}</th>
+                      <th className="px-4 py-3 font-medium text-slate-500">เลือก</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white">
@@ -429,10 +464,10 @@ export default function VideoCasesPage() {
                           <td className="px-4 py-4 align-top">
                             <button
                               type="button"
-                              onClick={() => setSelectedCaseId(videoCase.id)}
+                              onClick={() => selectCase(videoCase.id)}
                               className="text-left"
                             >
-                              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#04418b]">
+                              <p className="break-all text-xs font-medium text-[#04418b]">
                                 {videoCase.case_key}
                               </p>
                             </button>
@@ -440,29 +475,29 @@ export default function VideoCasesPage() {
                           <td className="px-4 py-4 align-top">
                             <button
                               type="button"
-                              onClick={() => setSelectedCaseId(videoCase.id)}
+                              onClick={() => selectCase(videoCase.id)}
                               className="text-left font-semibold text-slate-900 hover:text-[#04418b]"
                             >
-                              {videoCase.case_title || "Untitled case"}
+                              {videoCase.case_title || "ไม่มีชื่อเคส"}
                             </button>
                           </td>
                           <td className="px-4 py-4 align-top text-slate-600">
-                            {videoCase.source_file_name || "No source file"}
+                            {videoCase.source_file_name || "ไม่มีไฟล์วิดีโอ"}
                           </td>
-                          <td className="px-4 py-4 align-top text-slate-600">
-                            {new Date((showTrash && videoCase.deleted_at) || videoCase.updated_at).toLocaleString()}
+                          <td className="whitespace-nowrap px-4 py-4 align-top text-slate-600">
+                            {new Date((showTrash && videoCase.deleted_at) || videoCase.updated_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
                           </td>
                           <td className="px-4 py-4 align-top">
                             <button
                               type="button"
-                              onClick={() => setSelectedCaseId(videoCase.id)}
+                              onClick={() => selectCase(videoCase.id)}
                               className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                                 isSelected
                                   ? "border-[#04418b] bg-[#04418b] text-white"
                                   : "border-slate-300 bg-white text-slate-700 hover:border-[#04418b] hover:text-[#04418b]"
                               }`}
                             >
-                              {isSelected ? "Selected" : "Select"}
+                              {isSelected ? "เลือกอยู่" : "เลือก"}
                             </button>
                           </td>
                         </tr>
@@ -472,6 +507,7 @@ export default function VideoCasesPage() {
                 </table>
               </div>
             </div>
+            </>
           )}
         </section>
 

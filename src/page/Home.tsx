@@ -68,7 +68,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="flex justify-center lg:justify-end">
+            <div className="hidden justify-center lg:flex lg:justify-end">
               <div className="relative w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/70">
                 <div className="relative flex min-h-72 flex-col items-center justify-center rounded-2xl border border-[#04418b]/10 bg-slate-50 px-6 py-10 text-center">
                   <img

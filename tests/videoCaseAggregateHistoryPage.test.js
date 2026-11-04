@@ -70,7 +70,7 @@ test("guards aggregate deletion with leader permission and confirmation", () => 
   assert.match(pageSource, /setAggregateToDelete\(aggregate\)/);
   assert.match(pageSource, /await deleteVideoCaseAggregate\(aggregateToDelete\.id\)/);
   assert.match(pageSource, /await loadCaseData\(selectedCase\.id\)/);
-  assert.match(pageSource, /title="Delete aggregate"/);
+  assert.match(pageSource, /title="ลบผลรวม"/);
   assert.match(
     serviceSource,
     /\.delete\(\)\s*\.eq\("id", aggregateId\)\s*\.select\("id"\)\s*\.maybeSingle\(\)/,

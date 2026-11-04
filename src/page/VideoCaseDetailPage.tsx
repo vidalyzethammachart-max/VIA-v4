@@ -167,12 +167,12 @@ export default function VideoCaseDetailPage() {
 
   async function handleCombine() {
     if (!selectedCase) {
-      setErrorMessage("Select a case first.");
+      setErrorMessage("กรุณาเลือกเคสก่อน");
       return;
     }
 
     if (selectedAnalyses.length === 0) {
-      setErrorMessage("Select at least one evaluation to combine.");
+      setErrorMessage("กรุณาเลือกแบบประเมินอย่างน้อย 1 รายการ");
       return;
     }
 
@@ -200,7 +200,7 @@ export default function VideoCaseDetailPage() {
 
       navigate(`/video-cases/${selectedCase.id}/summaries/${aggregate.id}`);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to combine analyses.");
+      setErrorMessage(error instanceof Error ? error.message : "รวมผลแบบประเมินไม่สำเร็จ");
     } finally {
       setCombining(false);
       setConfirmOpen(false);
@@ -266,7 +266,7 @@ export default function VideoCaseDetailPage() {
       <ConfirmModal
         isOpen={confirmOpen}
         title="รวมผลแบบประเมิน"
-        message={`AI will combine ${selectedAnalyses.length} selected evaluation(s) for this case.`}
+        message={`รวมผลแบบประเมิน ${selectedAnalyses.length} รายการที่เลือกของเคสนี้`}
         variant="primary"
         onCancel={() => {
           if (!combining) setConfirmOpen(false);
@@ -278,49 +278,49 @@ export default function VideoCaseDetailPage() {
       />
       <ConfirmModal
         isOpen={Boolean(evaluationToDelete)}
-        title="Delete evaluation"
-        message={`Delete evaluation #${evaluationToDelete?.id ?? ""}? This cannot be undone.`}
+        title="ลบแบบประเมิน"
+        message={`ลบแบบประเมิน #${evaluationToDelete?.id ?? ""} ใช่ไหม? ลบแล้วกู้คืนไม่ได้`}
         variant="danger"
         onCancel={() => {
           if (!deleting) setEvaluationToDelete(null);
         }}
         onConfirm={() => void handleDeleteEvaluation()}
-        confirmLabel={deleting ? "Deleting..." : "Delete"}
-        cancelLabel="Cancel"
+        confirmLabel={deleting ? "กำลังลบ..." : "ลบ"}
+        cancelLabel="ยกเลิก"
         confirmDisabled={deleting}
       />
       <ConfirmModal
         isOpen={Boolean(aggregateToDelete)}
-        title="Delete aggregate"
-        message={`Delete aggregate ${aggregateToDelete?.id.slice(0, 8) ?? ""}? Source evaluations will remain.`}
+        title="ลบผลรวม"
+        message={`ลบผลรวม ${aggregateToDelete?.id.slice(0, 8) ?? ""} ใช่ไหม? แบบประเมินต้นทางจะยังอยู่`}
         variant="danger"
         onCancel={() => {
           if (!deletingAggregate) setAggregateToDelete(null);
         }}
         onConfirm={() => void handleDeleteAggregate()}
-        confirmLabel={deletingAggregate ? "Deleting..." : "Delete"}
-        cancelLabel="Cancel"
+        confirmLabel={deletingAggregate ? "กำลังลบ..." : "ลบ"}
+        cancelLabel="ยกเลิก"
         confirmDisabled={deletingAggregate}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-6 md:py-8">
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">Video case details</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">รายละเอียด Video Case</p>
             <h1 className="mt-2 text-2xl font-bold text-slate-900">
-              {selectedCase?.case_title || selectedCase?.case_key || "Video case"}
+              {selectedCase?.case_title || selectedCase?.case_key || "Video Case"}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              {selectedCase ? `Case key: ${selectedCase.case_key}` : "Choose a case from the list."}
+              {selectedCase ? `รหัสเคส: ${selectedCase.case_key}` : "เลือกเคสจากรายการ"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link to="/video-cases" className="btn-secondary">
-              Back to cases
+              กลับไปรายการเคส
             </Link>
             {selectedCase && (
               <Link to={`/form-submit?caseId=${selectedCase.id}`} className="btn-primary">
-                Submit review
+                กรอกแบบประเมิน
               </Link>
             )}
           </div>
@@ -344,19 +344,17 @@ export default function VideoCaseDetailPage() {
           </section>
         ) : !selectedCase ? (
           <section className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-sm text-red-700 shadow-sm">
-            Video case not found.
+            ไม่พบ Video Case นี้
           </section>
         ) : (
           <div className="space-y-6">
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-col gap-5 p-5 md:flex-row md:items-start md:justify-between md:p-6">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">Current video case</p>
-                  <h2 className="mt-2 text-2xl font-bold text-slate-900">{selectedCase.case_title || selectedCase.case_key}</h2>
-                  <p className="mt-2 text-sm text-slate-500">Case key: {selectedCase.case_key}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">ข้อมูลเคส</p>
                   {selectedCase.description && <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-600">{selectedCase.description}</p>}
                   <p className="mt-1 text-sm text-slate-500">
-                    {selectedCase.source_file_name || "No source file"} · Updated {new Date(selectedCase.updated_at).toLocaleString()}
+                    {selectedCase.source_file_name || "ไม่มีไฟล์วิดีโอ"} · แก้ไขล่าสุด {new Date(selectedCase.updated_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-start gap-3">
@@ -364,25 +362,25 @@ export default function VideoCaseDetailPage() {
                   <button type="button" className="btn-secondary" onClick={() => setEditingCase(selectedCase)}>แก้ไขเคส</button>
                 )}
                 <p className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                  Your role: {effectiveCaseRole}{appRole === "admin" ? " (via system admin)" : ""}
+                  บทบาทของคุณ: {effectiveCaseRole === "leader" ? "หัวหน้าเคส" : "สมาชิก"}{appRole === "admin" ? " (ผู้ดูแลระบบ)" : ""}
                 </p>
                 </div>
               </div>
-              <div className="grid border-t border-slate-200 sm:grid-cols-3">
-                <div className="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
-                  <p className="text-xs font-medium text-slate-500">Reviews</p>
+              <div className="grid grid-cols-3 border-t border-slate-200">
+                <div className="border-r border-slate-200 p-3 sm:p-4">
+                  <p className="text-xs font-medium text-slate-500">แบบประเมิน</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">{analyses.length}</p>
                 </div>
-                <div className="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
-                  <p className="text-xs font-medium text-slate-500">Reviewers</p>
+                <div className="border-r border-slate-200 p-3 sm:p-4">
+                  <p className="text-xs font-medium text-slate-500">ผู้ประเมิน</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">
                     {new Set(analyses.map((analysis) => analysis.user_id).filter(Boolean)).size}
                   </p>
                 </div>
                 <div className="p-4">
-                  <p className="text-xs font-medium text-slate-500">Latest AI summary</p>
+                  <p className="text-xs font-medium text-slate-500">ผลรวมล่าสุด</p>
                   <p className="mt-1 text-sm font-semibold text-slate-900">
-                    {latestAggregate ? latestAggregate.status : "Not available"}
+                    {latestAggregate ? getStatusLabel(latestAggregate.status) : "ยังไม่มี"}
                   </p>
                 </div>
               </div>
@@ -432,7 +430,64 @@ export default function VideoCaseDetailPage() {
               {analyses.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-500">ยังไม่มีผลวิเคราะห์</p>
               ) : (
-                <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+                <>
+                <ul className="mt-4 divide-y divide-slate-200 rounded-xl border border-slate-200 md:hidden">
+                  {analyses.map((run) => {
+                    const overallScore = getEvaluationAverage(run);
+                    const combinable = isCombinableEvaluation(run);
+                    const statusClass =
+                      run.document_status === "ready"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : run.document_status === "failed"
+                          ? "bg-red-50 text-red-700"
+                          : "bg-amber-50 text-amber-700";
+                    return (
+                      <li key={run.id} className="space-y-2 p-4 text-sm">
+                        <div className="flex items-start gap-3">
+                          {canCombine && (
+                            <input
+                              type="checkbox"
+                              checked={combinable && selectedAnalysisIds.includes(run.id)}
+                              disabled={!combinable}
+                              onChange={(event) => {
+                                setSelectedAnalysisIds((current) =>
+                                  event.target.checked
+                                    ? [...new Set([...current, run.id])]
+                                    : current.filter((id) => id !== run.id),
+                                );
+                              }}
+                              aria-label={`เลือกแบบประเมิน #${run.id} เพื่อรวมผล`}
+                              className="mt-1 h-5 w-5 shrink-0 accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
+                            />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="break-words font-semibold text-slate-900">{run.subject_name || "ไม่มีชื่อหัวข้อ"}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              #{run.id} · {run.employee_number || "-"} ·{" "}
+                              {new Date(run.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-base font-bold text-[#04418b]">
+                            {overallScore === null ? "-" : overallScore.toFixed(1)}
+                          </span>
+                        </div>
+                        <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 text-xs font-semibold ${statusClass}`}>
+                          {getStatusLabel(run.document_status)}
+                        </span>
+                        {run.overall_suggestion?.trim() && (
+                          <p className="line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-slate-600">{run.overall_suggestion.trim()}</p>
+                        )}
+                        <div className="flex gap-2">
+                          <Link to={`/preview/${run.id}`} className="btn-secondary text-xs">ดูสรุปผล</Link>
+                          {canCombine && (
+                            <button type="button" onClick={() => setEvaluationToDelete(run)} className="btn-danger text-xs">ลบ</button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="mt-4 hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
                   <table className="min-w-[1060px] w-full border-collapse text-left text-xs">
                     <thead className="bg-slate-50 text-slate-600">
                       <tr>
@@ -462,10 +517,10 @@ export default function VideoCaseDetailPage() {
                             <td className="sticky left-0 z-10 border-r border-slate-200 bg-white px-4 py-3">
                               <p className="font-semibold text-slate-900">{run.subject_name || "ไม่มีชื่อหัวข้อ"}</p>
                               <p className="mt-1 text-slate-500">แบบประเมิน #{run.id}</p>
-                              <p className="mt-1 text-slate-500">{new Date(run.created_at).toLocaleString()}</p>
+                              <p className="mt-1 text-slate-500">{new Date(run.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}</p>
                             </td>
                             <td className="border-l border-slate-200 px-3 py-3 text-center">
-                              <span className={`inline-flex rounded-full px-2 py-1 font-semibold ${statusClass}`}>
+                              <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 font-semibold ${statusClass}`}>
                                 {getStatusLabel(run.document_status)}
                               </span>
                             </td>
@@ -524,6 +579,7 @@ export default function VideoCaseDetailPage() {
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </section>
 

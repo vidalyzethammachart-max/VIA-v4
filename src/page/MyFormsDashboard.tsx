@@ -6,6 +6,7 @@ import MainNavbar from "../components/MainNavbar";
 import { useLanguage } from "../i18n/useLanguage";
 import { supabase } from "../lib/supabaseClient";
 import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
+import { isEvaluationStuck } from "../services/stuckEvaluationCore.js";
 
 const DOCUMENTS_BUCKET = "evaluation-documents";
 
@@ -32,7 +33,7 @@ export default function MyFormsDashboard() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeDownloadKey, setActiveDownloadKey] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | EvaluationItem["document_status"]>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "stuck" | EvaluationItem["document_status"]>("all");
   const [deleteTarget, setDeleteTarget] = useState<EvaluationItem | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const navigationState = location.state as
@@ -165,7 +166,9 @@ export default function MyFormsDashboard() {
 
   const completedPreviewCount = items.filter((item) => item.document_status === "ready").length;
   const filteredItems = items.filter((item) => {
-    const matchesStatus = statusFilter === "all" || item.document_status === statusFilter;
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "stuck" ? isEvaluationStuck(item) : item.document_status === statusFilter);
     const query = searchTerm.trim().toLowerCase();
     if (!query) {
       return matchesStatus;
@@ -222,35 +225,37 @@ export default function MyFormsDashboard() {
           </section>
         )}
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4">
           <div className="ui-hover-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-semibold text-slate-500">
               {t("myForms.totalForms")}
             </p>
-            <p className="mt-3 text-4xl font-bold text-slate-900">{items.length}</p>
-            <p className="mt-2 text-sm text-slate-500">{t("myForms.totalFormsDesc")}</p>
+            <p className="mt-3 text-3xl font-bold text-slate-900 md:text-4xl">{items.length}</p>
+            <p className="mt-2 hidden text-sm text-slate-500 sm:block">{t("myForms.totalFormsDesc")}</p>
           </div>
 
           <div className="ui-hover-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-semibold text-slate-500">
               {t("myForms.readyToPreview")}
             </p>
-            <p className="mt-3 text-4xl font-bold text-sky-600 dark:text-sky-400">
+            <p className="mt-3 text-3xl font-bold text-sky-600 md:text-4xl dark:text-sky-400">
               {completedPreviewCount}
             </p>
-            <p className="mt-2 text-sm text-slate-500">{t("myForms.readyToPreviewDesc")}</p>
+            <p className="mt-2 hidden text-sm text-slate-500 sm:block">{t("myForms.readyToPreviewDesc")}</p>
           </div>
 
-          <div className="ui-hover-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="ui-hover-card col-span-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-1">
             <p className="text-xs font-semibold text-slate-500">
               {t("myForms.quickAction")}
             </p>
-            <Link to="/form-submit" className="btn-primary mt-3 inline-flex">
-              {t("myForms.submitNewForm")}
-            </Link>
-            <Link to="/video-cases" className="btn-secondary mt-3 inline-flex">
-              Video cases
-            </Link>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link to="/form-submit" className="btn-primary inline-flex">
+                {t("myForms.submitNewForm")}
+              </Link>
+              <Link to="/video-cases" className="btn-secondary inline-flex">
+                {t("myForms.videoCases")}
+              </Link>
+            </div>
             <p className="mt-2 text-sm text-slate-500">{t("myForms.quickActionDesc")}</p>
           </div>
         </section>
@@ -269,11 +274,12 @@ export default function MyFormsDashboard() {
               />
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as "all" | EvaluationItem["document_status"])}
+                onChange={(e) => setStatusFilter(e.target.value as "all" | "stuck" | EvaluationItem["document_status"])}
                 className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#04418b]/30 focus:ring-4 focus:ring-[#04418b]/5"
               >
                 <option value="all">{t("myForms.allStatuses")}</option>
                 <option value="pending">{t("common.pending")}</option>
+                <option value="stuck">{t("myForms.stuckFilter")}</option>
                 <option value="ready">{t("common.ready")}</option>
                 <option value="failed">{t("common.failed")}</option>
               </select>
@@ -319,13 +325,13 @@ export default function MyFormsDashboard() {
                         {t("myForms.failed", { error: item.document_error || "-" })}
                       </p>
                     ) : item.document_status !== "ready" ? (
-                      <p className="mt-3 text-xs font-medium text-amber-600">
-                        {t("myForms.pendingPreview")}
+                      <p className={`mt-3 text-xs font-medium ${isEvaluationStuck(item) ? "text-red-600" : "text-amber-600"}`}>
+                        {isEvaluationStuck(item) ? t("myForms.stuckPreview") : t("myForms.pendingPreview")}
                       </p>
                     ) : null}
                   </div>
 
-                  <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                  <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:flex-row">
                     {item.document_status === "ready" && (item.pdf_storage_path || item.docx_storage_path) ? (
                       <>
                         <Link to={`/preview/${item.id}`} className="btn-primary text-center">
@@ -381,7 +387,7 @@ export default function MyFormsDashboard() {
                     ) : (
                       <>
                         <Link to={`/preview/${item.id}`} className="btn-secondary text-center">
-                          {t("myForms.trackStatus")}
+                          {isEvaluationStuck(item) ? t("myForms.stuckAction") : t("myForms.trackStatus")}
                         </Link>
                         <button
                           type="button"

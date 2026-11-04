@@ -30,21 +30,21 @@ export default function MainNavbar() {
 
           <div className="min-w-0 flex flex-1 flex-col gap-0.5 leading-none">
             <span
-              className={`text-xs font-semibold leading-tight ${
+              className={`hidden text-xs font-semibold leading-tight sm:block ${
                 isDark ? "text-white" : "text-primary"
               }`}
             >
               {t("navbar.brand")}
             </span>
             <h1
-              className={`text-base font-semibold leading-tight ${
+              className={`truncate text-sm font-semibold leading-tight sm:text-base ${
                 isDark ? "text-slate-100" : "text-slate-900"
               }`}
             >
               {t("navbar.title")}
             </h1>
             <p
-              className={`text-xs leading-tight ${
+              className={`hidden truncate text-xs leading-tight sm:block ${
                 isDark ? "text-slate-400" : "text-slate-500"
               }`}
             >

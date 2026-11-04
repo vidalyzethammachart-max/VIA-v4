@@ -145,7 +145,28 @@ export default function Dashboard() {
               </button>)}
             </div>
             {activities.length === 0 ? <p className="py-6 text-sm text-slate-500">{th ? "ยังไม่มีผลวิเคราะห์ประเภทนี้" : "No analyses of this type yet."}</p> : <>
-              <div className="overflow-x-auto">
+              <ul className="divide-y divide-slate-200 md:hidden dark:divide-slate-700">
+                {activities.slice(0, visibleCount).map(row => <li key={row.id} className="py-3 text-sm text-slate-700 dark:text-slate-200">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      {row.videoCaseId ? <Link to={`/video-cases/${row.videoCaseId}`} className="break-words font-semibold text-[#04418b] dark:text-sky-300">{row.title}</Link> : <span className="break-words font-semibold">{row.title}</span>}
+                      <p className="mt-1 text-xs text-slate-500">
+                        {row.kind === "aggregate" ? (th ? `ผลรวม ${row.sourceCount} รายการ` : `${row.sourceCount} combined`) : `${th ? "รายบุคคล" : "Individual"} ${row.id.replace("evaluation-", "#")}`}
+                        {" · "}{new Date(row.createdAt).toLocaleString(language === "th" ? "th-TH" : "en-US", { dateStyle: "short", timeStyle: "short" })}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-base font-bold">{row.average === null ? "—" : row.average.toFixed(2)}</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-500">{row.documentPath ? (th ? "พร้อมเปิด" : "Ready") : documentStatusLabel(row.documentStatus, th, row.createdAt)}</span>
+                    <div className="flex gap-2">
+                      <Link to={row.resultPath} className="btn-secondary whitespace-nowrap text-xs">{th ? "ดูผล" : "View result"}</Link>
+                      {row.documentPath && <Link to={row.documentPath} className="btn-primary whitespace-nowrap text-xs">PDF / DOCX</Link>}
+                    </div>
+                  </div>
+                </li>)}
+              </ul>
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[700px] text-left text-sm">
                   <thead className="border-b border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400"><tr>
                     {(th ? ["วิดีโอ / เคส", "ประเภท", "วันที่", "คะแนนเฉลี่ย", "เอกสาร", "เปิดดู"] : ["Video / case", "Type", "Date", "Average", "Document", "View"]).map(label => <th key={label} className="px-3 py-3 font-medium">{label}</th>)}
@@ -159,7 +180,7 @@ export default function Dashboard() {
                       <td className="px-3 py-3">{row.kind === "aggregate" ? (th ? `ผลรวม ${row.sourceCount} รายการ` : `${row.sourceCount} evaluations combined`) : (th ? "รายบุคคล" : "Individual")}</td>
                       <td className="px-3 py-3">{new Date(row.createdAt).toLocaleString(language === "th" ? "th-TH" : "en-US")}</td>
                       <td className="px-3 py-3 font-semibold">{row.average === null ? "—" : row.average.toFixed(2)}</td>
-                      <td className="px-3 py-3">{row.documentPath ? (th ? "พร้อมเปิด" : "Ready") : documentStatusLabel(row.documentStatus, th)}</td>
+                      <td className="px-3 py-3">{row.documentPath ? (th ? "พร้อมเปิด" : "Ready") : documentStatusLabel(row.documentStatus, th, row.createdAt)}</td>
                       <td className="px-3 py-3"><div className="flex flex-wrap gap-2">
                         <Link to={row.resultPath} className="btn-secondary whitespace-nowrap text-xs">{th ? "ดูผล" : "View result"}</Link>
                         {row.documentPath && <Link to={row.documentPath} className="btn-primary whitespace-nowrap text-xs">PDF / DOCX</Link>}

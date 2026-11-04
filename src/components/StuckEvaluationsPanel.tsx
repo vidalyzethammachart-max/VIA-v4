@@ -31,9 +31,9 @@ export default function StuckEvaluationsPanel() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (keepError = false) => {
     try {
-      setError(null);
+      if (!keepError) setError(null);
       setRows(await listStuckEvaluations());
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : t("admin.stuckLoadFailed"));
@@ -68,6 +68,8 @@ export default function StuckEvaluationsPanel() {
       await load();
     } catch (retryError) {
       setError(`#${row.evaluation_id}: ${retryError instanceof Error ? retryError.message : t("admin.retryFailed")}`);
+      // A refused retry may still have recorded the failure; refresh so the row shows it.
+      await load(true);
     } finally {
       setBusyId(null);
     }
@@ -91,6 +93,7 @@ export default function StuckEvaluationsPanel() {
       return (
         <span className="text-red-700">
           {row.failure_http_status === 429 ? t("admin.failedQuota") : t("admin.failedOther")}
+          {row.failure_http_status && row.failure_http_status !== 429 ? ` (HTTP ${row.failure_http_status})` : ""}
           {row.failure_execution_id ? ` · #${row.failure_execution_id}` : ""}
         </span>
       );
@@ -198,6 +201,9 @@ export default function StuckEvaluationsPanel() {
                         #{row.evaluation_id}
                         {row.order_number ? ` · ${row.order_number}` : ""}
                       </p>
+                      {row.document_status === "failed" && row.document_error && (
+                        <p className="mt-1 line-clamp-2 text-slate-500">{row.document_error}</p>
+                      )}
                       {row.retry_error && <p className="mt-1 text-red-700">{row.retry_error}</p>}
                     </td>
                     <td className="px-3 py-3 text-slate-700">{row.owner_email || "-"}</td>

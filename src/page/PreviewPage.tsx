@@ -3,9 +3,12 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from "react-route
 
 import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
+import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
 import { supabase } from "../lib/supabaseClient";
 import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
+import { isEvaluationStuck } from "../services/stuckEvaluationCore.js";
+import { getStuckEvaluationReport, reportStuckEvaluation } from "../services/stuckEvaluationService";
 
 const DOCUMENTS_BUCKET = "evaluation-documents";
 
@@ -44,8 +47,46 @@ export default function PreviewPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const { user: authUser, role: authRole } = useAuthRole();
+  const [stuckReported, setStuckReported] = useState<boolean | null>(null);
+  const [reportingStuck, setReportingStuck] = useState(false);
+  const [stuckReportError, setStuckReportError] = useState<string | null>(null);
+
   const dispatchError = (location.state as { dispatchError?: string } | null)?.dispatchError;
   const hasStorageArtifact = Boolean(record?.pdf_storage_path || record?.docx_storage_path);
+  const isStuck = isEvaluationStuck(record);
+  const isAdmin = authRole === "admin";
+  const canReportStuck = Boolean(record && authUser && (record.user_id === authUser.id || isAdmin));
+
+  useEffect(() => {
+    if (!isStuck || !canReportStuck || !record) return;
+    let cancelled = false;
+    getStuckEvaluationReport(record.id)
+      .then((report) => {
+        if (!cancelled) setStuckReported(report.reported);
+      })
+      .catch(() => {
+        // The notify button still works; the server refuses duplicate reports.
+        if (!cancelled) setStuckReported(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isStuck, canReportStuck, record?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleReportStuck = async () => {
+    if (!record) return;
+    try {
+      setReportingStuck(true);
+      setStuckReportError(null);
+      await reportStuckEvaluation(record.id);
+      setStuckReported(true);
+    } catch (error) {
+      setStuckReportError(error instanceof Error ? error.message : t("preview.stuckReportFailed"));
+    } finally {
+      setReportingStuck(false);
+    }
+  };
 
   useEffect(() => {
     const loadPreview = async () => {
@@ -286,8 +327,38 @@ export default function PreviewPage() {
           </section>
         ) : record?.document_status !== "ready" || artifactLoading || !hasStorageArtifact ? (
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-8 shadow-sm">
-            <h3 className="text-base font-semibold text-amber-900">{t("preview.processingTitle")}</h3>
-            <p className="mt-2 text-sm text-amber-800">{t("preview.processingDesc")}</p>
+            <h3 className="text-base font-semibold text-amber-900">
+              {isStuck ? t("preview.stuckTitle") : t("preview.processingTitle")}
+            </h3>
+            <p className="mt-2 text-sm text-amber-800">
+              {isStuck ? t("preview.stuckDesc") : t("preview.processingDesc")}
+            </p>
+            {isStuck && canReportStuck && (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                {stuckReported ? (
+                  <p className="text-sm font-semibold text-amber-900">{t("preview.stuckReported")}</p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleReportStuck()}
+                    disabled={reportingStuck || stuckReported === null}
+                    className="btn-primary text-sm"
+                  >
+                    {reportingStuck ? t("preview.stuckReporting") : t("preview.stuckReport")}
+                  </button>
+                )}
+                {isAdmin && (
+                  <Link to="/admin" className="btn-secondary text-sm">
+                    {t("preview.stuckAdminList")}
+                  </Link>
+                )}
+              </div>
+            )}
+            {stuckReportError && (
+              <p role="alert" className="mt-3 text-sm text-red-700">
+                {stuckReportError}
+              </p>
+            )}
             {(record?.document_error || dispatchError) && (
               <p role="alert" className="mt-3 text-sm text-amber-900">
                 {record?.document_error || dispatchError}

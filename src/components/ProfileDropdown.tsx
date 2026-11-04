@@ -221,6 +221,7 @@ export default function ProfileDropdown() {
               </li>
             )}
             {isAdmin && (
+              <>
               <li>
                 <MenuItem
                   label={t("common.adminDashboard")}
@@ -233,6 +234,19 @@ export default function ProfileDropdown() {
                   }
                 />
               </li>
+              <li>
+                <MenuItem
+                  label={t("admin.stuckTitle")}
+                  isDark={isDark}
+                  onClick={() => closeAndNavigate("/admin/stuck-jobs")}
+                  icon={
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m5-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  }
+                />
+              </li>
+              </>
             )}
             <hr className={`my-1 ${isDark ? "border-slate-700" : "border-slate-200"}`} />
             <li>

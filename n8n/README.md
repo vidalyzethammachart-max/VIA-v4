@@ -134,3 +134,21 @@ Original code SHA-256 (exact `jsCode` strings from the baseline export):
 | Transform VIA Payload | `8b71ce1b55cc7521faa9818de79436fe9da9f7823f5ca83d0f4561de706b9583` |
 | Assemble Final Evaluation Context | `c2bcbfbcf3659657d0f3e0dbc5eec9a7c051470697360c5db7aec707bd8288b0` |
 | Build Final AppScript Body | `5c79c599f4c363a16b31b8d09419a4c5964e124f71d8713760faf7735112420e` |
+
+## Failure reporting and admin retry (2026-11-05)
+
+`workflows/via-error-reporter.json` is the Error Workflow for `VIA-v4`. It holds
+no credentials: after import, set the HTTP node to a **Header Auth** credential
+with header name `x-callback-secret` and the same value as the Supabase secret
+`DOCUMENT_CALLBACK_SECRET`. Then in `VIA-v4` → Settings → Error workflow, select
+`VIA-v4 Error Reporter`.
+
+On any failed production execution it posts the execution ID, failed node and
+error to the `n8n-failure-callback` Edge Function. That function reads the
+execution through the n8n public API (`N8N_API_URL`, `N8N_API_KEY` secrets) to find
+the evaluation ID, marks the evaluation failed and records the failure. Admins
+can then press "ลองประเมินใหม่" on `/admin/stuck-jobs`, which calls
+`retry-n8n-execution` → `POST /api/v1/executions/{id}/retry` with
+`loadWorkflow: true`. Retry is limited to quota (HTTP 429) failures and to one
+retry per failed execution; older stuck jobs can be retried by entering their
+execution ID, which is checked against the evaluation before retrying.

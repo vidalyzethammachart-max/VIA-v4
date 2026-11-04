@@ -5,6 +5,7 @@ import { useLanguage } from "../i18n/useLanguage";
 import {
   listStuckEvaluations,
   resolveStuckEvaluationReport,
+  retryEvaluationExecution,
   type StuckEvaluationRow,
 } from "../services/stuckEvaluationService";
 
@@ -12,13 +13,22 @@ function minutesSince(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 60000));
 }
 
-// Admin view of evaluations pending for 30+ minutes. Recovery itself stays manual in n8n.
+const canRetryRecorded = (row: StuckEvaluationRow) =>
+  row.document_status === "failed" &&
+  row.failure_http_status === 429 &&
+  !row.retry_claimed_at &&
+  !row.retry_execution_id;
+
+// Admin view of stuck or failed evaluations. Retry reruns the same n8n execution
+// with the saved workflow, and only for quota (429) failures.
 export default function StuckEvaluationsPanel() {
   const { t } = useLanguage();
   const [rows, setRows] = useState<StuckEvaluationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [executionInputs, setExecutionInputs] = useState<Record<number, string>>({});
 
   const load = useCallback(async () => {
     try {
@@ -47,7 +57,23 @@ export default function StuckEvaluationsPanel() {
     }
   };
 
+  const retry = async (row: StuckEvaluationRow, executionId?: number) => {
+    try {
+      setBusyId(row.evaluation_id);
+      setError(null);
+      setNotice(null);
+      const newExecution = await retryEvaluationExecution(row.evaluation_id, executionId);
+      setNotice(t("admin.retryStarted", { id: String(row.evaluation_id), execution: String(newExecution ?? "-") }));
+      await load();
+    } catch (retryError) {
+      setError(`#${row.evaluation_id}: ${retryError instanceof Error ? retryError.message : t("admin.retryFailed")}`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const reportedCount = rows.filter((row) => row.report_id).length;
+  const quotaCount = rows.filter(canRetryRecorded).length;
 
   const formatWaiting = (minutes: number) => {
     if (minutes < 60) return t("admin.stuckMinutes", { minutes: String(minutes) });
@@ -55,6 +81,71 @@ export default function StuckEvaluationsPanel() {
     if (hours < 24) return t("admin.stuckHours", { hours: String(hours), minutes: String(minutes % 60) });
     return t("admin.stuckDays", { days: String(Math.floor(hours / 24)), hours: String(hours % 24) });
   };
+
+  const statusCell = (row: StuckEvaluationRow) => {
+    if (row.retry_execution_id && row.document_status === "pending") {
+      return <span className="text-sky-700">{t("admin.retryRunning", { execution: String(row.retry_execution_id) })}</span>;
+    }
+    if (row.document_status === "failed") {
+      return (
+        <span className="text-red-700">
+          {row.failure_http_status === 429 ? t("admin.failedQuota") : t("admin.failedOther")}
+          {row.failure_execution_id ? ` · #${row.failure_execution_id}` : ""}
+        </span>
+      );
+    }
+    return <span>{formatWaiting(minutesSince(row.created_at))}</span>;
+  };
+
+  const actions = (row: StuckEvaluationRow) => (
+    <div className="flex flex-wrap items-center gap-2">
+      <Link to={`/preview/${row.evaluation_id}`} className="btn-secondary text-xs">
+        {t("admin.stuckOpen")}
+      </Link>
+      {canRetryRecorded(row) && (
+        <button
+          type="button"
+          onClick={() => void retry(row)}
+          disabled={busyId === row.evaluation_id}
+          className="btn-primary text-xs"
+        >
+          {busyId === row.evaluation_id ? t("admin.retrying") : t("admin.retry")}
+        </button>
+      )}
+      {row.document_status === "pending" && !row.retry_execution_id && (
+        <span className="flex items-center gap-1">
+          <input
+            inputMode="numeric"
+            value={executionInputs[row.evaluation_id] ?? ""}
+            onChange={(event) =>
+              setExecutionInputs((current) => ({ ...current, [row.evaluation_id]: event.target.value.replace(/\D/g, "") }))
+            }
+            placeholder={t("admin.executionPlaceholder")}
+            aria-label={t("admin.executionPlaceholder")}
+            className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+          />
+          <button
+            type="button"
+            onClick={() => void retry(row, Number(executionInputs[row.evaluation_id]))}
+            disabled={busyId === row.evaluation_id || !executionInputs[row.evaluation_id]}
+            className="btn-secondary text-xs"
+          >
+            {t("admin.retry")}
+          </button>
+        </span>
+      )}
+      {row.report_id && (
+        <button
+          type="button"
+          onClick={() => void resolve(row.evaluation_id)}
+          disabled={busyId === row.evaluation_id}
+          className="btn-secondary text-xs"
+        >
+          {t("admin.stuckResolve")}
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -65,7 +156,9 @@ export default function StuckEvaluationsPanel() {
             {!error && ` (${rows.length})`}
           </h2>
           {!error && (
-            <p className="mt-1 text-sm text-slate-500">{t("admin.stuckDesc", { reported: String(reportedCount) })}</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {t("admin.stuckDesc", { reported: String(reportedCount) })} {t("admin.retryDesc", { quota: String(quotaCount) })}
+            </p>
           )}
         </div>
         <button type="button" onClick={() => void load()} className="btn-secondary text-xs">
@@ -73,6 +166,7 @@ export default function StuckEvaluationsPanel() {
         </button>
       </div>
 
+      {notice && <p role="status" className="mt-3 text-sm text-emerald-700">{notice}</p>}
       {error && (
         <p role="alert" className="mt-3 text-sm text-red-700">
           {error}
@@ -84,66 +178,70 @@ export default function StuckEvaluationsPanel() {
       ) : error && rows.length === 0 ? null : rows.length === 0 ? (
         <p className="mt-4 text-sm text-slate-500">{t("admin.stuckEmpty")}</p>
       ) : (
-        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full min-w-[860px] text-left text-xs">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-3 py-3 font-semibold">{t("admin.stuckEvaluation")}</th>
-                <th className="px-3 py-3 font-semibold">{t("admin.stuckOwner")}</th>
-                <th className="px-3 py-3 font-semibold">{t("admin.stuckWaiting")}</th>
-                <th className="px-3 py-3 font-semibold">{t("admin.stuckReport")}</th>
-                <th className="px-3 py-3 font-semibold">{t("admin.actions")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {rows.map((row) => (
-                <tr key={row.evaluation_id} className="align-top">
-                  <td className="px-3 py-3">
-                    <p className="font-semibold text-slate-900">{row.subject_name || "-"}</p>
-                    <p className="mt-1 text-slate-500">
-                      #{row.evaluation_id}
-                      {row.order_number ? ` · ${row.order_number}` : ""}
-                    </p>
-                    {row.document_error && <p className="mt-1 text-red-700">{row.document_error}</p>}
-                  </td>
-                  <td className="px-3 py-3 text-slate-700">{row.owner_email || "-"}</td>
-                  <td className="px-3 py-3 text-slate-700">
-                    {row.document_status === "pending" ? formatWaiting(minutesSince(row.created_at)) : row.document_status}
-                  </td>
-                  <td className="px-3 py-3 text-slate-700">
-                    {row.report_id ? (
-                      <>
-                        <span className="inline-flex rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700">
-                          {t("admin.stuckReported")}
-                        </span>
-                        {row.report_note && <p className="mt-1">{row.report_note}</p>}
-                      </>
-                    ) : (
-                      <span className="text-slate-500">{t("admin.stuckNotReported")}</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <Link to={`/preview/${row.evaluation_id}`} className="btn-secondary text-xs">
-                        {t("admin.stuckOpen")}
-                      </Link>
-                      {row.report_id && (
-                        <button
-                          type="button"
-                          onClick={() => void resolve(row.evaluation_id)}
-                          disabled={busyId === row.evaluation_id}
-                          className="btn-secondary text-xs"
-                        >
-                          {t("admin.stuckResolve")}
-                        </button>
-                      )}
-                    </div>
-                  </td>
+        <>
+          <ul className="mt-4 divide-y divide-slate-200 rounded-xl border border-slate-200 md:hidden">
+            {rows.map((row) => (
+              <li key={row.evaluation_id} className="space-y-2 p-4 text-sm">
+                <p className="break-words font-semibold text-slate-900">{row.subject_name || "-"}</p>
+                <p className="text-xs text-slate-500">
+                  #{row.evaluation_id}
+                  {row.order_number ? ` · ${row.order_number}` : ""} · {row.owner_email || "-"}
+                </p>
+                <p className="text-xs">{statusCell(row)}</p>
+                {row.report_id && (
+                  <p className="text-xs text-amber-700">
+                    {t("admin.stuckReported")}
+                    {row.report_note ? `: ${row.report_note}` : ""}
+                  </p>
+                )}
+                {row.retry_error && <p className="text-xs text-red-700">{row.retry_error}</p>}
+                {actions(row)}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4 hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
+            <table className="w-full min-w-[960px] text-left text-xs">
+              <thead className="bg-slate-50 text-slate-600">
+                <tr>
+                  <th className="px-3 py-3 font-semibold">{t("admin.stuckEvaluation")}</th>
+                  <th className="px-3 py-3 font-semibold">{t("admin.stuckOwner")}</th>
+                  <th className="px-3 py-3 font-semibold">{t("admin.stuckWaiting")}</th>
+                  <th className="px-3 py-3 font-semibold">{t("admin.stuckReport")}</th>
+                  <th className="px-3 py-3 font-semibold">{t("admin.actions")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {rows.map((row) => (
+                  <tr key={row.evaluation_id} className="align-top">
+                    <td className="px-3 py-3">
+                      <p className="font-semibold text-slate-900">{row.subject_name || "-"}</p>
+                      <p className="mt-1 text-slate-500">
+                        #{row.evaluation_id}
+                        {row.order_number ? ` · ${row.order_number}` : ""}
+                      </p>
+                      {row.retry_error && <p className="mt-1 text-red-700">{row.retry_error}</p>}
+                    </td>
+                    <td className="px-3 py-3 text-slate-700">{row.owner_email || "-"}</td>
+                    <td className="px-3 py-3 text-slate-700">{statusCell(row)}</td>
+                    <td className="px-3 py-3 text-slate-700">
+                      {row.report_id ? (
+                        <>
+                          <span className="inline-flex rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700">
+                            {t("admin.stuckReported")}
+                          </span>
+                          {row.report_note && <p className="mt-1">{row.report_note}</p>}
+                        </>
+                      ) : (
+                        <span className="text-slate-500">{t("admin.stuckNotReported")}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">{actions(row)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </section>
   );

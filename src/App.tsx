@@ -7,6 +7,7 @@ import Register from "./page/Register";
 import Profile from "./page/Profile";
 import Dashboard from "./page/Dashboard";
 import AdminDashboard from "./page/AdminDashboard";
+import AdminStuckJobsPage from "./page/AdminStuckJobsPage";
 import RoleRequestsPage from "./page/RoleRequestsPage";
 import VideoCasesPage from "./page/VideoCasesPage";
 import VideoCaseDetailPage from "./page/VideoCaseDetailPage";
@@ -147,6 +148,14 @@ export default function App() {
             element={
               <ProtectedRoute requiredRole="admin">
                 <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/stuck-jobs"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <AdminStuckJobsPage />
               </ProtectedRoute>
             }
           />

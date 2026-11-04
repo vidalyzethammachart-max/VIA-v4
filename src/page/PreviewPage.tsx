@@ -322,7 +322,9 @@ export default function PreviewPage() {
           <section className="rounded-2xl border border-red-200 bg-red-50 p-8 shadow-sm">
             <h3 className="text-base font-semibold text-red-800">{t("preview.generationFailed")}</h3>
             <p className="mt-2 text-sm text-red-700">
-              {record.document_error || t("preview.generatorNoDoc")}
+              {/\(HTTP 429\)/.test(record.document_error || "")
+                ? t("myForms.failedQuota")
+                : record.document_error || t("preview.generatorNoDoc")}
             </p>
           </section>
         ) : record?.document_status !== "ready" || artifactLoading || !hasStorageArtifact ? (

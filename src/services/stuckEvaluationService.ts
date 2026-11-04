@@ -12,6 +12,12 @@ export type StuckEvaluationRow = {
   report_id: string | null;
   reported_at: string | null;
   report_note: string | null;
+  failure_execution_id: number | null;
+  failure_http_status: number | null;
+  failure_node: string | null;
+  retry_claimed_at: string | null;
+  retry_execution_id: number | null;
+  retry_error: string | null;
 };
 
 export async function reportStuckEvaluation(evaluationId: number, note?: string): Promise<void> {
@@ -37,4 +43,29 @@ export async function listStuckEvaluations(): Promise<StuckEvaluationRow[]> {
 export async function resolveStuckEvaluationReport(evaluationId: number): Promise<void> {
   const { error } = await supabase.rpc("resolve_stuck_evaluation_report", { p_evaluation_id: evaluationId });
   if (error) throw new Error(error.message);
+}
+
+async function functionErrorMessage(error: unknown): Promise<string> {
+  const context = typeof error === "object" && error !== null ? Reflect.get(error, "context") : null;
+  if (context instanceof Response) {
+    try {
+      const payload = await context.clone().json();
+      if (typeof payload?.error === "string" && payload.error) return payload.error;
+    } catch {
+      // Fall through to the generic message.
+    }
+  }
+  return error instanceof Error ? error.message : "Retry failed.";
+}
+
+// Admin only: rerun a quota-failed n8n execution. executionId is needed only for
+// older stuck jobs whose failure was never reported back by n8n.
+export async function retryEvaluationExecution(evaluationId: number, executionId?: number): Promise<number | null> {
+  const { data, error } = await supabase.functions.invoke<{ ok: boolean; retry_execution_id?: number | null; error?: string }>(
+    "retry-n8n-execution",
+    { body: { evaluation_id: evaluationId, ...(executionId ? { execution_id: executionId } : {}) } },
+  );
+  if (error) throw new Error(await functionErrorMessage(error));
+  if (!data?.ok) throw new Error(data?.error || "Retry failed.");
+  return data.retry_execution_id ?? null;
 }

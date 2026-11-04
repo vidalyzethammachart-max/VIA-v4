@@ -381,3 +381,15 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/document-artifact-url/deno.json"
 entrypoint = "./functions/document-artifact-url/index.ts"
+
+[functions.n8n-failure-callback]
+enabled = true
+verify_jwt = false
+import_map = "./functions/n8n-failure-callback/deno.json"
+entrypoint = "./functions/n8n-failure-callback/index.ts"
+
+[functions.retry-n8n-execution]
+enabled = true
+verify_jwt = true
+import_map = "./functions/retry-n8n-execution/deno.json"
+entrypoint = "./functions/retry-n8n-execution/index.ts"

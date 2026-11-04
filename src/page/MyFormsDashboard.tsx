@@ -322,7 +322,9 @@ export default function MyFormsDashboard() {
                     </p>
                     {item.document_status === "failed" ? (
                       <p className="mt-3 text-xs font-medium text-red-600">
-                        {t("myForms.failed", { error: item.document_error || "-" })}
+                        {/\(HTTP 429\)/.test(item.document_error || "")
+                          ? t("myForms.failedQuota")
+                          : t("myForms.failed", { error: item.document_error || "-" })}
                       </p>
                     ) : item.document_status !== "ready" ? (
                       <p className={`mt-3 text-xs font-medium ${isEvaluationStuck(item) ? "text-red-600" : "text-amber-600"}`}>

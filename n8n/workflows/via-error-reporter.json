@@ -1,0 +1,40 @@
+{
+  "name": "VIA-v4 Error Reporter",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "6f1d2c7e-1a51-4c55-9a0e-6e2a3b1c0001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vpajxuomerowvxwfezik.supabase.co/functions/v1/n8n-failure-callback",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ execution: { id: $json.execution.id, lastNodeExecuted: $json.execution.lastNodeExecuted, error: { message: $json.execution.error?.message, description: $json.execution.error?.description, httpCode: $json.execution.error?.httpCode } }, workflow: { id: $json.workflow.id, name: $json.workflow.name } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "6f1d2c7e-1a51-4c55-9a0e-6e2a3b1c0002",
+      "name": "Report Failure To VIA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [[{ "node": "Report Failure To VIA", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import MainNavbar from "../components/MainNavbar";
-import StuckEvaluationsPanel from "../components/StuckEvaluationsPanel";
 import { useLanguage } from "../i18n/useLanguage";
 import { normalizeRole, roleAtLeast, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
@@ -409,7 +408,15 @@ export default function AdminDashboard() {
           )}
         </section>
 
-        <StuckEvaluationsPanel />
+        <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">{t("admin.stuckTitle")}</h2>
+            <p className="mt-1 text-sm text-slate-500">{t("admin.stuckLinkDesc")}</p>
+          </div>
+          <Link to="/admin/stuck-jobs" className="btn-primary text-center">
+            {t("admin.stuckOpenPage")}
+          </Link>
+        </section>
       </div>
 
       {deleteTarget && (

@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import MainNavbar from "../components/MainNavbar";
 import { SectionCard } from "../components/SectionCard";
 import { getLikertLabels, getSections, type LikertValue } from "../config/sections";
+import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
 import { normalizeRole, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
@@ -224,7 +225,10 @@ function FormSubmit() {
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [submitErrorMessage, setSubmitErrorMessage] = useState<string | null>(null);
   const [submitSuccessMessage, setSubmitSuccessMessage] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<AppRole>("user");
+  // ProtectedRoute has already loaded the role; starting from it avoids flashing the
+  // "need editor access" card while the profile query below is still in flight.
+  const { role: authRole } = useAuthRole();
+  const [userRole, setUserRole] = useState<AppRole>(authRole ?? "user");
   const [employeeNumber, setEmployeeNumber] = useState<string | null>(null);
   const [isRequestingRole, setIsRequestingRole] = useState(false);
   const [roleRequestMessage, setRoleRequestMessage] = useState<string | null>(null);

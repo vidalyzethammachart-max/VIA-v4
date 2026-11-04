@@ -35,7 +35,7 @@ export default function Home() {
           <div className="relative mx-auto grid min-h-[calc(100vh-96px)] max-w-7xl grid-cols-1 items-center gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:py-16">
             <div className="max-w-3xl">
 
-              <h1 className="text-3xl font-bold leading-tight text-slate-950 sm:text-4xl lg:text-5xl">
+              <h1 className="text-3xl font-bold leading-tight text-slate-950 dark:text-slate-50 sm:text-4xl lg:text-5xl">
                 {t("navbar.title")}
               </h1>
               <p className="mt-4 max-w-2xl text-base font-medium leading-7 text-[#04418b] sm:text-lg">
@@ -53,7 +53,7 @@ export default function Home() {
                     className={
                       action.variant === "primary"
                         ? "ui-hover-button inline-flex min-h-12 items-center justify-center rounded-lg border border-[#04418b] bg-[#04418b] px-6 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-[#03326a]"
-                        : "ui-hover-button inline-flex min-h-12 items-center justify-center rounded-lg border border-[#04418b]/30 bg-white px-6 py-3 text-center text-sm font-semibold text-[#04418b] shadow-sm hover:bg-[#04418b]/5"
+                        : "ui-hover-button inline-flex min-h-12 items-center justify-center rounded-lg border border-[#04418b]/30 bg-white px-6 py-3 text-center text-sm font-semibold text-[#04418b] shadow-sm hover:bg-[#04418b]/5 dark:border-sky-400/40 dark:text-sky-300 dark:hover:bg-sky-400/10"
                     }
                   >
                     {t(action.title)}

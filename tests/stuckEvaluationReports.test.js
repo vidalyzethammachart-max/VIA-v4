@@ -6,7 +6,7 @@ import { PGlite } from "@electric-sql/pglite";
 const owner = "00000000-0000-4000-8000-000000000001";
 const other = "00000000-0000-4000-8000-000000000002";
 const admin = "00000000-0000-4000-8000-000000000003";
-const migration = new URL("../supabase/migrations/20261104090000_stuck_evaluation_reports.sql", import.meta.url);
+const migration = new URL("../supabase/migrations/20261104003925_stuck_evaluation_reports.sql", import.meta.url);
 
 async function database() {
   const db = new PGlite();

@@ -49,6 +49,13 @@ export default function StuckEvaluationsPanel() {
 
   const reportedCount = rows.filter((row) => row.report_id).length;
 
+  const formatWaiting = (minutes: number) => {
+    if (minutes < 60) return t("admin.stuckMinutes", { minutes: String(minutes) });
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return t("admin.stuckHours", { hours: String(hours), minutes: String(minutes % 60) });
+    return t("admin.stuckDays", { days: String(Math.floor(hours / 24)), hours: String(hours % 24) });
+  };
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -101,9 +108,7 @@ export default function StuckEvaluationsPanel() {
                   </td>
                   <td className="px-3 py-3 text-slate-700">{row.owner_email || "-"}</td>
                   <td className="px-3 py-3 text-slate-700">
-                    {row.document_status === "pending"
-                      ? t("admin.stuckMinutes", { minutes: String(minutesSince(row.created_at)) })
-                      : row.document_status}
+                    {row.document_status === "pending" ? formatWaiting(minutesSince(row.created_at)) : row.document_status}
                   </td>
                   <td className="px-3 py-3 text-slate-700">
                     {row.report_id ? (

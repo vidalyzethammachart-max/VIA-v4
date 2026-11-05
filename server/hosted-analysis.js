@@ -7,11 +7,14 @@ import { requireAnalysisAccess } from './analysisControls.js';
 import { analyzeVideoFromUrl } from './videoAnalysisCore.js';
 import { getGeminiConfig } from './geminiAnalysis.js';
 
+const HOSTED_MODELS = new Set(['gemini-2.5-flash', 'gemini-3.8-flash']);
+
 function validateConfiguration() {
   if (process.env.VIDEO_ANALYSIS_PROVIDER?.trim() !== 'gemini') throw new Error('Hosted analysis requires provider gemini.');
   if (!process.env.ANALYSIS_API_TOKEN?.trim()) throw new Error('Missing ANALYSIS_API_TOKEN.');
   if (process.env.VIDEO_ALLOW_LOCAL_TEST_URLS !== 'false') throw new Error('VIDEO_ALLOW_LOCAL_TEST_URLS must be false.');
-  if (getGeminiConfig().model !== 'gemini-2.5-flash') throw new Error('Hosted analysis requires gemini-2.5-flash.');
+  // gemini-3.8-flash is for keys that Google no longer lets use gemini-2.5-flash.
+  if (!HOSTED_MODELS.has(getGeminiConfig().model)) throw new Error(`Hosted analysis requires one of: ${[...HOSTED_MODELS].join(', ')}.`);
   if (!process.env.VIDEO_ALLOWED_HOSTS?.trim() && !process.env.R2_ACCOUNT_ID?.trim()) throw new Error('Missing allowed video hosts.');
 }
 
@@ -62,7 +65,7 @@ export async function startHostedAnalysisServer({ port = Number(process.env.PORT
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   startHostedAnalysisServer().then(server => {
-    console.log(`[hosted-analysis] Gemini gemini-2.5-flash listening on ${server.address().port}`);
+    console.log(`[hosted-analysis] Gemini ${getGeminiConfig().model} listening on ${server.address().port}`);
     process.on('SIGTERM', () => server.close(() => process.exit(0)));
   }).catch(() => {
     console.error('[hosted-analysis] Startup failed. Check provider, model, secrets, allowed hosts and port.');

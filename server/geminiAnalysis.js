@@ -28,6 +28,24 @@ async function describeServerError(response) {
   return `HTTP ${response.status}${status ? ` ${status.replace(/[^A-Z_]/g, '').slice(0, 40)}` : ''}${message ? `: ${message}` : ''}`;
 }
 
+// For rejected requests keep only known-safe hints (Gemini status, model and quota
+// names, limits); the free-text message is not passed on.
+async function describeClientError(response) {
+  let status = '', message = '';
+  try {
+    const payload = await response.json();
+    status = typeof payload?.error?.status === 'string' ? payload.error.status.replace(/[^A-Z_]/g, '').slice(0, 40) : '';
+    message = typeof payload?.error?.message === 'string' ? payload.error.message : '';
+  } catch { /* not JSON */ }
+  const hints = [...new Set([
+    ...(message.match(/\bmodels\/[a-z0-9.-]{1,60}/g) || []),
+    ...(message.match(/\bgenerativelanguage\.googleapis\.com\/[a-z_]{1,80}/g) || []),
+    ...(message.match(/\blimit: \d{1,9}/g) || []),
+    ...(message.match(/no longer available to new users|not found|free tier/gi) || []).map(text => text.toLowerCase()),
+  ])].slice(0, 6);
+  return `HTTP ${response.status}${status ? ` ${status}` : ''}${hints.length ? `: ${hints.join('; ')}` : ''}`;
+}
+
 function describeTransportError(error) {
   const code = [error?.cause?.code, error?.code].find(value => typeof value === 'string' && /^[A-Z0-9_]{2,40}$/.test(value));
   return `network error ${code || error?.name || 'unknown'}`;
@@ -74,7 +92,9 @@ export async function generateGeminiAnalysis({ prompt, frames = [], audio = null
     if (response.status >= 500) throw unknownOutcome(false, await describeServerError(response));
     if (!response.ok) {
       const code = ({ 401: 'ai_auth_failed', 403: 'ai_auth_failed', 402: 'ai_billing_required', 429: 'ai_quota_exceeded' })[response.status] || 'ai_request_rejected';
-      const error = new Error(`Gemini request failed (HTTP ${response.status}). ${code}. Check API key, model access, project quota and billing.`);
+      const detail = await describeClientError(response);
+      console.error(`[gemini] request rejected: ${code} ${detail}`);
+      const error = new Error(`Gemini request failed (HTTP ${response.status}). ${code} (${detail}). Check API key, model access, project quota and billing.`);
       error.code = code;
       error.status = [402, 429].includes(response.status) ? 503 : 502;
       throw error;

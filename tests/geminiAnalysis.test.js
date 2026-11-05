@@ -148,6 +148,20 @@ test('Gemini server errors report the HTTP status and provider message without p
   });
 });
 
+test('Gemini client errors include the provider status and message without private detail', async t => {
+  await setup(t);
+  t.mock.method(console, 'error', () => {});
+  t.mock.method(globalThis, 'fetch', async () => Response.json(
+    { error: { code: 404, status: 'NOT_FOUND', message: 'This model models/gemini-2.5-flash is no longer available to new users. key=private-test-key' } },
+    { status: 404 }));
+  await assert.rejects(generateVideoAnalysis({ prompt: 'missing model' }), error => {
+    assert.equal(error.code, 'ai_request_rejected');
+    assert.match(error.message, /HTTP 404 NOT_FOUND: models\/gemini-2.5-flash; no longer available to new users/);
+    assert.doesNotMatch(error.message, /private-test-key/);
+    return true;
+  });
+});
+
 test('Gemini missing audio is explicit and the aggregate step still uses its existing provider', async t => {
   await setup(t);
   t.mock.method(globalThis, 'fetch', async (_url, options) => {

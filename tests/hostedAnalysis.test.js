@@ -139,3 +139,10 @@ test('hosted startup fails closed on missing auth, unsafe sources or another pro
   delete process.env.R2_ACCOUNT_ID;
   await assert.rejects(startHostedAnalysisServer({ port: 0 }), /allowed video hosts/);
 });
+
+test('hosted service accepts gemini-3.8-flash for keys that cannot use gemini-2.5-flash', async t => {
+  configure(t);
+  process.env.GEMINI_MODEL = 'gemini-3.8-flash';
+  const server = await startHostedAnalysisServer({ port: 0 });
+  await new Promise(resolve => server.close(resolve));
+});

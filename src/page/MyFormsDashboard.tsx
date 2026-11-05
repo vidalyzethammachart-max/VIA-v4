@@ -6,6 +6,7 @@ import MainNavbar from "../components/MainNavbar";
 import { useLanguage } from "../i18n/useLanguage";
 import { supabase } from "../lib/supabaseClient";
 import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
+import { collapseSupersededEvaluations } from "../services/evaluationSupersedeCore.js";
 import { isEvaluationStuck } from "../services/stuckEvaluationCore.js";
 
 const DOCUMENTS_BUCKET = "evaluation-documents";
@@ -75,7 +76,8 @@ export default function MyFormsDashboard() {
         throw error;
       }
 
-      setItems((data ?? []) as EvaluationItem[]);
+      // A resubmitted case replaces its stuck copy, so each case shows once.
+      setItems(collapseSupersededEvaluations((data ?? []) as EvaluationItem[]));
     } catch (error) {
       console.error("Failed to load my forms:", error);
       setErrorMessage(error instanceof Error ? error.message : t("myForms.loadFailed"));

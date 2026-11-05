@@ -7,6 +7,7 @@ import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
 import { supabase } from "../lib/supabaseClient";
 import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
+import { findSupersedingEvaluation } from "../services/evaluationSupersedeCore.js";
 import { isEvaluationStuck } from "../services/stuckEvaluationCore.js";
 import { getStuckEvaluationReport, reportStuckEvaluation } from "../services/stuckEvaluationService";
 
@@ -114,12 +115,28 @@ export default function PreviewPage() {
         return;
       }
 
-      setRecord(data as PreviewRecord);
+      const loaded = data as PreviewRecord;
+      // A stuck evaluation whose case was resubmitted and finished opens the finished copy.
+      if (loaded.document_status !== "ready" && loaded.user_id && loaded.video_case_id) {
+        const { data: siblings } = await supabase
+          .from("evaluations")
+          .select("id, user_id, video_case_id, document_status, created_at")
+          .eq("user_id", loaded.user_id)
+          .eq("video_case_id", loaded.video_case_id)
+          .eq("document_status", "ready");
+        const replacement = findSupersedingEvaluation(loaded, siblings ?? []);
+        if (replacement) {
+          navigate(`/preview/${replacement.id}`, { replace: true });
+          return;
+        }
+      }
+
+      setRecord(loaded);
       setLoading(false);
     };
 
     void loadPreview();
-  }, [evaluationId, t]);
+  }, [evaluationId, navigate, t]);
 
   useEffect(() => {
     if (!record || record.document_status !== "pending") {

@@ -124,6 +124,30 @@ test('Gemini network or server uncertainty prevents blind replay', async t => {
   }
 });
 
+test('Gemini server errors report the HTTP status and provider message without private detail', async t => {
+  await setup(t);
+  const logged = [];
+  t.mock.method(console, 'error', (...args) => logged.push(args.join(' ')));
+  t.mock.method(globalThis, 'fetch', async () => Response.json(
+    { error: { code: 503, status: 'UNAVAILABLE', message: 'The model is overloaded. Please try again later. key=private-test-key https://signed-url.example/x' } },
+    { status: 503 }));
+  await assert.rejects(generateVideoAnalysis({ prompt: 'overloaded' }), error => {
+    assert.equal(error.deliveryUnknown, true);
+    assert.match(error.message, /outcome unknown/);
+    assert.match(error.message, /HTTP 503 UNAVAILABLE: The model is overloaded/);
+    assert.doesNotMatch(error.message, /private-test-key|signed-url/);
+    return true;
+  });
+  assert.match(logged.join('\n'), /HTTP 503 UNAVAILABLE/);
+  assert.doesNotMatch(logged.join('\n'), /private-test-key|signed-url/);
+  t.mock.method(globalThis, 'fetch', async () => { throw Object.assign(new Error('private transport detail'), { cause: { code: 'ECONNRESET' } }); });
+  await assert.rejects(generateVideoAnalysis({ prompt: 'network' }), error => {
+    assert.match(error.message, /network error ECONNRESET/);
+    assert.doesNotMatch(error.message, /private transport detail/);
+    return true;
+  });
+});
+
 test('Gemini missing audio is explicit and the aggregate step still uses its existing provider', async t => {
   await setup(t);
   t.mock.method(globalThis, 'fetch', async (_url, options) => {

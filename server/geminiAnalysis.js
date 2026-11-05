@@ -13,9 +13,30 @@ export function getGeminiConfig() {
   return { apiKey, model };
 }
 
-function unknownOutcome(timedOut = false) {
-  const error = new Error(timedOut ? 'Gemini request timed out; outcome unknown. Inspect provider usage before retrying.'
-    : 'Gemini request outcome unknown. Inspect provider usage before retrying.');
+// Short, log-safe description of what Gemini returned: status plus the provider's
+// own error message with URLs and key-like values removed. Raw non-JSON bodies and
+// transport messages are never included because they may echo private data.
+async function describeServerError(response) {
+  let status = '', message = '';
+  try {
+    const payload = await response.json();
+    status = typeof payload?.error?.status === 'string' ? payload.error.status : '';
+    message = typeof payload?.error?.message === 'string' ? payload.error.message : '';
+  } catch { /* not JSON: report the HTTP status only */ }
+  message = message.replace(/https?:\/\/\S+/g, '[url]').replace(/\b(key|token|signature)=\S+/gi, '$1=[redacted]')
+    .replace(/\s+/g, ' ').trim().slice(0, 200);
+  return `HTTP ${response.status}${status ? ` ${status.replace(/[^A-Z_]/g, '').slice(0, 40)}` : ''}${message ? `: ${message}` : ''}`;
+}
+
+function describeTransportError(error) {
+  const code = [error?.cause?.code, error?.code].find(value => typeof value === 'string' && /^[A-Z0-9_]{2,40}$/.test(value));
+  return `network error ${code || error?.name || 'unknown'}`;
+}
+
+function unknownOutcome(timedOut = false, detail = '') {
+  const base = timedOut ? 'Gemini request timed out; outcome unknown.' : 'Gemini request outcome unknown.';
+  const error = new Error(`${base}${detail ? ` (${detail})` : ''} Inspect provider usage before retrying.`);
+  console.error(`[gemini] ${base}${detail ? ` ${detail}` : ''}`);
   error.deliveryUnknown = true;
   error.code = timedOut ? 'ai_timeout' : 'ai_delivery_unknown';
   error.status = timedOut ? 504 : 503;
@@ -46,8 +67,11 @@ export async function generateGeminiAnalysis({ prompt, frames = [], audio = null
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.apiKey },
         body: serialized, signal: AbortSignal.timeout(180000),
       });
-    } catch (error) { throw unknownOutcome(error?.name === 'TimeoutError'); }
-    if (response.status >= 500) throw unknownOutcome();
+    } catch (error) {
+      const timedOut = error?.name === 'TimeoutError';
+      throw unknownOutcome(timedOut, timedOut ? '' : describeTransportError(error));
+    }
+    if (response.status >= 500) throw unknownOutcome(false, await describeServerError(response));
     if (!response.ok) {
       const code = ({ 401: 'ai_auth_failed', 403: 'ai_auth_failed', 402: 'ai_billing_required', 429: 'ai_quota_exceeded' })[response.status] || 'ai_request_rejected';
       const error = new Error(`Gemini request failed (HTTP ${response.status}). ${code}. Check API key, model access, project quota and billing.`);
@@ -56,7 +80,7 @@ export async function generateGeminiAnalysis({ prompt, frames = [], audio = null
       throw error;
     }
     let payload;
-    try { payload = await response.json(); } catch { throw unknownOutcome(); }
+    try { payload = await response.json(); } catch { throw unknownOutcome(false, `HTTP ${response.status} response was not valid JSON`); }
     const candidate = payload?.candidates?.[0];
     if (payload?.promptFeedback?.blockReason || candidate?.finishReason !== 'STOP') {
       throw invalidEvaluation('Gemini analysis was blocked or incomplete.');

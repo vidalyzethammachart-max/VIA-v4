@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { collapseSupersededEvaluations, findSupersedingEvaluation } from "../src/services/evaluationSupersedeCore.js";
+import { collapseSupersededEvaluations, findSupersededIds, findSupersedingEvaluation } from "../src/services/evaluationSupersedeCore.js";
 
 const item = (id, status, createdAt, extra = {}) => ({
   id, user_id: "u1", video_case_id: "case-a", document_status: status, created_at: createdAt, ...extra,
@@ -64,4 +64,15 @@ test("a ready evaluation, or one without a case or a ready copy, is not redirect
   const stuck = item(282, "pending", "2026-10-26T00:00:00Z");
   assert.equal(findSupersedingEvaluation(stuck, [item(297, "pending", "2026-10-29T00:00:00Z")]), null);
   assert.equal(findSupersedingEvaluation(stuck, [item(305, "ready", "2026-10-29T00:00:00Z", { user_id: "u2" })]), null);
+});
+
+test("superseded ids lists the copies that collapsing hides", () => {
+  const rows = [
+    item(282, "pending", "2026-10-26T00:00:00Z"),
+    item(305, "ready", "2026-10-29T00:00:00Z"),
+    item(276, "pending", "2026-10-26T00:00:00Z", { video_case_id: "case-b" }),
+    item(297, "failed", "2026-10-29T00:00:00Z", { video_case_id: "case-b" }),
+    item(4, "pending", "2026-10-26T00:00:00Z", { video_case_id: null }),
+  ];
+  assert.deepEqual([...findSupersededIds(rows)].sort((a, b) => a - b), [276, 282]);
 });

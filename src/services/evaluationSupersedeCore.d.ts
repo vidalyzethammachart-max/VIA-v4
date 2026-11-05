@@ -12,3 +12,5 @@ export function findSupersedingEvaluation<T extends SupersedeRow>(
   record: SupersedeRow,
   siblings: T[] | null | undefined,
 ): T | null;
+
+export function findSupersededIds(rows: SupersedeRow[] | null | undefined): Set<number>;

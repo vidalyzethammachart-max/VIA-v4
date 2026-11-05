@@ -34,3 +34,9 @@ export function findSupersedingEvaluation(record, siblings) {
   const ready = (siblings ?? []).filter((row) => row.id !== record.id && groupKey(row) === key && row.document_status === "ready");
   return ready.sort(newestFirst)[0] ?? null;
 }
+
+// Ids of the rows that collapseSupersededEvaluations would hide.
+export function findSupersededIds(rows) {
+  const visible = new Set(collapseSupersededEvaluations(rows).map((row) => row.id));
+  return new Set((rows ?? []).filter((row) => !visible.has(row.id)).map((row) => row.id));
+}

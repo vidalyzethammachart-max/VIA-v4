@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { findSupersededIds } from "./evaluationSupersedeCore.js";
 
 export type StuckEvaluationRow = {
   evaluation_id: number;
@@ -34,10 +35,30 @@ export async function getStuckEvaluationReport(evaluationId: number): Promise<{ 
   return data as { reported: boolean; reported_at: string | null };
 }
 
+type CaseCopy = { id: number; user_id: string | null; video_case_id: string | null; document_status: string; created_at: string };
+
 export async function listStuckEvaluations(): Promise<StuckEvaluationRow[]> {
   const { data, error } = await supabase.rpc("list_stuck_evaluations_v2");
   if (error) throw new Error(error.message);
-  return (data ?? []) as StuckEvaluationRow[];
+  const rows = (data ?? []) as StuckEvaluationRow[];
+  if (rows.length === 0) return rows;
+
+  // Hide stuck copies of a case the same user resubmitted: the ready copy, or the
+  // newest unfinished one, stands for that case, as on my-forms.
+  const listed = await supabase
+    .from("evaluations")
+    .select("id, user_id, video_case_id, document_status, created_at")
+    .in("id", rows.map((row) => row.evaluation_id));
+  if (listed.error) throw new Error(listed.error.message);
+  const caseIds = [...new Set((listed.data ?? []).map((row) => row.video_case_id).filter(Boolean))] as string[];
+  if (caseIds.length === 0) return rows;
+  const copies = await supabase
+    .from("evaluations")
+    .select("id, user_id, video_case_id, document_status, created_at")
+    .in("video_case_id", caseIds);
+  if (copies.error) throw new Error(copies.error.message);
+  const hidden = findSupersededIds((copies.data ?? []) as CaseCopy[]);
+  return rows.filter((row) => !hidden.has(row.evaluation_id));
 }
 
 export async function resolveStuckEvaluationReport(evaluationId: number): Promise<void> {

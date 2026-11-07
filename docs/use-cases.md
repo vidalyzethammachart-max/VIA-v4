@@ -281,7 +281,7 @@ flowchart LR
   3. เปลี่ยน role หรือลบบัญชี (ยืนยันก่อนลบ)
 - **Alternate**: ดำเนินการไม่สำเร็จ แสดง error; Admin จัดการบัญชีตัวเองผ่านหน้านี้ไม่ได้
 - **Postcondition**: role หรือบัญชีเปลี่ยนตามที่เลือก (ผ่าน Edge Function `admin-user-management`)
-- **ข้อควรระวังของการลบบัญชี**: Edge Function ลบ `activity_logs`, `evaluations`, `role_requests`, `user_information` และ avatar ก่อน แล้วค่อยลบผู้ใช้ใน Auth ส่วน `video_case_members` และ aggregate runs จะถูกลบตามด้วย cascade แต่ `video_cases.created_by` อ้างอิง `auth.users` แบบ `ON DELETE RESTRICT` ถ้าผู้ใช้เคยสร้างเคส การลบ Auth จะล้มเหลว (ตอบ 500) หลังจากลบข้อมูลข้างต้นไปแล้ว ทำให้เหลือบัญชี Auth ที่ไม่มีโปรไฟล์ (อ่านจาก migration ยังไม่ได้ทดสอบกับฐานข้อมูลจริง)
+- **การลบบัญชี**: Edge Function ตรวจก่อนว่าผู้ใช้เคยสร้าง video case หรือไม่ (`video_cases.created_by` อ้างอิง `auth.users` แบบ `ON DELETE RESTRICT`) ถ้าเคย จะตอบ 409 และไม่ลบอะไรเลย ผู้ดูแลต้องโอนหรือลบเคสเหล่านั้นก่อน ถ้าไม่เคย จะลบ `activity_logs`, `evaluations`, `role_requests`, `user_information` และ avatar แล้วลบผู้ใช้ใน Auth ส่วน `video_case_members` และ aggregate runs ถูกลบตามด้วย cascade (อ่านจาก migration ยังไม่ได้ทดสอบกับฐานข้อมูลจริง)
 
 ### UC-21 ตรวจงานที่ค้าง (Stuck Jobs)
 - **Actor**: Admin

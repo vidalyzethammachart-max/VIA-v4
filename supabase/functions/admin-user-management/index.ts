@@ -114,6 +114,26 @@ serve(async (req) => {
     }
 
     if (action === "delete_user") {
+      // video_cases.created_by references auth.users ON DELETE RESTRICT, so a
+      // creator cannot be removed from Auth. Check first so we never delete
+      // profile data and then fail on the Auth step.
+      const { data: ownedCases, error: ownedCasesError } = await adminSupabase
+        .from("video_cases")
+        .select("id")
+        .eq("created_by", targetAuthUserId)
+        .limit(1);
+
+      if (ownedCasesError) {
+        return jsonResponse(500, { ok: false, error: ownedCasesError.message });
+      }
+
+      if (ownedCases && ownedCases.length > 0) {
+        return jsonResponse(409, {
+          ok: false,
+          error: "This user created video cases. Transfer or remove those video cases before deleting the account.",
+        });
+      }
+
       await adminSupabase.from("activity_logs").delete().eq("user_id", targetAuthUserId);
       await adminSupabase.from("evaluations").delete().eq("user_id", targetAuthUserId);
       await adminSupabase.from("role_requests").delete().eq("user_id", targetAuthUserId);

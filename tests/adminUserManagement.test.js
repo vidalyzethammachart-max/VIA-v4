@@ -5,7 +5,7 @@ import { fakeQuery, installTsLoader } from "./helpers/tsLoader.js";
 installTsLoader();
 
 // UC-20: admin-user-management Edge Function, run with fake Deno + Supabase.
-const state = { authUser: null, actorRole: "admin", calls: [], deleteUserError: null, updateError: null };
+const state = { authUser: null, actorRole: "admin", calls: [], deleteUserError: null, updateError: null, ownedCases: [], ownedCasesError: null };
 
 globalThis.Deno = { env: { get: (k) => `fake-${k}` } };
 globalThis.__createClient = (_url, key) => {
@@ -17,7 +17,9 @@ globalThis.__createClient = (_url, key) => {
       state.calls.push(["from", table]);
       const result = table === "user_information"
         ? { data: { role: state.actorRole }, error: state.updateError }
-        : { data: null, error: null };
+        : table === "video_cases"
+          ? { data: state.ownedCases, error: state.ownedCasesError }
+          : { data: null, error: null };
       return fakeQuery(result, state.calls);
     },
     storage: { from: (b) => ({ remove: async (paths) => { state.calls.push(["storage.remove", b, paths]); } }) },
@@ -37,7 +39,7 @@ function call(body, { token = "jwt", method = "POST" } = {}) {
 }
 
 function reset(over = {}) {
-  Object.assign(state, { authUser: { id: "admin-1" }, actorRole: "admin", calls: [], deleteUserError: null, updateError: null }, over);
+  Object.assign(state, { authUser: { id: "admin-1" }, actorRole: "admin", calls: [], deleteUserError: null, updateError: null, ownedCases: [], ownedCasesError: null }, over);
 }
 
 test("UC-20 rejects missing token, bad token and non-POST methods", async () => {
@@ -107,4 +109,19 @@ test("UC-20 delete_user reports auth deletion failure as 500", async () => {
   const res = await call({ action: "delete_user", targetAuthUserId: "u2" });
   assert.equal(res.status, 500);
   assert.match((await res.json()).error, /cannot delete/);
+});
+
+test("UC-20 delete_user is refused with 409 and deletes nothing when the user created video cases", async () => {
+  reset({ ownedCases: [{ id: "case-1" }] });
+  const res = await call({ action: "delete_user", targetAuthUserId: "u2" });
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /video case/i);
+  assert.ok(!state.calls.some((c) => c[0] === "delete" || c[0] === "storage.remove" || c[0] === "auth.deleteUser"));
+});
+
+test("UC-20 delete_user stops with 500 and deletes nothing if the video case check fails", async () => {
+  reset({ ownedCasesError: { message: "lookup failed" } });
+  const res = await call({ action: "delete_user", targetAuthUserId: "u2" });
+  assert.equal(res.status, 500);
+  assert.ok(!state.calls.some((c) => c[0] === "delete" || c[0] === "auth.deleteUser"));
 });

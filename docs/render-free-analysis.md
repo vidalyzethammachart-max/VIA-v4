@@ -102,9 +102,13 @@ Render จะทำหน้าที่แทน backend ในเครื่�
 ```dotenv
 NODE_ENV=production
 VIDEO_ANALYSIS_PROVIDER=gemini
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.8-flash
 VIDEO_ALLOW_LOCAL_TEST_URLS=false
 ```
+
+ค่า `GEMINI_MODEL` ใน `render.yaml` ต้องตรงกับค่าบน Render เสมอ ไม่งั้น blueprint sync จะเขียนค่าเดิมกลับ
+service รับ `gemini-3.8-flash` หรือ `gemini-2.5-flash` เท่านั้น ถ้า key ใดได้ HTTP 404
+"no longer available to new users" กับ `gemini-2.5-flash` ให้ใช้ `gemini-3.8-flash`
 
 Secrets ใน Render เท่านั้น:
 

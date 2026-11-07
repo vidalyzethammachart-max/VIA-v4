@@ -13,35 +13,50 @@ export function getGeminiConfig() {
   return { apiKey, model };
 }
 
+// Models the hosted and local analysis servers accept. gemini-3.8-flash is for keys
+// that Google no longer lets use gemini-2.5-flash.
+export const SUPPORTED_GEMINI_MODELS = Object.freeze(['gemini-2.5-flash', 'gemini-3.8-flash']);
+
+export function requireSupportedGeminiModel(label) {
+  const { model } = getGeminiConfig();
+  if (!SUPPORTED_GEMINI_MODELS.includes(model)) {
+    throw new Error(`${label} requires GEMINI_MODEL to be one of: ${SUPPORTED_GEMINI_MODELS.join(', ')}.`);
+  }
+  return model;
+}
+
+async function readGeminiError(response) {
+  try {
+    const payload = await response.json();
+    return {
+      status: typeof payload?.error?.status === 'string' ? payload.error.status.replace(/[^A-Z_]/g, '').slice(0, 40) : '',
+      message: typeof payload?.error?.message === 'string' ? payload.error.message : '',
+    };
+  } catch { return { status: '', message: '' }; } // not JSON: report the HTTP status only
+}
+
 // Short, log-safe description of what Gemini returned: status plus the provider's
 // own error message with URLs and key-like values removed. Raw non-JSON bodies and
 // transport messages are never included because they may echo private data.
 async function describeServerError(response) {
-  let status = '', message = '';
-  try {
-    const payload = await response.json();
-    status = typeof payload?.error?.status === 'string' ? payload.error.status : '';
-    message = typeof payload?.error?.message === 'string' ? payload.error.message : '';
-  } catch { /* not JSON: report the HTTP status only */ }
-  message = message.replace(/https?:\/\/\S+/g, '[url]').replace(/\b(key|token|signature)=\S+/gi, '$1=[redacted]')
+  const { status, message: raw } = await readGeminiError(response);
+  const message = raw.replace(/https?:\/\/\S+/g, '[url]').replace(/\b(key|token|signature)=\S+/gi, '$1=[redacted]')
     .replace(/\s+/g, ' ').trim().slice(0, 200);
-  return `HTTP ${response.status}${status ? ` ${status.replace(/[^A-Z_]/g, '').slice(0, 40)}` : ''}${message ? `: ${message}` : ''}`;
+  return `HTTP ${response.status}${status ? ` ${status}` : ''}${message ? `: ${message}` : ''}`;
 }
 
 // For rejected requests keep only known-safe hints (Gemini status, model and quota
-// names, limits); the free-text message is not passed on.
+// names, limits); the free-text message is not passed on. Model IDs may contain dots
+// but never end with one, so a sentence-ending period is not captured. Quota errors
+// name the model as "model: X" rather than "models/X".
 async function describeClientError(response) {
-  let status = '', message = '';
-  try {
-    const payload = await response.json();
-    status = typeof payload?.error?.status === 'string' ? payload.error.status.replace(/[^A-Z_]/g, '').slice(0, 40) : '';
-    message = typeof payload?.error?.message === 'string' ? payload.error.message : '';
-  } catch { /* not JSON */ }
+  const { status, message } = await readGeminiError(response);
   const hints = [...new Set([
-    ...(message.match(/\bmodels\/[a-z0-9.-]{1,60}/g) || []),
+    ...[...message.matchAll(/\bmodels?(?:\/|: )(gemini-[a-z0-9-]+(?:\.[a-z0-9-]+)*)/g)].map(match => `models/${match[1].slice(0, 60)}`),
     ...(message.match(/\bgenerativelanguage\.googleapis\.com\/[a-z_]{1,80}/g) || []),
     ...(message.match(/\blimit: \d{1,9}/g) || []),
-    ...(message.match(/no longer available to new users|not found|free tier/gi) || []).map(text => text.toLowerCase()),
+    ...(message.match(/no longer available to new users|not found|free[ _]tier/gi) || [])
+      .map(text => text.toLowerCase().replace('_', ' ')),
   ])].slice(0, 6);
   return `HTTP ${response.status}${status ? ` ${status}` : ''}${hints.length ? `: ${hints.join('; ')}` : ''}`;
 }
@@ -61,6 +76,12 @@ function unknownOutcome(timedOut = false, detail = '') {
   return error;
 }
 
+// Thinking tokens count toward maxOutputTokens. Gemini 3 models think more by default,
+// so give them more room; gemini-2.5-flash keeps its original limit (and cache keys).
+function outputTokenLimit(model) {
+  return model === 'gemini-2.5-flash' ? 8192 : 32768;
+}
+
 export async function generateGeminiAnalysis({ prompt, frames = [], audio = null }) {
   const config = getGeminiConfig();
   const evidence = { hasAudio: Boolean(audio), hasFrames: frames.length > 0 };
@@ -71,7 +92,7 @@ export async function generateGeminiAnalysis({ prompt, frames = [], audio = null
   ...(audio ? [{ inlineData: { mimeType: 'audio/mpeg', data: audio.base64 } }] : [])];
   const body = { contents: [{ role: 'user', parts }],
     systemInstruction: { parts: [{ text: evaluationInstructions(evidence) }] },
-    generationConfig: { responseMimeType: 'application/json', responseJsonSchema: videoEvaluationSchema, maxOutputTokens: 8192 } };
+    generationConfig: { responseMimeType: 'application/json', responseJsonSchema: videoEvaluationSchema, maxOutputTokens: outputTokenLimit(config.model) } };
   const serialized = JSON.stringify(body);
   // Bound inline payloads conservatively; do not silently discard evidence.
   if (Buffer.byteLength(serialized) > 20_000_000) throw new Error('Gemini analysis inline media exceeds the supported request limit.');
@@ -94,7 +115,7 @@ export async function generateGeminiAnalysis({ prompt, frames = [], audio = null
       const code = ({ 401: 'ai_auth_failed', 403: 'ai_auth_failed', 402: 'ai_billing_required', 429: 'ai_quota_exceeded' })[response.status] || 'ai_request_rejected';
       const detail = await describeClientError(response);
       console.error(`[gemini] request rejected: ${code} ${detail}`);
-      const error = new Error(`Gemini request failed (HTTP ${response.status}). ${code} (${detail}). Check API key, model access, project quota and billing.`);
+      const error = new Error(`Gemini request failed: ${code} (${detail}). Check API key, model access, project quota and billing.`);
       error.code = code;
       error.status = [402, 429].includes(response.status) ? 503 : 502;
       throw error;

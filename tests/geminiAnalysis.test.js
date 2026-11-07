@@ -157,7 +157,18 @@ test('Gemini client errors include the provider status and message without priva
   await assert.rejects(generateVideoAnalysis({ prompt: 'missing model' }), error => {
     assert.equal(error.code, 'ai_request_rejected');
     assert.match(error.message, /HTTP 404 NOT_FOUND: models\/gemini-2.5-flash; no longer available to new users/);
+    assert.equal(error.message.match(/HTTP \d{3}/g).length, 1);
     assert.doesNotMatch(error.message, /private-test-key/);
+    return true;
+  });
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ error: { code: 429, status: 'RESOURCE_EXHAUSTED',
+    message: 'Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash. Retry later.' } },
+  { status: 429 }));
+  await assert.rejects(generateVideoAnalysis({ prompt: 'quota' }), error => {
+    assert.equal(error.code, 'ai_quota_exceeded');
+    assert.match(error.message, /models\/gemini-3\.8-flash(?!\.)/);
+    assert.match(error.message, /generate_content_free_tier_requests; limit: 20/);
+    assert.match(error.message, /free tier/);
     return true;
   });
 });

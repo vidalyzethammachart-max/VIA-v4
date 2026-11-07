@@ -13,7 +13,7 @@ services:
       - key: VIDEO_ANALYSIS_PROVIDER
         value: gemini
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.8-flash
       - key: VIDEO_ALLOW_LOCAL_TEST_URLS
         value: "false"
       - key: AI_ANALYSIS_CACHE_DIR

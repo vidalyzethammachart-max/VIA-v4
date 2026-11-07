@@ -130,7 +130,7 @@ test('hosted startup fails closed on missing auth, unsafe sources or another pro
   await assert.rejects(startHostedAnalysisServer({ port: 0 }), /gemini/);
   process.env.VIDEO_ANALYSIS_PROVIDER = 'gemini';
   process.env.GEMINI_MODEL = 'gemini-other';
-  await assert.rejects(startHostedAnalysisServer({ port: 0 }), /gemini-2.5-flash/);
+  await assert.rejects(startHostedAnalysisServer({ port: 0 }), /one of: gemini-2\.5-flash, gemini-3\.8-flash\./);
   process.env.GEMINI_MODEL = 'gemini-2.5-flash';
   delete process.env.GEMINI_API_KEY;
   await assert.rejects(startHostedAnalysisServer({ port: 0 }), /GEMINI_API_KEY/);
@@ -142,7 +142,13 @@ test('hosted startup fails closed on missing auth, unsafe sources or another pro
 
 test('hosted service accepts gemini-3.8-flash for keys that cannot use gemini-2.5-flash', async t => {
   configure(t);
-  process.env.GEMINI_MODEL = 'gemini-3.8-flash';
-  const server = await startHostedAnalysisServer({ port: 0 });
-  await new Promise(resolve => server.close(resolve));
+  for (const model of ['gemini-3.8-flash', 'gemini-2.5-flash']) {
+    process.env.GEMINI_MODEL = model;
+    const server = await startHostedAnalysisServer({ port: 0 });
+    await new Promise(resolve => server.close(resolve));
+  }
+  for (const model of ['gemini-3-flash', 'gemini-3.8-flash-lite']) {
+    process.env.GEMINI_MODEL = model;
+    await assert.rejects(startHostedAnalysisServer({ port: 0 }), /requires GEMINI_MODEL to be one of/);
+  }
 });

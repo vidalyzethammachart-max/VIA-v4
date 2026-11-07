@@ -42,8 +42,11 @@ test('local analysis refuses missing auth, other providers and local source test
   process.env.VIDEO_ANALYSIS_PROVIDER = 'openai';
   await assert.rejects(startLocalAnalysisServer({ port: 0 }), /gemini/);
   process.env.VIDEO_ANALYSIS_PROVIDER = 'gemini';
+  process.env.GEMINI_MODEL = 'gemini-3-flash';
+  await assert.rejects(startLocalAnalysisServer({ port: 0 }), /GEMINI_MODEL to be one of: gemini-2\.5-flash, gemini-3\.8-flash\./);
   process.env.GEMINI_MODEL = 'gemini-3.8-flash';
-  await assert.rejects(startLocalAnalysisServer({ port: 0 }), /GEMINI_MODEL/);
+  const server = await startLocalAnalysisServer({ port: 0 });
+  await new Promise(resolve => server.close(resolve));
   process.env.GEMINI_MODEL = 'gemini-2.5-flash';
   process.env.VIDEO_ALLOW_LOCAL_TEST_URLS = 'true';
   await assert.rejects(startLocalAnalysisServer({ port: 0 }), /VIDEO_ALLOW_LOCAL_TEST_URLS/);

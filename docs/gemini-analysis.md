@@ -55,6 +55,11 @@ The user approved the video-only Free Tier design. The adapter now defaults to
 `VIDEO_ANALYSIS_PROVIDER=gemini` and `GEMINI_MODEL=gemini-2.5-flash` explicitly on
 the deployment. A model ID alone cannot enforce a free billing tier.
 
+Hosted and local analysis accept `GEMINI_MODEL=gemini-2.5-flash` or
+`gemini-3.8-flash` (the list lives in `SUPPORTED_GEMINI_MODELS` in
+`server/geminiAnalysis.js`). Use `gemini-3.8-flash` for a key where Google rejects
+`gemini-2.5-flash` with HTTP 404 "no longer available to new users".
+
 Read-only API Keys lookup linked the existing local Gemini key to project
 `gen-lang-client-0749209595`. Cloud Billing returned `billingEnabled=false`.
 Service Usage reported these free-tier effective limits for the selected model:

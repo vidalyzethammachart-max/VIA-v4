@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app } from './cloud-run-upload.js';
-import { getGeminiConfig } from './geminiAnalysis.js';
+import { requireSupportedGeminiModel } from './geminiAnalysis.js';
 
 // The tunnel must target this restricted loopback listener, never the upload API.
 export async function startLocalAnalysisServer({ port = Number(process.env.LOCAL_ANALYSIS_PORT || 8081) } = {}) {
@@ -14,8 +14,7 @@ export async function startLocalAnalysisServer({ port = Number(process.env.LOCAL
   if (process.env.VIDEO_ALLOW_LOCAL_TEST_URLS === 'true') {
     throw new Error('VIDEO_ALLOW_LOCAL_TEST_URLS must be false for the tunnel listener.');
   }
-  const config = getGeminiConfig();
-  if (config.model !== 'gemini-2.5-flash') throw new Error('Local analysis requires GEMINI_MODEL=gemini-2.5-flash.');
+  requireSupportedGeminiModel('Local analysis');
   const server = createServer((req, res) => {
     if (req.method !== 'POST' || req.url?.split('?')[0] !== '/api/analyze-video') {
       res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -34,10 +33,10 @@ export async function startLocalAnalysisServer({ port = Number(process.env.LOCAL
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   startLocalAnalysisServer().then(server => {
-    console.log(`[local-analysis] Gemini gemini-2.5-flash on 127.0.0.1:${server.address().port}; POST /api/analyze-video only`);
+    console.log(`[local-analysis] Gemini ${requireSupportedGeminiModel('Local analysis')} on 127.0.0.1:${server.address().port}; POST /api/analyze-video only`);
   }).catch(error => {
     console.error('[local-analysis] Could not start:', error.code === 'EADDRINUSE' ? 'Port is already in use.'
-      : /^(Local analysis requires |Missing |VIDEO_ALLOW_LOCAL_TEST_URLS)/.test(error.message) ? error.message : 'Check local configuration.');
+      : /^(Local analysis requires |Missing |VIDEO_ALLOW_LOCAL_TEST_URLS|Invalid GEMINI_MODEL )/.test(error.message) ? error.message : 'Check local configuration.');
     process.exitCode = 1;
   });
 }

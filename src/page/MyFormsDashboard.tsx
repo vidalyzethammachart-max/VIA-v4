@@ -8,6 +8,9 @@ import { supabase } from "../lib/supabaseClient";
 import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
 import { collapseSupersededEvaluations } from "../services/evaluationSupersedeCore.js";
 import { isEvaluationStuck } from "../services/stuckEvaluationCore.js";
+import { deleteEvaluationWithFiles } from "../services/evaluationDelete";
+import { describeEvaluationDeleteError, isEvaluationInUseError } from "../utils/evaluationDeleteError";
+import "./dashboard.css";
 
 const DOCUMENTS_BUCKET = "evaluation-documents";
 
@@ -36,6 +39,7 @@ export default function MyFormsDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "stuck" | EvaluationItem["document_status"]>("all");
   const [deleteTarget, setDeleteTarget] = useState<EvaluationItem | null>(null);
+  const [blockedItem, setBlockedItem] = useState<EvaluationItem | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const navigationState = location.state as
     | { generated?: boolean; evaluationId?: number; submissionId?: string; aggregateId?: string }
@@ -144,23 +148,20 @@ export default function MyFormsDashboard() {
         return;
       }
 
-      const { error } = await supabase
-        .from("evaluations")
-        .delete()
-        .eq("id", deleteTarget.id)
-        .eq("user_id", user.id)
-        .select("id")
-        .single();
-
-      if (error) {
-        throw error;
-      }
+      await deleteEvaluationWithFiles(deleteTarget.id, user.id);
 
       setItems((current) => current.filter((item) => item.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (error) {
       console.error("Failed to delete form:", error);
-      setErrorMessage(error instanceof Error ? error.message : t("myForms.deleteFailed"));
+      if (isEvaluationInUseError(error)) {
+        // Explain in a dialog and point at the case where the summary can be removed.
+        setBlockedItem(deleteTarget);
+      } else {
+        setErrorMessage(describeEvaluationDeleteError(error, t));
+      }
+      // Close the confirmation so the reason is visible instead of a dialog that looks stuck.
+      setDeleteTarget(null);
     } finally {
       setDeletingId(null);
     }
@@ -191,7 +192,7 @@ export default function MyFormsDashboard() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="db-root">
       <MainNavbar />
       <ConfirmModal
         isOpen={Boolean(deleteTarget)}
@@ -209,15 +210,41 @@ export default function MyFormsDashboard() {
         confirmDisabled={Boolean(deletingId)}
       />
 
-      <main className="mx-auto max-w-6xl px-4 py-6 md:py-8">
+      <ConfirmModal
+        isOpen={Boolean(blockedItem)}
+        title={t("myForms.deleteBlockedTitle")}
+        message={t("myForms.deleteInUse")}
+        variant="primary"
+        onCancel={() => setBlockedItem(null)}
+        onConfirm={() => {
+          const caseId = blockedItem?.video_case_id;
+          setBlockedItem(null);
+          navigate(caseId ? `/video-cases/${caseId}` : "/video-cases");
+        }}
+        confirmLabel={t("myForms.deleteBlockedAction")}
+        cancelLabel={t("common.close")}
+      />
+
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <header className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div>
+            <h1 className="text-3xl font-bold leading-snug">{t("myForms.submissionsTitle")}</h1>
+            <p className="db-muted max-w-xl">{t("myForms.submissionsDesc")}</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link to="/video-cases" className="btn-secondary">{t("myForms.videoCases")}</Link>
+            <Link to="/form-submit" className="btn-primary">{t("myForms.submitNewForm")}</Link>
+          </div>
+        </header>
+
         {showSuccessBanner && (
-          <section className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-sm">
+          <section role="status" className="db-ok mb-6">
             <p className="font-semibold">
               {navigationState?.aggregateId
                 ? "Combined summary sent for re-analysis."
                 : "Evaluation sent for analysis."}
             </p>
-            <p className="mt-1 text-emerald-700">
+            <p className="mt-1">
               {navigationState?.aggregateId
                 ? `Aggregate ID: ${navigationState.aggregateId}`
                 : navigationState?.evaluationId
@@ -227,186 +254,163 @@ export default function MyFormsDashboard() {
           </section>
         )}
 
-        <section className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4">
-          <div className="ui-hover-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold text-slate-500">
-              {t("myForms.totalForms")}
-            </p>
-            <p className="mt-3 text-3xl font-bold text-slate-900 md:text-4xl">{items.length}</p>
-            <p className="mt-2 hidden text-sm text-slate-500 sm:block">{t("myForms.totalFormsDesc")}</p>
+        <dl className="db-kpis mb-8" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+          <div className="db-kpi">
+            <dt className="db-muted text-sm">{t("myForms.totalForms")}</dt>
+            <dd>{items.length}</dd>
           </div>
-
-          <div className="ui-hover-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold text-slate-500">
-              {t("myForms.readyToPreview")}
-            </p>
-            <p className="mt-3 text-3xl font-bold text-sky-600 md:text-4xl dark:text-sky-400">
-              {completedPreviewCount}
-            </p>
-            <p className="mt-2 hidden text-sm text-slate-500 sm:block">{t("myForms.readyToPreviewDesc")}</p>
+          <div className="db-kpi">
+            <dt className="db-muted text-sm">{t("myForms.readyToPreview")}</dt>
+            <dd>{completedPreviewCount}</dd>
           </div>
+        </dl>
 
-          <div className="ui-hover-card col-span-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-1">
-            <p className="text-xs font-semibold text-slate-500">
-              {t("myForms.quickAction")}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link to="/form-submit" className="btn-primary inline-flex">
-                {t("myForms.submitNewForm")}
-              </Link>
-              <Link to="/video-cases" className="btn-secondary inline-flex">
-                {t("myForms.videoCases")}
-              </Link>
-            </div>
-            <p className="mt-2 text-sm text-slate-500">{t("myForms.quickActionDesc")}</p>
-          </div>
-        </section>
-
-        <section className="ui-hover-card mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="text-lg font-semibold text-slate-900">{t("myForms.submissionsTitle")}</h2>
-            <p className="mt-1 text-sm text-slate-500">{t("myForms.submissionsDesc")}</p>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder={t("myForms.searchPlaceholder")}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:border-[#04418b]/30 focus:ring-4 focus:ring-[#04418b]/5 sm:w-72"
-              />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as "all" | "stuck" | EvaluationItem["document_status"])}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#04418b]/30 focus:ring-4 focus:ring-[#04418b]/5"
-              >
-                <option value="all">{t("myForms.allStatuses")}</option>
-                <option value="pending">{t("common.pending")}</option>
-                <option value="stuck">{t("myForms.stuckFilter")}</option>
-                <option value="ready">{t("common.ready")}</option>
-                <option value="failed">{t("common.failed")}</option>
-              </select>
-            </div>
+        <section className="db-panel">
+          <div className="flex flex-col gap-3 border-b px-5 py-4 sm:flex-row" style={{ borderColor: "var(--db-line)" }}>
+            <input
+              type="search"
+              aria-label={t("myForms.searchPlaceholder")}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t("myForms.searchPlaceholder")}
+              className="db-input sm:w-80"
+            />
+            <select
+              aria-label={t("myForms.allStatuses")}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as "all" | "stuck" | EvaluationItem["document_status"])}
+              className="db-input sm:w-56"
+            >
+              <option value="all">{t("myForms.allStatuses")}</option>
+              <option value="pending">{t("common.pending")}</option>
+              <option value="stuck">{t("myForms.stuckFilter")}</option>
+              <option value="ready">{t("common.ready")}</option>
+              <option value="failed">{t("common.failed")}</option>
+            </select>
           </div>
 
           {loading ? (
-            <div className="px-5 py-12 text-center text-sm text-slate-500">{t("myForms.loading")}</div>
+            <p className="db-muted px-5 py-12 text-center text-sm" role="status">{t("myForms.loading")}</p>
           ) : errorMessage ? (
-            <div className="px-5 py-12 text-center text-sm text-red-600">{errorMessage}</div>
+            <p className="px-5 py-12 text-center text-sm" role="alert" style={{ color: "#dc2626" }}>{errorMessage}</p>
           ) : items.length === 0 ? (
-            <div className="px-5 py-12 text-center text-sm text-slate-500">{t("myForms.empty")}</div>
+            <p className="db-muted px-5 py-12 text-center text-sm">{t("myForms.empty")}</p>
           ) : filteredItems.length === 0 ? (
-            <div className="px-5 py-12 text-center text-sm text-slate-500">{t("myForms.noMatch")}</div>
+            <p className="db-muted px-5 py-12 text-center text-sm">{t("myForms.noMatch")}</p>
           ) : (
-            <div className="divide-y divide-slate-200">
-              {filteredItems.map((item) => (
-                <article
-                  key={item.id}
-                  className="ui-hover-card flex flex-col gap-4 px-5 py-5 md:flex-row md:items-start md:justify-between"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-base font-semibold text-slate-900">
-                        {item.subject_name || t("myForms.untitled")}
-                      </h3>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                        #{item.order_number || "-"}
-                      </span>
+            <ul>
+              {filteredItems.map((item) => {
+                const stuck = isEvaluationStuck(item);
+                const state = item.document_status === "ready" ? "ready" : item.document_status === "failed" || stuck ? "alert" : "pending";
+                return (
+                  <li
+                    key={item.id}
+                    data-state={state}
+                    className="db-row flex flex-col gap-4 px-5 py-5 md:flex-row md:items-start md:justify-between"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-semibold leading-relaxed">
+                          {item.subject_name || t("myForms.untitled")}
+                        </h2>
+                        <span className="db-chip">#{item.order_number || "-"}</span>
+                      </div>
+                      <p className="db-muted text-sm">{formatDate(item.created_at)}</p>
+                      {item.video_case_id && (
+                        <p className="db-muted mt-1 text-xs">
+                          Case ID: {item.video_case_id} ·{" "}
+                          <Link to={`/video-cases/${item.video_case_id}`} className="db-link">Linked case</Link>
+                        </p>
+                      )}
+                      <p className="mt-3 line-clamp-2 text-sm leading-relaxed">
+                        {item.overall_suggestion?.trim() || t("myForms.noSuggestion")}
+                      </p>
+                      {item.document_status === "failed" ? (
+                        <p className="db-status-alert mt-3 text-xs font-medium">
+                          {/\(HTTP 429\)/.test(item.document_error || "")
+                            ? t("myForms.failedQuota")
+                            : t("myForms.failed", { error: item.document_error || "-" })}
+                        </p>
+                      ) : item.document_status !== "ready" ? (
+                        <p className={`mt-3 text-xs font-medium ${stuck ? "db-status-alert" : "db-status-pending"}`}>
+                          {stuck ? t("myForms.stuckPreview") : t("myForms.pendingPreview")}
+                        </p>
+                      ) : null}
                     </div>
-                    <p className="mt-1 text-sm text-slate-500">{formatDate(item.created_at)}</p>
-                    {item.video_case_id && (
-                      <p className="mt-1 text-xs text-slate-500">
-                        Case ID: {item.video_case_id} ·{" "}
-                        <span className="font-medium text-[#04418b]">Linked case</span>
-                      </p>
-                    )}
-                    <p className="mt-3 line-clamp-2 text-sm text-slate-600">
-                      {item.overall_suggestion?.trim() || t("myForms.noSuggestion")}
-                    </p>
-                    {item.document_status === "failed" ? (
-                      <p className="mt-3 text-xs font-medium text-red-600">
-                        {/\(HTTP 429\)/.test(item.document_error || "")
-                          ? t("myForms.failedQuota")
-                          : t("myForms.failed", { error: item.document_error || "-" })}
-                      </p>
-                    ) : item.document_status !== "ready" ? (
-                      <p className={`mt-3 text-xs font-medium ${isEvaluationStuck(item) ? "text-red-600" : "text-amber-600"}`}>
-                        {isEvaluationStuck(item) ? t("myForms.stuckPreview") : t("myForms.pendingPreview")}
-                      </p>
-                    ) : null}
-                  </div>
 
-                  <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:flex-row">
-                    {item.document_status === "ready" && (item.pdf_storage_path || item.docx_storage_path) ? (
-                      <>
-                        <Link to={`/preview/${item.id}`} className="btn-primary text-center">
-                          {t("common.preview")}
-                        </Link>
-                        {item.pdf_storage_path && (
+                    <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:flex-row">
+                      {item.document_status === "ready" && (item.pdf_storage_path || item.docx_storage_path) ? (
+                        <>
+                          <Link to={`/preview/${item.id}`} className="btn-primary text-center">
+                            {t("common.preview")}
+                          </Link>
+                          {item.pdf_storage_path && (
+                            <button
+                              type="button"
+                              onClick={() => void handleDownload(item, "pdf")}
+                              disabled={activeDownloadKey === `${item.id}:pdf`}
+                              className="btn-secondary text-center"
+                            >
+                              {activeDownloadKey === `${item.id}:pdf`
+                                ? t("myForms.preparingPdf")
+                                : t("myForms.downloadPdf")}
+                            </button>
+                          )}
+                          {item.docx_storage_path && (
+                            <button
+                              type="button"
+                              onClick={() => void handleDownload(item, "docx")}
+                              disabled={activeDownloadKey === `${item.id}:docx`}
+                              className="btn-secondary text-center"
+                            >
+                              {activeDownloadKey === `${item.id}:docx`
+                                ? t("myForms.preparingDocx")
+                                : t("myForms.downloadDocx")}
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => void handleDownload(item, "pdf")}
-                            disabled={activeDownloadKey === `${item.id}:pdf`}
-                            className="btn-secondary text-center"
+                            onClick={() => setDeleteTarget(item)}
+                            disabled={deletingId === item.id}
+                            className="btn-danger text-center"
                           >
-                            {activeDownloadKey === `${item.id}:pdf`
-                              ? t("myForms.preparingPdf")
-                              : t("myForms.downloadPdf")}
+                            {t("myForms.delete")}
                           </button>
-                        )}
-                        {item.docx_storage_path && (
+                        </>
+                      ) : item.document_status === "failed" ? (
+                        <>
+                          <Link to={`/preview/${item.id}`} className="btn-danger text-center">
+                            {t("myForms.viewError")}
+                          </Link>
                           <button
                             type="button"
-                            onClick={() => void handleDownload(item, "docx")}
-                            disabled={activeDownloadKey === `${item.id}:docx`}
-                            className="btn-secondary text-center"
+                            onClick={() => setDeleteTarget(item)}
+                            disabled={deletingId === item.id}
+                            className="btn-danger text-center"
                           >
-                            {activeDownloadKey === `${item.id}:docx`
-                              ? t("myForms.preparingDocx")
-                              : t("myForms.downloadDocx")}
+                            {t("myForms.delete")}
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(item)}
-                          disabled={deletingId === item.id}
-                          className="btn-danger text-center"
-                        >
-                          {t("myForms.delete")}
-                        </button>
-                      </>
-                    ) : item.document_status === "failed" ? (
-                      <>
-                        <Link to={`/preview/${item.id}`} className="btn-danger text-center">
-                          {t("myForms.viewError")}
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(item)}
-                          disabled={deletingId === item.id}
-                          className="btn-danger text-center"
-                        >
-                          {t("myForms.delete")}
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <Link to={`/preview/${item.id}`} className="btn-secondary text-center">
-                          {isEvaluationStuck(item) ? t("myForms.stuckAction") : t("myForms.trackStatus")}
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(item)}
-                          disabled={deletingId === item.id}
-                          className="btn-danger text-center"
-                        >
-                          {t("myForms.delete")}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
+                        </>
+                      ) : (
+                        <>
+                          <Link to={`/preview/${item.id}`} className="btn-secondary text-center">
+                            {stuck ? t("myForms.stuckAction") : t("myForms.trackStatus")}
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(item)}
+                            disabled={deletingId === item.id}
+                            className="btn-danger text-center"
+                          >
+                            {t("myForms.delete")}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </section>
       </main>

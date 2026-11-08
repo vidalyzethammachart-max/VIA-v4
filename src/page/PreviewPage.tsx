@@ -10,6 +10,8 @@ import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
 import { findSupersedingEvaluation } from "../services/evaluationSupersedeCore.js";
 import { isEvaluationStuck } from "../services/stuckEvaluationCore.js";
 import { getStuckEvaluationReport, reportStuckEvaluation } from "../services/stuckEvaluationService";
+import { deleteEvaluationWithFiles } from "../services/evaluationDelete";
+import { describeEvaluationDeleteError, isEvaluationInUseError } from "../utils/evaluationDeleteError";
 
 const DOCUMENTS_BUCKET = "evaluation-documents";
 
@@ -46,6 +48,7 @@ export default function PreviewPage() {
   const [artifactUrls, setArtifactUrls] = useState<ArtifactUrls | null>(null);
   const [artifactLoading, setArtifactLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteBlocked, setDeleteBlocked] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const { user: authUser, role: authRole } = useAuthRole();
@@ -218,22 +221,16 @@ export default function PreviewPage() {
         return;
       }
 
-      const { error } = await supabase
-        .from("evaluations")
-        .delete()
-        .eq("id", record.id)
-        .eq("user_id", user.id)
-        .select("id")
-        .single();
-
-      if (error) {
-        throw error;
-      }
+      await deleteEvaluationWithFiles(record.id, user.id);
 
       navigate("/my-forms", { replace: true });
     } catch (error) {
       console.error("Failed to delete preview record:", error);
-      setErrorMessage(error instanceof Error ? error.message : t("myForms.deleteFailed"));
+      if (isEvaluationInUseError(error)) {
+        setDeleteBlocked(true);
+      } else {
+        setErrorMessage(describeEvaluationDeleteError(error, t));
+      }
     } finally {
       setDeleting(false);
       setDeleteConfirmOpen(false);
@@ -261,6 +258,20 @@ export default function PreviewPage() {
         confirmLabel={t("myForms.confirmDelete")}
         cancelLabel={t("common.cancel")}
         confirmDisabled={deleting}
+      />
+
+      <ConfirmModal
+        isOpen={deleteBlocked}
+        title={t("myForms.deleteBlockedTitle")}
+        message={t("myForms.deleteInUse")}
+        variant="primary"
+        onCancel={() => setDeleteBlocked(false)}
+        onConfirm={() => {
+          setDeleteBlocked(false);
+          navigate(record?.video_case_id ? `/video-cases/${record.video_case_id}` : "/video-cases");
+        }}
+        confirmLabel={t("myForms.deleteBlockedAction")}
+        cancelLabel={t("common.close")}
       />
 
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 md:py-8">

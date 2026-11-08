@@ -1,6 +1,13 @@
 import { useLanguage } from "../i18n/useLanguage";
 import { useTheme } from "../theme/useTheme";
 
+// Each channel lights up in its own brand color on hover or keyboard focus.
+const SOCIAL_HOVER: Record<string, string> = {
+  Website: "hover:bg-[#f2b01e] hover:text-[#0b1b33] focus-visible:bg-[#f2b01e] focus-visible:text-[#0b1b33]",
+  Facebook: "hover:bg-[#1877f2] hover:text-white focus-visible:bg-[#1877f2]",
+  LINE: "hover:bg-[#06c755] hover:text-white focus-visible:bg-[#06c755]",
+};
+
 export default function Footer() {
   const { theme } = useTheme();
   const { t } = useLanguage();
@@ -109,7 +116,7 @@ export default function Footer() {
                   href={href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`flex h-10 w-10 items-center justify-center rounded-full ${isDark ? "bg-slate-800" : "bg-white/10"}`}
+                  className={`flex h-10 w-10 items-center justify-center rounded-full text-white outline-none ring-2 ring-transparent transition-colors duration-200 ease-out focus-visible:ring-white ${isDark ? "bg-slate-800" : "bg-white/10"} ${SOCIAL_HOVER[label]}`}
                   aria-label={label}
                 >
                   {label === "Facebook" && (

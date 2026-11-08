@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
-import Logo from "../assets/logo_no_bg.png";
 import { accountingService } from "../services/accountingService";
 import AuthAlert from "../components/AuthAlert";
 import AuthModal from "../components/AuthModal";
-import AuthPageControls from "../components/AuthPageControls";
+import AuthShell from "../components/AuthShell";
 import { useLanguage } from "../i18n/useLanguage";
 import {
   getPasswordUpdateErrorMessage,
@@ -344,23 +343,8 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f7f9fb] dark:bg-slate-950">
-      <AuthPageControls />
+    <AuthShell title={t("auth.resetPasswordTitle")} subtitle={t("auth.resetPasswordSubtitle")}>
       {modalError && <AuthModal message={modalError} onClose={() => setModalError("")} />}
-
-      <div className="relative z-10 flex w-full max-w-md items-center justify-center rounded-2xl border-4 border-[#eaeef2] bg-white px-4 py-12 dark:border-slate-800 dark:bg-slate-900">
-        <div className="relative z-10 w-full max-w-md rounded-2xl p-8 backdrop-blur-lg">
-          <div className="mb-4 flex justify-center p-2">
-            <img src={Logo} alt="Logo" className="h-auto w-100" />
-          </div>
-          <div>
-            <h2 className="mb-2 text-center text-2xl font-bold text-black dark:text-white">
-              {t("auth.resetPasswordTitle")}
-            </h2>
-            <p className="mb-6 text-center text-sm text-gray-500 dark:text-slate-400">
-              {t("auth.resetPasswordSubtitle")}
-            </p>
-          </div>
 
           {message && <AuthAlert variant="success" message={message} />}
           {effectivePageError && <AuthAlert variant="error" message={effectivePageError} />}
@@ -369,13 +353,14 @@ export default function ResetPassword() {
           )}
           {isCheckingRecovery && <AuthAlert variant="info" message={t("auth.resetLinkChecking")} />}
 
-          <form noValidate onSubmit={handleUpdate} className="space-y-5">
+          <form noValidate onSubmit={handleUpdate} className="mt-5 space-y-5">
             <div>
-              <label className="mb-1 block font-medium text-gray-600 dark:text-slate-300">
+              <label htmlFor="auth-field-1" className="login-label">
                 {t("auth.newPassword")}
               </label>
               <div className="relative">
                 <input
+ id="auth-field-1"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => {
@@ -391,11 +376,8 @@ export default function ResetPassword() {
                     }
                   }}
                   disabled={loading || !hasRecoverySession}
-                  className={`w-full rounded-lg border bg-white py-2 pl-4 pr-10 text-black focus:outline-none focus:ring-1 dark:bg-slate-950 dark:text-white ${
-                    fieldErrors.password
-                      ? "border-red-400 focus:ring-red-200 dark:border-red-500/60"
-                      : "border-gray-500 focus:ring-[#04418b] dark:border-slate-700"
-                  }`}
+                  aria-invalid={fieldErrors.password ? true : undefined}
+                  className="login-input pr-11 disabled:opacity-70"
                   placeholder={t("auth.enterNewPassword")}
                   minLength={MIN_PASSWORD_LENGTH}
                   autoComplete="new-password"
@@ -406,8 +388,7 @@ export default function ResetPassword() {
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
                   title={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
-                  tabIndex={-1}
+                  className="login-muted absolute inset-y-0 right-0 flex items-center rounded-lg px-3"
                 >
                   {showPassword ? (
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
@@ -422,11 +403,12 @@ export default function ResetPassword() {
             </div>
 
             <div>
-              <label className="mb-1 block font-medium text-gray-600 dark:text-slate-300">
+              <label htmlFor="auth-field-2" className="login-label">
                 {t("auth.confirmPassword")}
               </label>
               <div className="relative">
                 <input
+ id="auth-field-2"
                   type={showConfirmPassword ? "text" : "password"}
                   value={confirmPassword}
                   onChange={(e) => {
@@ -441,11 +423,8 @@ export default function ResetPassword() {
                     }
                   }}
                   disabled={loading || !hasRecoverySession}
-                  className={`w-full rounded-lg border bg-white py-2 pl-4 pr-10 text-black focus:outline-none focus:ring-1 dark:bg-slate-950 dark:text-white ${
-                    fieldErrors.confirmPassword
-                      ? "border-red-400 focus:ring-red-200 dark:border-red-500/60"
-                      : "border-gray-500 focus:ring-[#04418b] dark:border-slate-700"
-                  }`}
+                  aria-invalid={fieldErrors.confirmPassword ? true : undefined}
+                  className="login-input pr-11 disabled:opacity-70"
                   placeholder={t("auth.confirmNewPassword")}
                   minLength={MIN_PASSWORD_LENGTH}
                   autoComplete="new-password"
@@ -456,8 +435,7 @@ export default function ResetPassword() {
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   aria-label={showConfirmPassword ? t("auth.hidePassword") : t("auth.showPassword")}
                   title={showConfirmPassword ? t("auth.hidePassword") : t("auth.showPassword")}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
-                  tabIndex={-1}
+                  className="login-muted absolute inset-y-0 right-0 flex items-center rounded-lg px-3"
                 >
                   {showConfirmPassword ? (
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
@@ -491,8 +469,6 @@ export default function ResetPassword() {
               </button>
             )}
           </form>
-        </div>
-      </div>
-    </div>
+    </AuthShell>
   );
 }

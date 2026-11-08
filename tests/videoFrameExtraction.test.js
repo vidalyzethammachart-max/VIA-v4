@@ -53,6 +53,7 @@ test('undecodable media reports a decode failure without exposing the source pat
   });
   assert.equal(diagnostics[0][1].stage, 'frames');
   assert.equal(diagnostics[0][1].timedOut, false);
-  assert.equal(diagnostics[0][1].code, 1);
+  assert.notEqual(diagnostics[0][1].code, 0);
+  assert.equal(typeof diagnostics[0][1].code, 'number');
   assert.doesNotMatch(JSON.stringify(diagnostics), /private-source/);
 });

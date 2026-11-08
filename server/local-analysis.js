@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app } from './cloud-run-upload.js';
-import { requireSupportedGeminiModel } from './geminiAnalysis.js';
+import { getGeminiConfig, requireSupportedGeminiModel } from './geminiAnalysis.js';
 
 // The tunnel must target this restricted loopback listener, never the upload API.
 export async function startLocalAnalysisServer({ port = Number(process.env.LOCAL_ANALYSIS_PORT || 8081) } = {}) {
@@ -33,7 +33,7 @@ export async function startLocalAnalysisServer({ port = Number(process.env.LOCAL
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   startLocalAnalysisServer().then(server => {
-    console.log(`[local-analysis] Gemini ${requireSupportedGeminiModel('Local analysis')} on 127.0.0.1:${server.address().port}; POST /api/analyze-video only`);
+    console.log(`[local-analysis] Gemini ${getGeminiConfig().model} on 127.0.0.1:${server.address().port}; POST /api/analyze-video only`);
   }).catch(error => {
     console.error('[local-analysis] Could not start:', error.code === 'EADDRINUSE' ? 'Port is already in use.'
       : /^(Local analysis requires |Missing |VIDEO_ALLOW_LOCAL_TEST_URLS|Invalid GEMINI_MODEL )/.test(error.message) ? error.message : 'Check local configuration.');

@@ -31,7 +31,7 @@ export default function VideoCaseEditor({ videoCase, onSaved, onCancel }: {
       const updated = await updateVideoCase({ id: videoCase.id, expectedUpdatedAt: videoCase.updated_at, caseTitle: title, description, videoFile: file });
       onSaved(updated);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "บันทึกเคสไม่สำเร็จ กรุณาลองอีกครั้ง");
+      setError(cause instanceof Error ? cause.message : "บันทึกงานประเมินไม่สำเร็จ กรุณาลองอีกครั้ง");
     } finally {
       busy.current = false;
       setSaving(false);
@@ -44,17 +44,17 @@ export default function VideoCaseEditor({ videoCase, onSaved, onCancel }: {
     }} className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-950/60">
       <form onSubmit={save} className="space-y-5 p-6" aria-busy={saving}>
         <div>
-          <h2 id="edit-case-title" className="text-xl font-bold">แก้ไข Video Case</h2>
+          <h2 id="edit-case-title" className="text-xl font-bold">แก้ไขงานประเมิน</h2>
           <p className="mt-1 break-all text-xs text-slate-500">Case key: {videoCase.case_key}</p>
         </div>
         <fieldset disabled={saving} className="space-y-4">
           <div>
-            <label htmlFor="case-edit-name" className="block text-sm font-semibold">ชื่อเคส <span className="text-red-500">*</span></label>
+            <label htmlFor="case-edit-name" className="block text-sm font-semibold">ชื่อ <span className="text-red-500">*</span></label>
             <input id="case-edit-name" autoFocus required value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
           </div>
           <div>
             <label htmlFor="case-edit-description" className="block text-sm font-semibold">รายละเอียด</label>
-            <textarea id="case-edit-description" rows={4} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="รายละเอียดหรือคำอธิบายวิดีโอของเคสนี้" className="mt-2 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+            <textarea id="case-edit-description" rows={4} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="รายละเอียดหรือคำอธิบายวิดีโอของงานประเมินนี้" className="mt-2 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <label htmlFor="case-edit-video" className="block text-sm font-semibold">เปลี่ยนวิดีโอ</label>

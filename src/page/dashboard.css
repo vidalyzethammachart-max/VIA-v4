@@ -262,3 +262,14 @@ html.dark .db-state[data-state="alert"] { color: #fca5a5; }
 /* Whole row opens the evaluation; the ID and type links keep it reachable by keyboard. */
 .db-click { cursor: pointer; }
 .db-click:hover { background: color-mix(in srgb, var(--db-blue) 6%, transparent); }
+
+/* Selected list row: amber rail, the same playhead colour used across the redesign. */
+.db-click[data-selected="true"] { background: color-mix(in srgb, var(--db-blue) 9%, transparent); box-shadow: inset 3px 0 0 var(--db-playhead); }
+.db-root .db-table tbody button { color: inherit; }
+.db-root .db-table tbody button:hover { color: var(--db-blue); }
+
+/* Destructive action kept away from the everyday buttons and quiet until hovered. */
+.db-danger-link { color: #c2352f; font-size: 0.875rem; font-weight: 600; background: none; border: 0; padding: 0.25rem 0; }
+.db-danger-link:hover:not(:disabled) { text-decoration: underline; }
+.db-danger-link:disabled { opacity: 0.5; }
+html.dark .db-danger-link { color: #fca5a5; }

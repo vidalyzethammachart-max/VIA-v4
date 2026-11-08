@@ -1,16 +1,14 @@
-import { getAnalysisMatrix } from "../services/aggregateStatistics.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
+import "./dashboard.css";
 import VideoCaseEditor from "../components/VideoCaseEditor";
 import { buildVideoCaseSummaryDocumentPreviewPath } from "../services/videoCaseSummaryDocumentPreviewCore.js";
 import { normalizeRole, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import {
-  combineVideoCaseAnalyses,
-  deleteVideoCaseEvaluation,
   getMyVideoCases,
   getVideoCaseAggregates,
   getVideoCaseAnalyses,
@@ -22,8 +20,11 @@ import {
   type VideoCaseRow,
 } from "../services/videoCaseService";
 
+const PAGE_SIZE = 15;
+
+const formatCaseDate = (value: string) => new Date(value).toLocaleString("th-TH", { day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+
 export default function VideoCasesPage() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedCaseId = searchParams.get("caseId")?.trim() || "";
   const [loading, setLoading] = useState(true);
@@ -31,6 +32,8 @@ export default function VideoCasesPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [editingCase, setEditingCase] = useState<VideoCaseRow | null>(null);
   const [showTrash, setShowTrash] = useState(false);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [caseToTrash, setCaseToTrash] = useState<VideoCaseRow | null>(null);
   const [changingTrash, setChangingTrash] = useState(false);
   const trashBusy = useRef(false);
@@ -43,18 +46,14 @@ export default function VideoCasesPage() {
   const [aggregates, setAggregates] = useState<VideoCaseAggregateRow[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [prompt] = useState("");
-  const [combining, setCombining] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [selectedAnalysisIds, setSelectedAnalysisIds] = useState<number[]>([]);
-  const [evaluationToDelete, setEvaluationToDelete] = useState<VideoCaseEvaluationRow | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [evaluationCounts, setEvaluationCounts] = useState<Record<string, number>>({});
 
-  // On phones the selected-case card sits far above the list, so bring it into view.
+  // The selected-case box sits above the list, so scroll it back into view when it is off screen.
   const selectCase = (caseId: string) => {
     setSelectedCaseId(caseId);
-    if (window.matchMedia("(max-width: 767px)").matches) {
-      document.getElementById("selected-video-case")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const box = document.getElementById("selected-video-case");
+    if (box && (window.matchMedia("(max-width: 767px)").matches || box.getBoundingClientRect().top < 0)) {
+      box.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
@@ -65,10 +64,6 @@ export default function VideoCasesPage() {
 
   const effectiveCaseRole: VideoCaseMemberRole =
     appRole === "admin" ? "leader" : (selectedRole ?? "member");
-  const selectedAnalyses = useMemo(
-    () => analyses.filter((run) => selectedAnalysisIds.includes(run.id)),
-    [analyses, selectedAnalysisIds],
-  );
 
   const loadCases = useCallback(async () => {
     const request = ++listRequest.current;
@@ -78,6 +73,18 @@ export default function VideoCasesPage() {
       const data = await getMyVideoCases({ trashed: showTrash });
       if (request !== listRequest.current) return;
       setCases(data);
+      setEvaluationCounts({});
+      if (data.length > 0) {
+        void supabase.from("evaluations").select("video_case_id").in("video_case_id", data.map((item) => item.id)).then(({ data: rows, error }) => {
+          if (error || request !== listRequest.current) return;
+          const counts: Record<string, number> = {};
+          for (const row of rows ?? []) {
+            const key = String(row.video_case_id);
+            counts[key] = (counts[key] ?? 0) + 1;
+          }
+          setEvaluationCounts(counts);
+        });
+      }
       if (requestedCaseId && data.some((item) => item.id === requestedCaseId)) {
         setSelectedCaseId(requestedCaseId);
         return;
@@ -106,7 +113,6 @@ export default function VideoCasesPage() {
       setSelectedRole(membership?.member_role ?? null);
       setAnalyses(analysisRows);
       setAggregates(aggregateRows);
-      setSelectedAnalysisIds(analysisRows.map((run) => run.id));
     } catch (error) {
       if (request === detailsRequest.current) setErrorMessage(error instanceof Error ? error.message : "Failed to load case details.");
     }
@@ -144,7 +150,6 @@ export default function VideoCasesPage() {
       setAnalyses([]);
       setAggregates([]);
       setSelectedRole(null);
-      setSelectedAnalysisIds([]);
       return;
     }
 
@@ -163,6 +168,8 @@ export default function VideoCasesPage() {
     setErrorMessage(null);
     setSuccessMessage(null);
     setShowTrash(trashed);
+    setSearch("");
+    setPage(1);
   }
 
   async function handleTrashChange(videoCase: VideoCaseRow, trashed: boolean) {
@@ -175,84 +182,32 @@ export default function VideoCasesPage() {
       await setVideoCaseTrashed(videoCase.id, trashed);
       setCases((previous) => previous.filter((item) => item.id !== videoCase.id));
       setSelectedCaseId((previous) => previous === videoCase.id ? "" : previous);
-      setSuccessMessage(trashed ? "ย้ายเคสเข้าถังขยะแล้ว ผลประเมินและรายงานเดิมยังอยู่ สามารถกู้คืนได้" : "กู้คืนเคสแล้ว ดูได้ในแท็บเคสที่ใช้งาน");
+      setSuccessMessage(trashed ? "ย้ายงานประเมินเข้าถังขยะแล้ว แบบประเมินและรายงานเดิมยังอยู่ กู้คืนได้" : "กู้คืนงานประเมินแล้ว ดูได้ในแท็บงานประเมินที่ใช้งาน");
       setCaseToTrash(null);
     } catch (error) {
       setCaseToTrash(null);
-      setErrorMessage(error instanceof Error ? error.message : "เปลี่ยนสถานะเคสไม่สำเร็จ กรุณาลองอีกครั้ง");
+      setErrorMessage(error instanceof Error ? error.message : "เปลี่ยนสถานะงานประเมินไม่สำเร็จ กรุณาลองอีกครั้ง");
     } finally {
       trashBusy.current = false;
       setChangingTrash(false);
     }
   }
 
-  async function handleCombine() {
-    if (!selectedCase) {
-      setErrorMessage("Select a case first.");
-      return;
-    }
-
-    if (selectedAnalyses.length === 0) {
-      setErrorMessage("Select at least one evaluation to combine.");
-      return;
-    }
-
-    try {
-      setCombining(true);
-      setErrorMessage(null);
-      const aggregate = await combineVideoCaseAnalyses({
-        videoCaseId: selectedCase.id,
-        caseTitle: selectedCase.case_title || selectedCase.case_key,
-        sourceRuns: selectedAnalyses.map((run) => ({
-          id: run.id,
-          user_id: run.user_id,
-          employee_number: run.employee_number,
-          evaluation_id: run.id,
-          run_kind: run.analysis_kind,
-          rubric: run.rubric,
-          matrix: getAnalysisMatrix(run.analysis_ai_output),
-          ai_output: run.analysis_ai_output,
-          ai_raw_text: run.analysis_ai_raw_text,
-          notes: run.overall_suggestion,
-          created_at: run.created_at,
-          order_number: run.order_number,
-        })),
-        prompt: prompt.trim() || undefined,
-      });
-
-      navigate(`/video-cases/${selectedCase.id}/summaries/${aggregate.id}`);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to combine analyses.");
-    } finally {
-      setCombining(false);
-      setConfirmOpen(false);
-    }
-  }
-
-  async function handleDeleteEvaluation() {
-    if (!selectedCase || !evaluationToDelete) return;
-
-    try {
-      setDeleting(true);
-      setErrorMessage(null);
-      await deleteVideoCaseEvaluation(evaluationToDelete.id);
-      setSuccessMessage(`Evaluation #${evaluationToDelete.id} was deleted.`);
-      await loadCaseData(selectedCase.id);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to delete evaluation.");
-    } finally {
-      setDeleting(false);
-      setEvaluationToDelete(null);
-    }
-  }
+  const searchTerm = search.trim().toLowerCase();
+  const filteredCases = searchTerm
+    ? cases.filter((item) => [item.case_title, item.case_key, item.source_file_name].some((value) => (value || "").toLowerCase().includes(searchTerm)))
+    : cases;
+  const pageCount = Math.max(1, Math.ceil(filteredCases.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filteredCases.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="db-root">
       <MainNavbar />
       <ConfirmModal
         isOpen={Boolean(caseToTrash)}
-        title="ย้ายเคสเข้าถังขยะ"
-        message={`ย้ายเคส “${caseToTrash?.case_title || caseToTrash?.case_key || ""}” (${caseToTrash?.case_key || ""}) เข้าถังขยะหรือไม่? ผลประเมิน รายงาน และวิดีโอเดิมจะถูกเก็บไว้ และสามารถกู้คืนได้`}
+        title="ย้ายงานประเมินเข้าถังขยะ"
+        message={`ย้ายงานประเมิน “${caseToTrash?.case_title || caseToTrash?.case_key || ""}” (${caseToTrash?.case_key || ""}) เข้าถังขยะหรือไม่? ผลประเมิน รายงาน และวิดีโอเดิมจะถูกเก็บไว้ และสามารถกู้คืนได้`}
         onCancel={() => { if (!trashBusy.current) setCaseToTrash(null); }}
         onConfirm={() => { if (caseToTrash) void handleTrashChange(caseToTrash, true); }}
         confirmLabel="ย้ายเข้าถังขยะ" cancelLabel="ยกเลิก" confirmDisabled={changingTrash}
@@ -264,253 +219,184 @@ export default function VideoCasesPage() {
             setCases((previous) => previous.map((item) => item.id === updated.id ? updated : item));
             setEditingCase(null);
             setErrorMessage(null);
-            setSuccessMessage("บันทึกข้อมูลเคสเรียบร้อยแล้ว");
+            setSuccessMessage("บันทึกข้อมูลงานประเมินเรียบร้อยแล้ว");
           }}
         />
       )}
-      <ConfirmModal
-        isOpen={confirmOpen}
-        title="รวมผลและวิเคราะห์ใหม่"
-        message={`AI will combine ${selectedAnalyses.length} selected evaluation(s) for this case.`}
-        variant="primary"
-        onCancel={() => {
-          if (!combining) setConfirmOpen(false);
-        }}
-        onConfirm={() => void handleCombine()}
-        confirmLabel="รวมผล"
-        cancelLabel="ยกเลิก"
-        confirmDisabled={combining}
-      />
-      <ConfirmModal
-        isOpen={Boolean(evaluationToDelete)}
-        title="Delete evaluation"
-        message={`Delete evaluation #${evaluationToDelete?.id ?? ""}? This cannot be undone.`}
-        variant="danger"
-        onCancel={() => {
-          if (!deleting) setEvaluationToDelete(null);
-        }}
-        onConfirm={() => void handleDeleteEvaluation()}
-        confirmLabel={deleting ? "Deleting..." : "Delete"}
-        cancelLabel="Cancel"
-        confirmDisabled={deleting}
-      />
-      <main className="mx-auto max-w-7xl px-4 py-6 md:py-8">
-        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <header className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">จัดการ Video Case</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              ใช้สำหรับสร้างหรือเข้าร่วมเคส ดูผลวิเคราะห์รายคน และให้หัวหน้ารวมผลเพื่อสรุปใหม่
-            </p>
+            <h1 className="text-3xl font-bold leading-snug">จัดการงานประเมิน</h1>
+            <p className="db-muted max-w-xl">ดูแบบประเมินรายคนของแต่ละงานประเมิน และให้หัวหน้ารวมเป็นแบบประเมินกลุ่ม</p>
           </div>
-          <Link to="/form-submit" className="btn-secondary text-center">
-            ไปหน้ากรอกประเมิน
-          </Link>
+          <Link to="/form-submit" className="btn-primary text-center">ไปหน้ากรอกแบบประเมิน</Link>
+        </header>
+
+        {errorMessage && <div role="alert" className="db-alert mb-4">{errorMessage}</div>}
+        {successMessage && <div role="status" className="db-ok mb-4">{successMessage}</div>}
+
+        <div className="db-tabs mb-4" role="group" aria-label="รายการงานประเมิน">
+          <button type="button" aria-pressed={!showTrash} disabled={changingTrash} className="db-tab" onClick={() => switchCaseList(false)}>งานประเมินที่ใช้งาน</button>
+          <button type="button" aria-pressed={showTrash} disabled={changingTrash} className="db-tab" onClick={() => switchCaseList(true)}>ถังขยะ</button>
         </div>
+        {showTrash && <p className="db-muted mb-4 text-sm">งานประเมินในถังขยะยังเก็บแบบประเมิน รายงาน และวิดีโอไว้ ผู้สร้างหรือแอดมินกู้คืนได้</p>}
 
-        {errorMessage && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {errorMessage}
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            {successMessage}
-          </div>
-        )}
-
-        <div className="mb-4 flex gap-2" role="group" aria-label="รายการ Video Case">
-          <button type="button" aria-pressed={!showTrash} disabled={changingTrash} className={!showTrash ? "btn-primary" : "btn-secondary"} onClick={() => switchCaseList(false)}>เคสที่ใช้งาน</button>
-          <button type="button" aria-pressed={showTrash} disabled={changingTrash} className={showTrash ? "btn-primary" : "btn-secondary"} onClick={() => switchCaseList(true)}>ถังขยะ</button>
-        </div>
-        {showTrash && <p className="mb-4 text-sm text-slate-500">เคสในถังขยะยังเก็บผลประเมิน รายงาน และวิดีโอไว้ ผู้สร้างเคสหรือแอดมินสามารถกู้คืนเพื่อใช้งานต่อได้</p>}
-        <section id="selected-video-case" className="mb-6 scroll-mt-20 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section id="selected-video-case" className="db-panel mb-8 scroll-mt-20 overflow-hidden">
           <div className="flex flex-col gap-5 p-5 md:flex-row md:items-start md:justify-between md:p-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">เคสที่เลือก</p>
-              <h3 className="mt-2 text-2xl font-bold text-slate-900">
-                {selectedCase?.case_title || selectedCase?.case_key || "ยังไม่ได้เลือกเคส"}
-              </h3>
-              <p className="mt-2 text-sm text-slate-500">
-                {selectedCase ? `รหัสเคส: ${selectedCase.case_key}` : "เลือกเคสด้านล่างเพื่อดูแบบประเมินและผลรวม"}
+            <div className="min-w-0">
+              <p className="db-muted text-sm">งานประเมินที่เลือก</p>
+              <h2 className="mt-1 break-words text-2xl font-bold leading-snug">
+                {selectedCase?.case_title || selectedCase?.case_key || "ยังไม่ได้เลือกงานประเมิน"}
+              </h2>
+              <p className="db-muted mt-1 text-sm">
+                {selectedCase ? `รหัส ${selectedCase.case_key}` : "เลือกงานประเมินจากรายการด้านล่างเพื่อดูแบบประเมินและแบบประเมินกลุ่ม"}
               </p>
               {selectedCase && (
-                <p className="mt-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                  บทบาทของคุณ: {effectiveCaseRole === "leader" ? "หัวหน้าเคส" : "สมาชิก"}{appRole === "admin" ? " (ผู้ดูแลระบบ)" : ""}
+                <p className="db-state mt-3" data-state={effectiveCaseRole === "leader" ? "ready" : "pending"}>
+                  คุณเป็น{effectiveCaseRole === "leader" ? "หัวหน้า" : "สมาชิก"}{appRole === "admin" ? " (ผู้ดูแลระบบ)" : ""}
                 </p>
               )}
               {selectedCase?.description && (
-                <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-600">{selectedCase.description}</p>
+                <p className="mt-3 whitespace-pre-wrap break-words text-sm">{selectedCase.description}</p>
               )}
               {selectedCase?.source_file_name && (
-                <p className="mt-2 break-all text-sm text-slate-500">วิดีโอ: {selectedCase.source_file_name}</p>
+                <p className="db-muted mt-2 break-all text-sm">วิดีโอ: {selectedCase.source_file_name}</p>
               )}
             </div>
             {selectedCase && !showTrash && (
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 {(appRole === "admin" || selectedCase.created_by === currentUserId) && (
-                  <>
-                    <button type="button" className="btn-secondary" disabled={changingTrash} onClick={() => setEditingCase(selectedCase)}>แก้ไขเคส</button>
-                    <button type="button" className="btn-danger" disabled={changingTrash} onClick={() => setCaseToTrash(selectedCase)}>ย้ายเข้าถังขยะ</button>
-                  </>
+                  <button type="button" className="btn-secondary" disabled={changingTrash} onClick={() => setEditingCase(selectedCase)}>แก้ไข</button>
                 )}
-                <Link
-                  to={`/video-cases/${selectedCase.id}`}
-                  className="btn-secondary text-center"
-                >
-                  ดูรายละเอียด
-                </Link>
-                <Link
-                  to={`/form-submit?caseId=${selectedCase.id}`}
-                  className="btn-primary text-center"
-                >
-                  กรอกแบบประเมิน
-                </Link>
+                <Link to={`/video-cases/${selectedCase.id}`} className="btn-secondary text-center">ดูรายละเอียด</Link>
               </div>
             )}
             {selectedCase && showTrash && (appRole === "admin" || selectedCase.created_by === currentUserId) && (
-              <button type="button" className="btn-primary" disabled={changingTrash} onClick={() => void handleTrashChange(selectedCase, false)}>{changingTrash ? "กำลังกู้คืน..." : "กู้คืนเคส"}</button>
+              <button type="button" className="btn-primary" disabled={changingTrash} onClick={() => void handleTrashChange(selectedCase, false)}>{changingTrash ? "กำลังกู้คืน..." : "กู้คืน"}</button>
             )}
           </div>
-          <div className="grid grid-cols-3 border-t border-slate-200">
-            <div className="border-r border-slate-200 p-3 sm:p-4">
-              <p className="text-xs font-medium text-slate-500">แบบประเมิน</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">{analyses.length}</p>
+          <dl className="db-kpis" style={{ gridTemplateColumns: "repeat(3, 1fr)", borderBottom: 0 }}>
+            <div className="db-kpi" style={{ borderLeft: 0 }}>
+              <dt className="db-muted text-sm">แบบประเมิน</dt>
+              <dd>{analyses.length}</dd>
             </div>
-            <div className="border-r border-slate-200 p-3 sm:p-4">
-              <p className="text-xs font-medium text-slate-500">ผู้ประเมิน</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">
-                {new Set(analyses.map((analysis) => analysis.user_id).filter(Boolean)).size}
-              </p>
+            <div className="db-kpi" style={{ borderLeft: "1px solid var(--db-line)" }}>
+              <dt className="db-muted text-sm">ผู้ประเมิน</dt>
+              <dd>{new Set(analyses.map((analysis) => analysis.user_id).filter(Boolean)).size}</dd>
             </div>
-            <div className="p-4">
-              <p className="text-xs font-medium text-slate-500">ผลรวมล่าสุด</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900">
-                {aggregates[0] ? ({ pending: "กำลังดำเนินการ", ready: "พร้อมใช้งาน", failed: "ไม่สำเร็จ" }[aggregates[0].status] ?? aggregates[0].status) : "ยังไม่มี"}
-              </p>
+            <div className="db-kpi" style={{ borderLeft: "1px solid var(--db-line)" }}>
+              <dt className="db-muted text-sm">แบบประเมินกลุ่มล่าสุด</dt>
+              <dd className="!text-base !font-semibold">
+                {aggregates[0] ? ({ pending: "กำลังดำเนินการ", ready: "พร้อมเปิด", failed: "ไม่สำเร็จ" }[aggregates[0].status] ?? aggregates[0].status) : "ยังไม่มี"}
+              </dd>
               {selectedCase && !showTrash && aggregates[0]?.document_status === "ready" && (aggregates[0].pdf_storage_path || aggregates[0].docx_storage_path) && (
-                <Link
-                  to={buildVideoCaseSummaryDocumentPreviewPath(selectedCase.id, aggregates[0].id)}
-                  className="btn-primary mt-2 inline-flex text-xs"
-                >
-                  เปิดไฟล์รวม PDF / DOCX
+                <Link to={buildVideoCaseSummaryDocumentPreviewPath(selectedCase.id, aggregates[0].id)} className="btn-primary mt-2 inline-flex text-xs">
+                  เปิดไฟล์ PDF / DOCX
                 </Link>
               )}
             </div>
-          </div>
+          </dl>
+          {selectedCase && !showTrash && (appRole === "admin" || selectedCase.created_by === currentUserId) && (
+            <div className="flex justify-end border-t px-5 py-2 md:px-6" style={{ borderColor: "var(--db-line)" }}>
+              <button type="button" className="db-danger-link" disabled={changingTrash} onClick={() => setCaseToTrash(selectedCase)}>ย้ายเข้าถังขยะ</button>
+            </div>
+          )}
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
+        <section className="db-panel p-4 sm:p-6">
+          <div className="flex items-end justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">{showTrash ? "เคสในถังขยะ" : "รายการ Video Case"}</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                {showTrash ? "เลือกเคสที่ต้องการกู้คืน" : "เลือกเคสเพื่อดูผลประเมิน แก้ไขข้อมูล หรือย้ายเข้าถังขยะ"}
+              <h2 className="text-xl font-bold leading-snug">{showTrash ? "งานประเมินในถังขยะ" : "รายการงานประเมิน"}</h2>
+              <p className="db-muted mt-1 text-sm">
+                {showTrash ? "เลือกงานประเมินที่ต้องการกู้คืน" : "เลือกงานประเมินเพื่อดูแบบประเมิน แก้ไข หรือย้ายเข้าถังขยะ"}
               </p>
             </div>
-            <p className="text-xs font-medium text-slate-500">{cases.length} เคส</p>
+            <p className="db-muted text-sm tabular-nums">{searchTerm ? `${filteredCases.length} จาก ${cases.length} รายการ` : `${cases.length} รายการ`}</p>
           </div>
 
-          {loading ? <p className="mt-4 text-sm text-slate-500" role="status">กำลังโหลดเคส...</p> : cases.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-500">{showTrash ? "ไม่มีเคสในถังขยะ" : "ยังไม่มีเคสที่ใช้งาน"}</p>
+          {cases.length > 0 && (
+            <div className="mt-4">
+              <label htmlFor="case-search" className="sr-only">ค้นหางานประเมิน</label>
+              <input
+                id="case-search"
+                type="search"
+                value={search}
+                onChange={(event) => { setSearch(event.target.value); setPage(1); }}
+                placeholder="ค้นหาจากชื่อ รหัส หรือชื่อไฟล์วิดีโอ"
+                className="db-input w-full sm:max-w-sm"
+              />
+            </div>
+          )}
+
+          {loading ? <p className="db-muted mt-4 text-sm" role="status">กำลังโหลด...</p> : cases.length === 0 ? (
+            <div className="mt-4">
+              <p className="db-muted text-sm">{showTrash ? "ไม่มีงานประเมินในถังขยะ" : "ยังไม่มีงานประเมินที่ใช้งาน"}</p>
+              {!showTrash && <Link to="/form-submit" className="btn-primary mt-3 inline-flex">ไปหน้ากรอกแบบประเมิน</Link>}
+            </div>
+          ) : filteredCases.length === 0 ? (
+            <p className="db-muted mt-4 text-sm">ไม่พบงานประเมินที่ตรงกับ “{search.trim()}”</p>
           ) : (
             <>
-            <ul className="mt-4 divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 md:hidden">
-              {cases.map((videoCase) => {
-                const isSelected = videoCase.id === selectedCaseId;
-                return (
-                  <li key={videoCase.id}>
-                    <button
-                      type="button"
-                      onClick={() => selectCase(videoCase.id)}
-                      aria-pressed={isSelected}
-                      className={`flex w-full items-start justify-between gap-3 px-4 py-3 text-left ${isSelected ? "bg-blue-50" : "bg-white"}`}
-                    >
-                      <span className="min-w-0">
-                        <span className="block break-words font-semibold text-slate-900">{videoCase.case_title || "ไม่มีชื่อเคส"}</span>
-                        <span className="mt-1 block break-all text-xs text-slate-500">{videoCase.case_key}</span>
-                        <span className="mt-1 block text-xs text-slate-500">
-                          {new Date((showTrash && videoCase.deleted_at) || videoCase.updated_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
-                        </span>
-                      </span>
-                      <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${isSelected ? "border-[#04418b] bg-[#04418b] text-white" : "border-slate-300 text-slate-700"}`}>
-                        {isSelected ? "เลือกอยู่" : "เลือก"}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="mt-4 hidden overflow-hidden rounded-2xl border border-slate-200 md:block">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-                  <thead className="bg-slate-50">
+              <ul className="mt-4 md:hidden">
+                {pageRows.map((videoCase) => {
+                  const isSelected = videoCase.id === selectedCaseId;
+                  return (
+                    <li key={videoCase.id} className="db-click border-t" data-selected={isSelected} style={{ borderColor: "var(--db-line)" }}>
+                      <button type="button" onClick={() => selectCase(videoCase.id)} aria-pressed={isSelected} className="block w-full px-3 py-3 text-left">
+                        <span className="block break-words font-semibold">{videoCase.case_title || "ไม่มีชื่อ"}</span>
+                        <span className="db-muted mt-1 block break-all text-xs">{videoCase.case_key}</span>
+                        <span className="db-muted mt-1 block text-xs">{evaluationCounts[videoCase.id] !== undefined ? `${evaluationCounts[videoCase.id]} แบบประเมิน · ` : ""}{formatCaseDate((showTrash && videoCase.deleted_at) || videoCase.updated_at)}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="mt-4 hidden overflow-x-auto md:block">
+                <table className="db-table w-full min-w-[700px] text-left text-sm">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3 font-medium text-slate-500">รหัสเคส</th>
-                      <th className="px-4 py-3 font-medium text-slate-500">ชื่อเคส</th>
-                      <th className="px-4 py-3 font-medium text-slate-500">ไฟล์วิดีโอ</th>
-                      <th className="px-4 py-3 font-medium text-slate-500">{showTrash ? "ย้ายเข้าถังขยะเมื่อ" : "แก้ไขล่าสุด"}</th>
-                      <th className="px-4 py-3 font-medium text-slate-500">เลือก</th>
+                      <th className="px-3 py-3">รหัส</th>
+                      <th className="px-3 py-3">ชื่อ</th>
+                      <th className="px-3 py-3">ไฟล์วิดีโอ</th>
+                      <th className="px-3 py-3">แบบประเมิน</th>
+                      <th className="px-3 py-3">{showTrash ? "ย้ายเข้าถังขยะเมื่อ" : "แก้ไขล่าสุด"}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 bg-white">
-                    {cases.map((videoCase) => {
+                  <tbody>
+                    {pageRows.map((videoCase) => {
                       const isSelected = videoCase.id === selectedCaseId;
                       return (
-                        <tr
-                          key={videoCase.id}
-                          className={isSelected ? "bg-blue-50" : "hover:bg-slate-50"}
-                        >
-                          <td className="px-4 py-4 align-top">
-                            <button
-                              type="button"
-                              onClick={() => selectCase(videoCase.id)}
-                              className="text-left"
-                            >
-                              <p className="break-all text-xs font-medium text-[#04418b]">
-                                {videoCase.case_key}
-                              </p>
+                        <tr key={videoCase.id} className="db-click" data-selected={isSelected} onClick={() => selectCase(videoCase.id)}>
+                          <td className="px-3 py-3 align-top"><span className="db-muted break-all text-xs">{videoCase.case_key}</span></td>
+                          <td className="px-3 py-3 align-top">
+                            <button type="button" aria-pressed={isSelected} onClick={() => selectCase(videoCase.id)} className="text-left font-semibold">
+                              {videoCase.case_title || "ไม่มีชื่อ"}
                             </button>
                           </td>
-                          <td className="px-4 py-4 align-top">
-                            <button
-                              type="button"
-                              onClick={() => selectCase(videoCase.id)}
-                              className="text-left font-semibold text-slate-900 hover:text-[#04418b]"
-                            >
-                              {videoCase.case_title || "ไม่มีชื่อเคส"}
-                            </button>
-                          </td>
-                          <td className="px-4 py-4 align-top text-slate-600">
-                            {videoCase.source_file_name || "ไม่มีไฟล์วิดีโอ"}
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-4 align-top text-slate-600">
-                            {new Date((showTrash && videoCase.deleted_at) || videoCase.updated_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
-                          </td>
-                          <td className="px-4 py-4 align-top">
-                            <button
-                              type="button"
-                              onClick={() => selectCase(videoCase.id)}
-                              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                                isSelected
-                                  ? "border-[#04418b] bg-[#04418b] text-white"
-                                  : "border-slate-300 bg-white text-slate-700 hover:border-[#04418b] hover:text-[#04418b]"
-                              }`}
-                            >
-                              {isSelected ? "เลือกอยู่" : "เลือก"}
-                            </button>
-                          </td>
+                          <td className="db-muted px-3 py-3 align-top">{videoCase.source_file_name || "ไม่มีไฟล์วิดีโอ"}</td>
+                          <td className="px-3 py-3 align-top tabular-nums">{evaluationCounts[videoCase.id] ?? "—"}</td>
+                          <td className="whitespace-nowrap px-3 py-3 align-top">{formatCaseDate((showTrash && videoCase.deleted_at) || videoCase.updated_at)}</td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
-            </div>
+              {pageCount > 1 && (
+                <nav className="mt-4 flex flex-wrap items-center justify-between gap-3" aria-label="เลือกหน้า">
+                  <span className="db-muted text-xs tabular-nums">
+                    {`แสดง ${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, filteredCases.length)} จาก ${filteredCases.length} รายการ`}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button type="button" className="btn-secondary text-xs" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>ก่อนหน้า</button>
+                    <span className="db-muted text-xs tabular-nums" aria-live="polite">{`หน้า ${currentPage} จาก ${pageCount}`}</span>
+                    <button type="button" className="btn-secondary text-xs" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}>ถัดไป</button>
+                  </div>
+                </nav>
+              )}
             </>
           )}
         </section>
-
       </main>
     </div>
   );

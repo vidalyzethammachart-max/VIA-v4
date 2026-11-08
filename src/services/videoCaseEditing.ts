@@ -17,8 +17,8 @@ export async function updateVideoCase(input: {
   videoFile?: File | null;
 }): Promise<VideoCaseRow> {
   const title = input.caseTitle.trim();
-  if (!title) throw new Error("กรุณาระบุชื่อเคส");
-  if (!input.expectedUpdatedAt) throw new Error("กรุณาโหลดข้อมูลเคสใหม่ก่อนแก้ไข");
+  if (!title) throw new Error("กรุณาระบุชื่อ");
+  if (!input.expectedUpdatedAt) throw new Error("กรุณาโหลดข้อมูลงานประเมินใหม่ก่อนแก้ไข");
   if (input.videoFile) {
     const error = validateCaseVideo(input.videoFile);
     if (error) throw new Error(error);
@@ -28,17 +28,17 @@ export async function updateVideoCase(input: {
   const { data: current, error: readError } = await supabase.from("video_cases")
     .select("id, created_by, updated_at, deleted_at").eq("id", input.id).maybeSingle();
   if (readError) throw new Error(readError.message);
-  if (!current) throw new Error("ไม่พบเคสหรือคุณไม่มีสิทธิ์เข้าถึง");
-  if (current.deleted_at) throw new Error("เคสอยู่ในถังขยะ กรุณากู้คืนก่อนแก้ไข");
+  if (!current) throw new Error("ไม่พบงานประเมินหรือคุณไม่มีสิทธิ์เข้าถึง");
+  if (current.deleted_at) throw new Error("งานประเมินอยู่ในถังขยะ กรุณากู้คืนก่อนแก้ไข");
   if (current.created_by !== auth.user.id) {
     const { data: profile, error } = await supabase.from("user_information")
       .select("role").eq("auth_user_id", auth.user.id).maybeSingle();
     if (error || normalizeRole(profile?.role) !== "admin") {
-      throw new Error("เฉพาะผู้สร้างเคสหรือแอดมินเท่านั้นที่แก้ไขได้");
+      throw new Error("เฉพาะผู้สร้างงานประเมินหรือแอดมินเท่านั้นที่แก้ไขได้");
     }
   }
   if (current.updated_at !== input.expectedUpdatedAt) {
-    throw new Error("เคสนี้มีการเปลี่ยนแปลงแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนแก้ไขอีกครั้ง");
+    throw new Error("งานประเมินนี้มีการเปลี่ยนแปลงแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนแก้ไขอีกครั้ง");
   }
   const patch: Record<string, unknown> = {
     case_title: title,
@@ -68,7 +68,7 @@ export async function updateVideoCase(input: {
       body: file,
       signal: AbortSignal.timeout(15 * 60_000),
     });
-    if (!uploaded.ok) throw new Error(`อัปโหลดวิดีโอไม่สำเร็จ (${uploaded.status}) ข้อมูลเคสยังไม่ถูกเปลี่ยน`);
+    if (!uploaded.ok) throw new Error(`อัปโหลดวิดีโอไม่สำเร็จ (${uploaded.status}) ข้อมูลงานประเมินยังไม่ถูกเปลี่ยน`);
     Object.assign(patch, {
       source_file_name: file.name, video_name: file.name,
       video_object_key: presign.objectKey,
@@ -81,6 +81,6 @@ export async function updateVideoCase(input: {
   const { data, error } = await supabase.from("video_cases").update(patch)
     .eq("id", input.id).eq("updated_at", input.expectedUpdatedAt).select("*").maybeSingle();
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("บันทึกไม่ได้ เคสอาจถูกแก้ไขหรือสิทธิ์ของคุณเปลี่ยนไป กรุณาโหลดข้อมูลล่าสุด");
+  if (!data) throw new Error("บันทึกไม่ได้ งานประเมินอาจถูกแก้ไขหรือสิทธิ์ของคุณเปลี่ยนไป กรุณาโหลดข้อมูลล่าสุด");
   return data as VideoCaseRow;
 }

@@ -382,6 +382,12 @@ verify_jwt = true
 import_map = "./functions/document-artifact-url/deno.json"
 entrypoint = "./functions/document-artifact-url/index.ts"
 
+[functions.delete-evaluation]
+enabled = true
+verify_jwt = true
+import_map = "./functions/delete-evaluation/deno.json"
+entrypoint = "./functions/delete-evaluation/index.ts"
+
 [functions.n8n-failure-callback]
 enabled = true
 verify_jwt = false

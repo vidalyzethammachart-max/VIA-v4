@@ -318,7 +318,7 @@ export async function deleteVideoCaseEvaluation(evaluationId: number): Promise<v
 
   if (error) {
     if (error.code === "23503") {
-      throw new Error("This evaluation is used by a combined summary and cannot be deleted.");
+      throw new Error("แบบประเมินนี้ถูกนำไปรวมในแบบประเมินกลุ่มแล้ว จึงลบไม่ได้ หากต้องการลบ ให้ไปลบแบบประเมินกลุ่มนั้นก่อน (ดูตารางผลรวมด้านล่างของหน้านี้)");
     }
     throw new Error(error.message);
   }

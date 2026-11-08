@@ -21,7 +21,13 @@ export function collapseSupersededEvaluations(rows) {
   const visible = new Set();
   for (const group of groups.values()) {
     const ready = group.filter((row) => row.document_status === "ready");
-    if (ready.length > 0) ready.forEach((row) => visible.add(row));
+    // A ready copy that never produced a document (its path columns are known and empty)
+    // is hidden when another ready copy of the case has one.
+    const known = (row) => "pdf_storage_path" in row || "docx_storage_path" in row;
+    const hasDocument = (row) => Boolean(row.pdf_storage_path || row.docx_storage_path);
+    const withDocument = ready.filter(hasDocument);
+    const shown = withDocument.length > 0 ? ready.filter((row) => hasDocument(row) || !known(row)) : ready;
+    if (ready.length > 0) shown.forEach((row) => visible.add(row));
     else visible.add([...group].sort(newestFirst)[0]);
   }
   return (rows ?? []).filter((row) => !groupKey(row) || visible.has(row));

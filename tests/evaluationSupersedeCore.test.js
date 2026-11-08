@@ -76,3 +76,13 @@ test("superseded ids lists the copies that collapsing hides", () => {
   ];
   assert.deepEqual([...findSupersededIds(rows)].sort((a, b) => a - b), [276, 282]);
 });
+
+test("a ready copy without a document is hidden when another ready copy has one", () => {
+  const withFiles = item(290, "ready", "2026-10-26T06:12:54Z", { pdf_storage_path: "evaluations/290/result.pdf", docx_storage_path: null });
+  const empty = item(311, "ready", "2026-10-29T05:38:32Z", { pdf_storage_path: null, docx_storage_path: null });
+  assert.deepEqual(collapseSupersededEvaluations([empty, withFiles]).map((x) => x.id), [290]);
+  // Without a copy that has a document, nothing is hidden; rows without path columns are never judged.
+  assert.deepEqual(collapseSupersededEvaluations([empty]).map((x) => x.id), [311]);
+  const unknown = item(5, "ready", "2026-10-27T00:00:00Z");
+  assert.deepEqual(collapseSupersededEvaluations([unknown, withFiles]).map((x) => x.id), [5, 290]);
+});

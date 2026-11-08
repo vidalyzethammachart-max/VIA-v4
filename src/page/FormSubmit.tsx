@@ -455,6 +455,22 @@ function FormSubmit() {
       throw new Error(t("form.sessionNotReady"));
     }
 
+    // A failed or stuck evaluation of this case is reopened so it keeps its number
+    // instead of leaving a second row behind. Any error here falls back to a new row.
+    if (options.videoCaseId) {
+      const reopened = await supabase.rpc("reopen_unfinished_evaluation", {
+        p_video_case_id: options.videoCaseId,
+        p_order_number: payload.order_number ?? "",
+        p_subject_name: payload.subject_name,
+        p_overall_suggestion: payload.overall_suggestion ?? null,
+        p_rubric: payload.rubric,
+      });
+      const reopenedId = Number(reopened.data);
+      if (!reopened.error && reopened.data != null && Number.isInteger(reopenedId) && reopenedId > 0) {
+        return reopenedId;
+      }
+    }
+
     const { data, error } = await supabase
       .from("evaluations")
       .insert([

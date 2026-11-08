@@ -377,7 +377,7 @@ export default function VideoCaseDetailPage() {
                     คุณเป็น{effectiveCaseRole === "leader" ? "หัวหน้า" : "สมาชิก"}{appRole === "admin" ? " (ผู้ดูแลระบบ)" : ""}
                   </p>
                   {selectedCase.description && <p className="mt-3 whitespace-pre-wrap break-words text-sm">{selectedCase.description}</p>}
-                  <p className="db-muted mt-2 break-all text-sm">
+                  <p className="db-muted mt-2 break-words text-sm">
                     {selectedCase.source_file_name ? `วิดีโอ: ${selectedCase.source_file_name}` : "ไม่มีไฟล์วิดีโอ"} · แก้ไขล่าสุด {formatDetailDate(selectedCase.updated_at)}
                   </p>
                 </div>

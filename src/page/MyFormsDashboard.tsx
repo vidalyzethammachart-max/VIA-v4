@@ -53,8 +53,11 @@ export default function MyFormsDashboard() {
 
   function formatDate(dateString: string) {
     return new Intl.DateTimeFormat(language === "th" ? "th-TH" : "en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
+      day: "numeric",
+      month: "short",
+      year: language === "th" ? "2-digit" : "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     }).format(new Date(dateString));
   }
 
@@ -311,15 +314,14 @@ export default function MyFormsDashboard() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-base font-semibold leading-relaxed">
-                          {item.subject_name || t("myForms.untitled")}
+                          <Link to={`/preview/${item.id}`} className="db-link">{item.subject_name || t("myForms.untitled")}</Link>
                         </h2>
                         <span className="db-chip">#{item.order_number || "-"}</span>
                       </div>
                       <p className="db-muted text-sm">{formatDate(item.created_at)}</p>
                       {item.video_case_id && (
-                        <p className="db-muted mt-1 text-xs">
-                          Case ID: {item.video_case_id} ·{" "}
-                          <Link to={`/video-cases/${item.video_case_id}`} className="db-link">Linked case</Link>
+                        <p className="mt-1 text-xs">
+                          <Link to={`/video-cases/${item.video_case_id}`} className="db-link">{t("myForms.linkedCase")}</Link>
                         </p>
                       )}
                       <p className="mt-3 line-clamp-2 text-sm leading-relaxed">
@@ -372,21 +374,21 @@ export default function MyFormsDashboard() {
                             type="button"
                             onClick={() => setDeleteTarget(item)}
                             disabled={deletingId === item.id}
-                            className="btn-danger text-center"
+                            className="db-danger-link col-span-2 justify-self-end sm:col-span-1 sm:self-center"
                           >
                             {t("myForms.delete")}
                           </button>
                         </>
                       ) : item.document_status === "failed" ? (
                         <>
-                          <Link to={`/preview/${item.id}`} className="btn-danger text-center">
+                          <Link to={`/preview/${item.id}`} className="btn-secondary text-center">
                             {t("myForms.viewError")}
                           </Link>
                           <button
                             type="button"
                             onClick={() => setDeleteTarget(item)}
                             disabled={deletingId === item.id}
-                            className="btn-danger text-center"
+                            className="db-danger-link col-span-2 justify-self-end sm:col-span-1 sm:self-center"
                           >
                             {t("myForms.delete")}
                           </button>
@@ -400,7 +402,7 @@ export default function MyFormsDashboard() {
                             type="button"
                             onClick={() => setDeleteTarget(item)}
                             disabled={deletingId === item.id}
-                            className="btn-danger text-center"
+                            className="db-danger-link col-span-2 justify-self-end sm:col-span-1 sm:self-center"
                           >
                             {t("myForms.delete")}
                           </button>

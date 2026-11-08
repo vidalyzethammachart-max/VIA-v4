@@ -311,7 +311,7 @@ export default function VideoCasesPage() {
                 {showTrash ? "เลือกงานประเมินที่ต้องการกู้คืน" : "เลือกงานประเมินเพื่อดูแบบประเมิน แก้ไข หรือย้ายเข้าถังขยะ"}
               </p>
             </div>
-            <p className="db-muted text-sm tabular-nums">{searchTerm ? `${filteredCases.length} จาก ${cases.length} รายการ` : `${cases.length} รายการ`}</p>
+            <p className="db-muted shrink-0 whitespace-nowrap text-sm tabular-nums">{searchTerm ? `${filteredCases.length} จาก ${cases.length} รายการ` : `${cases.length} รายการ`}</p>
           </div>
 
           {cases.length > 0 && (

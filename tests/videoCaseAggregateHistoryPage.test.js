@@ -13,17 +13,15 @@ const serviceSource = readFileSync(
 
 test("renders the aggregate audit columns", () => {
   for (const label of [
-    "ประวัติการรวมผลการประเมิน",
+    "ประวัติแบบประเมินกลุ่ม",
     "ชื่อไฟล์",
     "วันที่สร้าง",
-    "ผู้รวมผล",
-    "รหัสพนักงาน",
+    "ผู้รวม",
     "แบบประเมินที่ใช้",
-    "สถานะการวิเคราะห์",
-    "สถานะเอกสาร",
+    "สถานะ",
     "จัดการ",
   ]) {
-    assert.match(pageSource, new RegExp(label.replace(".", "\\.")));
+    assert.match(pageSource, new RegExp(label));
   }
 });
 
@@ -32,36 +30,24 @@ test("links each aggregate to its existing summary page", () => {
     pageSource,
     /buildVideoCaseAggregateSummaryPath\(selectedCase\.id,\s*item\.aggregateId\)/,
   );
-  assert.match(pageSource, />\s*ดูสรุปผล\s*</);
-  assert.match(pageSource, /className="btn-secondary text-xs"/);
-  assert.match(pageSource, /className="btn-danger text-xs"/);
+  assert.match(
+    pageSource,
+    /buildVideoCaseSummaryDocumentPreviewPath\(selectedCase\.id,\s*item\.aggregateId\)/,
+  );
 });
 
-test("uses Thai evaluation labels and button actions", () => {
+test("uses Thai evaluation labels and links each evaluation to its summary", () => {
   for (const label of [
     "รายการแบบประเมิน",
-    "แบบประเมิน",
     "คะแนนเฉลี่ย",
     "ข้อเสนอแนะโดยรวม",
-    "เลือก",
-    "ดูสรุปผล",
+    "สถานะ",
     "ลบ",
   ]) {
     assert.match(pageSource, new RegExp(label));
   }
   assert.match(pageSource, /to=\{`\/preview\/\$\{run\.id\}`\}/);
-  assert.match(pageSource, />เลือก<\/th>/);
-  assert.match(pageSource, />ดูสรุปผล<\/th>/);
-  assert.match(pageSource, />ลบ<\/th>/);
-  assert.match(
-    pageSource,
-    /ดูสรุปผล<\/th>\s*\{canCombine && <th[^>]*>เลือก<\/th>\}\s*\{canCombine && <th[^>]*>ลบ<\/th>\}/,
-  );
-  assert.match(pageSource, /className="h-5 w-5 accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"/);
   assert.match(pageSource, /disabled=\{!combinable\}/);
-  assert.match(pageSource, />สถานะ<\/th>/);
-  assert.doesNotMatch(pageSource, />ผลวิเคราะห์ AI<\/th>/);
-  assert.doesNotMatch(pageSource, /min-w-40 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">จัดการ<\/th>/);
   assert.doesNotMatch(pageSource, /เลือกเพื่อรวม/);
 });
 
@@ -70,7 +56,7 @@ test("guards aggregate deletion with leader permission and confirmation", () => 
   assert.match(pageSource, /setAggregateToDelete\(aggregate\)/);
   assert.match(pageSource, /await deleteVideoCaseAggregate\(aggregateToDelete\.id\)/);
   assert.match(pageSource, /await loadCaseData\(selectedCase\.id\)/);
-  assert.match(pageSource, /title="ลบผลรวม"/);
+  assert.match(pageSource, /title="ลบแบบประเมินกลุ่ม"/);
   assert.match(
     serviceSource,
     /\.delete\(\)\s*\.eq\("id", aggregateId\)\s*\.select\("id"\)\s*\.maybeSingle\(\)/,
@@ -82,19 +68,11 @@ test("guards aggregate deletion with leader permission and confirmation", () => 
 });
 
 test("shows an explicit empty aggregate history state", () => {
-  assert.match(
-    pageSource,
-    /ยังไม่มีการรวมผลแบบประเมินสำหรับ Video Case นี้/,
-  );
+  assert.match(pageSource, /ยังไม่มีแบบประเมินกลุ่มในงานประเมินนี้/);
 });
 
-test("separates aggregate history columns with visible vertical borders", () => {
-  assert.match(
-    pageSource,
-    /className="border-b border-r border-slate-200 px-4 py-3 font-semibold"/,
-  );
-  assert.match(
-    pageSource,
-    /className="border-r border-slate-200 px-4 py-3"/,
-  );
+test("the page uses the shared dashboard design without the old card classes", () => {
+  assert.match(pageSource, /className="db-root"/);
+  assert.match(pageSource, /className="db-table /);
+  assert.doesNotMatch(pageSource, /rounded-2xl border border-slate-200 bg-white/);
 });

@@ -25,7 +25,7 @@ async function readReason(error: unknown): Promise<string | null> {
  * If the function is not deployed or unreachable (no structured reason in the reply), it falls back
  * to the previous behaviour of deleting only the database row so deletion keeps working.
  */
-export async function deleteEvaluationWithFiles(evaluationId: number, userId: string): Promise<void> {
+export async function deleteEvaluationWithFiles(evaluationId: number, userId?: string): Promise<void> {
   const { data, error } = await supabase.functions.invoke<DeleteResponse>("delete-evaluation", {
     body: { evaluationId },
   });
@@ -36,12 +36,9 @@ export async function deleteEvaluationWithFiles(evaluationId: number, userId: st
   if (reason) throw toDeleteError(reason);
 
   console.warn("delete-evaluation is unavailable; deleting the database row only.", error);
-  const { error: rowError } = await supabase
-    .from("evaluations")
-    .delete()
-    .eq("id", evaluationId)
-    .eq("user_id", userId)
-    .select("id")
-    .single();
+  let query = supabase.from("evaluations").delete().eq("id", evaluationId);
+  // Without an owner, row-level security alone decides (case leaders and admins).
+  if (userId) query = query.eq("user_id", userId);
+  const { error: rowError } = await query.select("id").single();
   if (rowError) throw rowError;
 }

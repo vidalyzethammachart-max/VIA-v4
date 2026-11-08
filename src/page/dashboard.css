@@ -244,3 +244,21 @@ html.dark .db-ok { border-color: rgba(74, 222, 128, 0.35); background: rgba(20, 
 .db-status-alert { color: #c2352f; }
 html.dark .db-status-pending { color: #f2b01e; }
 html.dark .db-status-alert { color: #fca5a5; }
+
+/* The default dark-blue primary button nearly disappears on the dark page; use the light accent. */
+html.dark .db-root .btn-primary { background: #8fc0ff; border-color: #8fc0ff; color: #06142b; }
+html.dark .db-root .btn-primary:hover { background: #b4d4ff; border-color: #b4d4ff; }
+
+/* Document status: colour dot plus the text label, so state never relies on colour alone. */
+.db-state { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
+.db-state::before { content: ""; width: 0.55rem; height: 0.55rem; border-radius: 9999px; background: currentColor; flex: none; }
+.db-state[data-state="ready"] { color: #1a7f43; }
+.db-state[data-state="pending"] { color: #a15c00; }
+.db-state[data-state="alert"] { color: #c2352f; }
+html.dark .db-state[data-state="ready"] { color: #86efac; }
+html.dark .db-state[data-state="pending"] { color: #f2b01e; }
+html.dark .db-state[data-state="alert"] { color: #fca5a5; }
+
+/* Whole row opens the evaluation; the ID and type links keep it reachable by keyboard. */
+.db-click { cursor: pointer; }
+.db-click:hover { background: color-mix(in srgb, var(--db-blue) 6%, transparent); }

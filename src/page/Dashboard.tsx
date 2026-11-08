@@ -1,4 +1,5 @@
 import { documentStatusLabel } from "../services/documentStatus";
+import { isEvaluationStuck } from "../services/stuckEvaluationCore.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildDashboardModel, buildDashboardStats, loadDashboardData, type DashboardData } from "../services/dashboardService";
 import { Link, useNavigate } from "react-router-dom";
@@ -9,6 +10,18 @@ import { getSections } from "../config/sections";
 import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
 import "./dashboard.css";
+
+const PAGE_SIZE = 15;
+
+function StatusPill({ row, th }: { row: { documentPath?: string | null; documentStatus: string; createdAt: string }; th: boolean }) {
+  const state = row.documentPath || row.documentStatus === "ready"
+    ? "ready"
+    : row.documentStatus === "failed" || isEvaluationStuck({ document_status: row.documentStatus, created_at: row.createdAt })
+      ? "alert"
+      : "pending";
+  const label = row.documentPath ? (th ? "พร้อมเปิด" : "Ready") : documentStatusLabel(row.documentStatus, th, row.createdAt);
+  return <span className="db-state" data-state={state}>{label}</span>;
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -22,7 +35,7 @@ export default function Dashboard() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [activityKind, setActivityKind] = useState<"all" | "evaluation" | "aggregate">("all");
-  const [visibleCount, setVisibleCount] = useState(8);
+  const [page, setPage] = useState(1);
   const [activeTab, setActiveTab] = useState<string>(sections[0]?.id || "1");
   const [chartType, setChartType] = useState<"bar" | "donut">("bar");
   const controller = useRef<AbortController | null>(null);
@@ -32,6 +45,9 @@ export default function Dashboard() {
   const stats = useMemo(() => buildDashboardStats(model?.evaluations || [], sections), [model, sections]);
   const totalResponses = model?.evaluations.length || 0;
   const activities = (model?.recent || []).filter(row => activityKind === "all" || row.kind === activityKind);
+  const pageCount = Math.max(1, Math.ceil(activities.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = activities.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const fetchDashboard = useCallback(async () => {
     if (!userId) return;
@@ -105,11 +121,13 @@ export default function Dashboard() {
     };
   });
   const dateLocale = language === "th" ? "th-TH" : "en-US";
+  // Thai shows the short Buddhist year (69); English keeps the full year so "26" is not read as a day.
+  const dateFormat: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: th ? "2-digit" : "numeric", hour: "2-digit", minute: "2-digit" };
   const kpis: [string, number][] = model ? [
-    [th ? "Video Case ที่ใช้งาน" : "Active video cases", model.caseCount],
-    [th ? "ผลประเมินรายบุคคล" : "Individual evaluations", totalResponses],
-    [th ? "ผลรวมการประเมิน" : "Combined summaries", model.summaryCount],
-    [th ? "รายงานพร้อมเปิด" : "Reports ready", model.readyDocumentCount],
+    [th ? "งานประเมินที่ใช้งาน" : "Active assessments", model.caseCount],
+    [th ? "แบบประเมินรายบุคคล" : "Individual evaluations", totalResponses],
+    [th ? "แบบประเมินกลุ่ม" : "Group evaluations", model.summaryCount],
+    [th ? "เอกสารที่เปิดดูได้" : "Documents ready to open", model.readyDocumentCount],
   ] : [];
 
   return (
@@ -126,12 +144,12 @@ export default function Dashboard() {
             <button type="button" className="btn-secondary" disabled={refreshing} onClick={() => void fetchDashboard()}>
               {refreshing ? (th ? "กำลังอัปเดต..." : "Updating...") : (th ? "รีเฟรชข้อมูล" : "Refresh")}
             </button>
-            <Link to="/video-cases" className="btn-primary">{th ? "จัดการ Video Case" : "Manage video cases"}</Link>
+            <Link to="/video-cases" className="btn-primary">{th ? "จัดการงานประเมิน" : "Manage assessments"}</Link>
           </div>
         </header>
 
         {errorMessage && <div role="alert" className="db-alert mb-6">
-          {th ? "โหลดข้อมูล Dashboard ไม่สำเร็จ กรุณากดรีเฟรชเพื่อลองอีกครั้ง" : "Could not load dashboard data. Refresh to try again."}
+          {th ? "โหลดข้อมูลไม่สำเร็จ กดรีเฟรชข้อมูลเพื่อลองใหม่" : "Could not load the data. Press Refresh to try again."}
           {data && <p>{th ? "ข้อมูลด้านล่างเป็นข้อมูลจากการโหลดสำเร็จครั้งล่าสุด" : "Showing the last successfully loaded data."}</p>}
         </div>}
 
@@ -143,64 +161,66 @@ export default function Dashboard() {
             </div>)}
           </dl>
           <p className="db-muted mb-8 max-w-3xl text-sm">
-            {th ? "แสดงข้อมูลตามสิทธิ์ของคุณ ไม่รวมเคสในถังขยะ กราฟด้านล่างใช้ผลประเมินรายบุคคลโดยไม่นับผลรวมซ้ำ และอัปเดตอัตโนมัติทุก 30 วินาทีขณะเปิดหน้านี้" : "Shows data you can access, excluding trashed cases. Charts use individual evaluations without double-counting summaries. Updates every 30 seconds while visible."}
+            {th ? "นับเฉพาะเคสที่คุณเข้าถึงได้ ไม่รวมเคสในถังขยะ กราฟนับแบบประเมินรายบุคคลเท่านั้น ข้อมูลรีเฟรชเองทุก 30 วินาที" : "Counts only cases you can access, excluding trashed cases. Charts count individual evaluations only. Data refreshes every 30 seconds."}
           </p>
 
           <section className="db-panel mb-10 p-4 sm:p-6">
-            <h2 className="text-xl font-bold leading-snug">{th ? "ผลวิเคราะห์วิดีโอและรายงาน" : "Video analyses and reports"}</h2>
-            <div className="my-4 flex flex-wrap gap-2" role="group" aria-label={th ? "ประเภทผลวิเคราะห์" : "Analysis type"}>
+            <h2 className="text-xl font-bold leading-snug">{th ? "รายการแบบประเมินล่าสุด" : "Latest evaluations"}</h2>
+            <div className="my-4 flex flex-wrap gap-2" role="group" aria-label={th ? "ประเภทแบบประเมิน" : "Evaluation type"}>
               {(["all", "evaluation", "aggregate"] as const).map(kind => <button key={kind} type="button" aria-pressed={activityKind === kind}
                 className="db-tab"
-                onClick={() => { setActivityKind(kind); setVisibleCount(8); }}>
-                {kind === "all" ? (th ? "ทั้งหมด" : "All") : kind === "evaluation" ? (th ? "รายบุคคล" : "Individual") : (th ? "ผลรวม Video Case" : "Case summaries")}
+                onClick={() => { setActivityKind(kind); setPage(1); }}>
+                {kind === "all" ? (th ? "ทั้งหมด" : "All") : kind === "evaluation" ? (th ? "รายบุคคล" : "Individual") : (th ? "กลุ่ม" : "Group")}
               </button>)}
             </div>
-            {activities.length === 0 ? <p className="db-muted py-6 text-sm">{th ? "ยังไม่มีผลวิเคราะห์ประเภทนี้ ส่งแบบประเมินจากหน้า Video Case เพื่อเริ่มต้น" : "No analyses of this type yet. Submit an evaluation from a video case to start."}</p> : <>
+            {activities.length === 0 ? <p className="db-muted py-6 text-sm">{th ? "ยังไม่มีแบบประเมินประเภทนี้ ส่งแบบประเมินเพื่อเริ่มต้น" : "No evaluations of this type yet. Submit an evaluation to get started."}</p> : <>
               <ul className="md:hidden">
-                {activities.slice(0, visibleCount).map(row => <li key={row.id} className="border-t py-3 text-sm" style={{ borderColor: "var(--db-line)" }}>
+                {pageRows.map(row => <li key={row.id} className="db-click border-t py-3 text-sm" style={{ borderColor: "var(--db-line)" }} onClick={() => navigate(row.resultPath)}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      {row.videoCaseId ? <Link to={`/video-cases/${row.videoCaseId}`} className="db-link break-words">{row.title}</Link> : <span className="break-words font-semibold">{row.title}</span>}
+                      {row.kind === "evaluation" && <span className="db-muted mr-2 font-semibold tabular-nums">{row.id.replace("evaluation-", "")}</span>}
+                      {row.videoCaseId ? <Link to={`/video-cases/${row.videoCaseId}`} onClick={(event) => event.stopPropagation()} className="db-link break-words">{row.title}</Link> : <span className="break-words font-semibold">{row.title}</span>}
                       <p className="db-muted mt-1 text-xs">
-                        {row.kind === "aggregate" ? (th ? `ผลรวม ${row.sourceCount} รายการ` : `${row.sourceCount} combined`) : `${th ? "รายบุคคล" : "Individual"} ${row.id.replace("evaluation-", "#")}`}
-                        {" · "}{new Date(row.createdAt).toLocaleString(dateLocale, { dateStyle: "short", timeStyle: "short" })}
+                        <Link to={row.resultPath} onClick={(event) => event.stopPropagation()} className="db-link">{row.kind === "aggregate" ? (th ? `กลุ่ม ${row.sourceCount} ใบ` : `Group of ${row.sourceCount}`) : (th ? "รายบุคคล" : "Individual")}</Link>
+                        {" · "}{new Date(row.createdAt).toLocaleString(dateLocale, dateFormat)}
                       </p>
                     </div>
                     <span className="shrink-0 text-lg font-bold tabular-nums">{row.average === null ? "—" : row.average.toFixed(2)}</span>
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <span className="db-muted text-xs">{row.documentPath ? (th ? "พร้อมเปิด" : "Ready") : documentStatusLabel(row.documentStatus, th, row.createdAt)}</span>
-                    <div className="flex gap-2">
-                      <Link to={row.resultPath} className="btn-secondary whitespace-nowrap text-xs">{th ? "ดูผล" : "View result"}</Link>
-                      {row.documentPath && <Link to={row.documentPath} className="btn-primary whitespace-nowrap text-xs">PDF / DOCX</Link>}
-                    </div>
+                    <StatusPill row={row} th={th} />
                   </div>
                 </li>)}
               </ul>
               <div className="hidden overflow-x-auto md:block">
                 <table className="db-table w-full min-w-[700px] text-left text-sm">
                   <thead><tr>
-                    {(th ? ["วิดีโอ / เคส", "ประเภท", "วันที่", "คะแนนเฉลี่ย", "เอกสาร", "เปิดดู"] : ["Video / case", "Type", "Date", "Average", "Document", "View"]).map(label => <th key={label} className="px-3 py-3">{label}</th>)}
+                    {(th ? ["ID", "ชื่อ", "ประเภท", "วันที่", "คะแนนเฉลี่ย", "เอกสาร"] : ["ID", "Name", "Type", "Date", "Average", "Document"]).map(label => <th key={label} className="px-3 py-3">{label}</th>)}
                   </tr></thead>
                   <tbody>
-                    {activities.slice(0, visibleCount).map(row => <tr key={row.id}>
+                    {pageRows.map(row => <tr key={row.id} className="db-click" onClick={() => navigate(row.resultPath)}>
+                      <td className="px-3 py-3 font-semibold tabular-nums"><Link to={row.resultPath} onClick={(event) => event.stopPropagation()} aria-label={th ? "เปิดดู" : "Open"} className="db-link">{row.kind === "evaluation" ? row.id.replace("evaluation-", "") : "—"}</Link></td>
                       <td className="max-w-[260px] break-words px-3 py-3">
-                        {row.videoCaseId ? <Link to={`/video-cases/${row.videoCaseId}`} className="db-link">{row.title}</Link> : <span className="font-semibold">{row.title}</span>}
-                        <p className="db-muted mt-1 text-xs">{row.id.replace("evaluation-", "#").replace("aggregate-", "")}</p>
+                        {row.videoCaseId ? <Link to={`/video-cases/${row.videoCaseId}`} onClick={(event) => event.stopPropagation()} className="db-link">{row.title}</Link> : <span className="font-semibold">{row.title}</span>}
                       </td>
-                      <td className="px-3 py-3">{row.kind === "aggregate" ? (th ? `ผลรวม ${row.sourceCount} รายการ` : `${row.sourceCount} evaluations combined`) : (th ? "รายบุคคล" : "Individual")}</td>
-                      <td className="px-3 py-3">{new Date(row.createdAt).toLocaleString(dateLocale)}</td>
+                      <td className="px-3 py-3">{row.kind === "aggregate" ? (th ? `กลุ่ม ${row.sourceCount} ใบ` : `Group of ${row.sourceCount}`) : (th ? "รายบุคคล" : "Individual")}</td>
+                      <td className="px-3 py-3">{new Date(row.createdAt).toLocaleString(dateLocale, dateFormat)}</td>
                       <td className="px-3 py-3 font-semibold tabular-nums">{row.average === null ? "—" : row.average.toFixed(2)}</td>
-                      <td className="px-3 py-3">{row.documentPath ? (th ? "พร้อมเปิด" : "Ready") : documentStatusLabel(row.documentStatus, th, row.createdAt)}</td>
-                      <td className="px-3 py-3"><div className="flex flex-wrap gap-2">
-                        <Link to={row.resultPath} className="btn-secondary whitespace-nowrap text-xs">{th ? "ดูผล" : "View result"}</Link>
-                        {row.documentPath && <Link to={row.documentPath} className="btn-primary whitespace-nowrap text-xs">PDF / DOCX</Link>}
-                      </div></td>
+                      <td className="px-3 py-3"><StatusPill row={row} th={th} /></td>
                     </tr>)}
                   </tbody>
                 </table>
               </div>
-              {activities.length > visibleCount && <button type="button" className="btn-secondary mt-4" onClick={() => setVisibleCount(count => count + 8)}>{th ? "แสดงเพิ่มเติม" : "Show more"}</button>}
+              {pageCount > 1 && <nav className="mt-4 flex flex-wrap items-center justify-between gap-3" aria-label={th ? "เลือกหน้า" : "Pages"}>
+                <span className="db-muted text-xs tabular-nums">
+                  {th ? `แสดง ${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, activities.length)} จาก ${activities.length} รายการ` : `Showing ${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, activities.length)} of ${activities.length}`}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button type="button" className="btn-secondary text-xs" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>{th ? "ก่อนหน้า" : "Previous"}</button>
+                  <span className="db-muted text-xs tabular-nums" aria-live="polite">{th ? `หน้า ${currentPage} จาก ${pageCount}` : `Page ${currentPage} of ${pageCount}`}</span>
+                  <button type="button" className="btn-secondary text-xs" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}>{th ? "ถัดไป" : "Next"}</button>
+                </div>
+              </nav>}
             </>}
           </section>
 
@@ -244,7 +264,7 @@ export default function Dashboard() {
             {activeSectionData ? (
               <ol className="grid gap-4 lg:grid-cols-2">
                 {activeSectionData.questions.map((question, idx) => (
-                  <li key={question.id} className="db-panel p-5">
+                  <li key={question.id} className="db-panel p-5 lg:[&:last-child:nth-child(odd)]:col-span-2 lg:[&:last-child:nth-child(odd)]:w-[calc(50%-0.5rem)] lg:[&:last-child:nth-child(odd)]:justify-self-center">
                     <div className="mb-4 flex items-start justify-between gap-4">
                       <h3 className="min-w-0 font-semibold leading-relaxed">{idx + 1}. {question.label}</h3>
                       <div className="shrink-0 text-right">

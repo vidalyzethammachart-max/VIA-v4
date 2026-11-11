@@ -12,3 +12,13 @@ export function keepCombinableSelection(runs, selectedIds) {
   const combinable = new Set(getCombinableEvaluationIds(runs));
   return selectedIds.filter((id) => combinable.has(id));
 }
+
+// A group evaluation needs at least two evaluations to combine.
+export const MIN_COMBINE_COUNT = 2;
+export const COMBINE_MIN_MESSAGE = "เลือกแบบประเมินที่พร้อมใช้งานอย่างน้อย 2 รายการจึงจะรวมผลได้";
+
+// Returns null when the selection can be combined, otherwise the reason it cannot.
+export function getCombineBlockReason(runs, selectedIds) {
+  const usable = new Set(keepCombinableSelection(runs, selectedIds));
+  return usable.size >= MIN_COMBINE_COUNT ? null : COMBINE_MIN_MESSAGE;
+}

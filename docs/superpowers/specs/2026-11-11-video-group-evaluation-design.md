@@ -12,7 +12,7 @@
 
 1. รวมได้ 1 ใบ (`VideoCaseDetailPage.tsx` ~บรรทัด 174, `videoCaseService.ts` ~บรรทัด 385 เช็คแค่ `length === 0`)
 2. ขั้นเลือก/รวมอยู่ที่ `/video-cases/:id` ไม่ใช่หน้า `/video-cases`; ใน `VideoCasesPage.tsx` เหลือโค้ดรวม/ลบที่ไม่มีปุ่มเรียกใช้
-3. `combineNestedValues` (`src/services/aggregateStatistics.js`) เฉลี่ยเฉพาะตัวเลข ค่าข้อความใช้แค่ค่าแรก และ `notes` รายคนไม่ถูกส่งต่อ
+3. ~~`combineNestedValues` ... ข้อความใช้แค่ค่าแรก และ `notes` รายคนไม่ถูกส่งต่อ~~ **แก้ไข (2026-11-11):** ค่า `rubric` เป็นตัวเลขล้วน และ `buildVideoCaseSummaryPayload` ส่ง `suggestions` ให้ n8n อยู่แล้ว สิ่งที่ขาดจริงคือการผูกข้อเสนอแนะกับผู้ประเมิน (`evaluators`) และร่างข้อเสนอแนะรวมให้ผู้ใช้ ดู `docs/superpowers/plans/2026-11-11-video-group-evaluation.md`
 4. ผลลัพธ์เป็นผลเฉลี่ยตัวเลข (`ai_model: null`) ผู้ใช้ต้องเขียนข้อเสนอแนะรวมเองจากศูนย์
 
 ## แนวทางที่เลือก: A — ย้ายขั้นเลือก/รวมมาที่ `/video-cases` และต่อยอดหน้าสรุปเดิม

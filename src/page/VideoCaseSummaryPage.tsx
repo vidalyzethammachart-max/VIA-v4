@@ -6,6 +6,7 @@ import MainNavbar from "../components/MainNavbar";
 import { getSections, type LikertValue } from "../config/sections";
 import { useLanguage } from "../i18n/useLanguage";
 import { buildVideoCaseSummaryDocumentPreviewPath } from "../services/videoCaseSummaryDocumentPreviewCore";
+import { buildCombinedSuggestionDraft } from "../services/videoCaseSummaryPayloadCore";
 import {
   getVideoCaseAnalyses,
   getVideoCaseAggregate,
@@ -176,9 +177,9 @@ export default function VideoCaseSummaryPage() {
     const initialSuggestion =
       typeof snapshot.combine_prompt === "string" && snapshot.combine_prompt.trim()
         ? snapshot.combine_prompt.trim()
-        : "";
+        : buildCombinedSuggestionDraft(sourceRuns);
     setOverallSuggestion(initialSuggestion);
-  }, [snapshot.combine_prompt]);
+  }, [snapshot.combine_prompt, sourceRuns]);
 
   const questionAverages = useMemo(() => (snapshot.question_averages_by_section ||
     snapshot.question_averages ||
@@ -222,12 +223,12 @@ export default function VideoCaseSummaryPage() {
       <main className="mx-auto max-w-7xl px-4 py-6 md:py-8">
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">Summary</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">แบบประเมินกลุ่มวิดีโอ</p>
             <h1 className="mt-2 text-2xl font-bold text-slate-900">
-              {snapshot.case_title || "Summary analysis"}
+              {snapshot.case_title || "แบบประเมินกลุ่มวิดีโอ"}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Review the combined scores and enter your overall suggestion, then submit to start processing.
+              รวมผลจากผู้ประเมิน {sourceRuns.length} คน ตรวจคะแนนรวมและข้อเสนอแนะโดยรวม แล้วส่งเพื่อให้ AI สรุปและสร้างเอกสาร
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -278,13 +279,13 @@ export default function VideoCaseSummaryPage() {
               <div className="flex flex-col gap-5 p-5 md:flex-row md:items-start md:justify-between md:p-6">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">
-                    Combined evaluation draft
+                    แบบประเมินกลุ่มวิดีโอ (ฉบับร่าง)
                   </p>
                   <h2 className="mt-2 text-2xl font-bold text-slate-900">
                     {snapshot.case_title || "Summary analysis"}
                   </h2>
                   <p className="mt-2 max-w-2xl text-sm text-slate-500">
-                    Review the combined evaluation results and complete your overall suggestion before submitting.
+                    ตรวจผลประเมินที่รวมแล้วและแก้ข้อเสนอแนะโดยรวมก่อนส่ง ข้อเสนอแนะของผู้ประเมินแต่ละคนถูกใส่ไว้ให้เป็นจุดเริ่มต้น
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2 text-xs">
                     <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700">

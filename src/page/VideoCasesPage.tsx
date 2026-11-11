@@ -1,16 +1,21 @@
-import { getAnalysisMatrix } from "../services/aggregateStatistics.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
+import CaseEvaluationPicker from "../components/CaseEvaluationPicker";
 import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
 import VideoCaseEditor from "../components/VideoCaseEditor";
 import { buildVideoCaseSummaryDocumentPreviewPath } from "../services/videoCaseSummaryDocumentPreviewCore.js";
+import {
+  getCombinableEvaluationIds,
+  getCombineBlockReason,
+  keepCombinableSelection,
+  toCombineSourceRuns,
+} from "../services/videoCaseCombineSelectionCore.js";
 import { normalizeRole, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import {
   combineVideoCaseAnalyses,
-  deleteVideoCaseEvaluation,
   getMyVideoCases,
   getVideoCaseAggregates,
   getVideoCaseAnalyses,
@@ -43,12 +48,9 @@ export default function VideoCasesPage() {
   const [aggregates, setAggregates] = useState<VideoCaseAggregateRow[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [prompt] = useState("");
   const [combining, setCombining] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [selectedAnalysisIds, setSelectedAnalysisIds] = useState<number[]>([]);
-  const [evaluationToDelete, setEvaluationToDelete] = useState<VideoCaseEvaluationRow | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
   // On phones the selected-case card sits far above the list, so bring it into view.
   const selectCase = (caseId: string) => {
@@ -65,10 +67,12 @@ export default function VideoCasesPage() {
 
   const effectiveCaseRole: VideoCaseMemberRole =
     appRole === "admin" ? "leader" : (selectedRole ?? "member");
-  const selectedAnalyses = useMemo(
-    () => analyses.filter((run) => selectedAnalysisIds.includes(run.id)),
-    [analyses, selectedAnalysisIds],
-  );
+  const selectedAnalyses = useMemo(() => {
+    const combinableIds = keepCombinableSelection(analyses, selectedAnalysisIds);
+    return analyses.filter((run) => combinableIds.includes(run.id));
+  }, [analyses, selectedAnalysisIds]);
+  const combineBlockReason = getCombineBlockReason(analyses, selectedAnalysisIds);
+  const canCombine = effectiveCaseRole === "leader" && !showTrash;
 
   const loadCases = useCallback(async () => {
     const request = ++listRequest.current;
@@ -106,7 +110,7 @@ export default function VideoCasesPage() {
       setSelectedRole(membership?.member_role ?? null);
       setAnalyses(analysisRows);
       setAggregates(aggregateRows);
-      setSelectedAnalysisIds(analysisRows.map((run) => run.id));
+      setSelectedAnalysisIds(getCombinableEvaluationIds(analysisRows));
     } catch (error) {
       if (request === detailsRequest.current) setErrorMessage(error instanceof Error ? error.message : "Failed to load case details.");
     }
@@ -188,12 +192,14 @@ export default function VideoCasesPage() {
 
   async function handleCombine() {
     if (!selectedCase) {
-      setErrorMessage("Select a case first.");
+      setErrorMessage("กรุณาเลือกเคสก่อน");
+      setConfirmOpen(false);
       return;
     }
 
-    if (selectedAnalyses.length === 0) {
-      setErrorMessage("Select at least one evaluation to combine.");
+    if (combineBlockReason) {
+      setErrorMessage(combineBlockReason);
+      setConfirmOpen(false);
       return;
     }
 
@@ -203,46 +209,15 @@ export default function VideoCasesPage() {
       const aggregate = await combineVideoCaseAnalyses({
         videoCaseId: selectedCase.id,
         caseTitle: selectedCase.case_title || selectedCase.case_key,
-        sourceRuns: selectedAnalyses.map((run) => ({
-          id: run.id,
-          user_id: run.user_id,
-          employee_number: run.employee_number,
-          evaluation_id: run.id,
-          run_kind: run.analysis_kind,
-          rubric: run.rubric,
-          matrix: getAnalysisMatrix(run.analysis_ai_output),
-          ai_output: run.analysis_ai_output,
-          ai_raw_text: run.analysis_ai_raw_text,
-          notes: run.overall_suggestion,
-          created_at: run.created_at,
-          order_number: run.order_number,
-        })),
-        prompt: prompt.trim() || undefined,
+        sourceRuns: toCombineSourceRuns(selectedAnalyses),
       });
 
       navigate(`/video-cases/${selectedCase.id}/summaries/${aggregate.id}`);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to combine analyses.");
+      setErrorMessage(error instanceof Error ? error.message : "รวมผลแบบประเมินไม่สำเร็จ");
     } finally {
       setCombining(false);
       setConfirmOpen(false);
-    }
-  }
-
-  async function handleDeleteEvaluation() {
-    if (!selectedCase || !evaluationToDelete) return;
-
-    try {
-      setDeleting(true);
-      setErrorMessage(null);
-      await deleteVideoCaseEvaluation(evaluationToDelete.id);
-      setSuccessMessage(`Evaluation #${evaluationToDelete.id} was deleted.`);
-      await loadCaseData(selectedCase.id);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to delete evaluation.");
-    } finally {
-      setDeleting(false);
-      setEvaluationToDelete(null);
     }
   }
 
@@ -271,7 +246,7 @@ export default function VideoCasesPage() {
       <ConfirmModal
         isOpen={confirmOpen}
         title="รวมผลและวิเคราะห์ใหม่"
-        message={`AI will combine ${selectedAnalyses.length} selected evaluation(s) for this case.`}
+        message={`รวมแบบประเมิน ${selectedAnalyses.length} รายการที่เลือกเป็นแบบประเมินกลุ่มวิดีโอ แล้วตรวจและส่งให้ AI สรุปในหน้าถัดไป`}
         variant="primary"
         onCancel={() => {
           if (!combining) setConfirmOpen(false);
@@ -280,19 +255,6 @@ export default function VideoCasesPage() {
         confirmLabel="รวมผล"
         cancelLabel="ยกเลิก"
         confirmDisabled={combining}
-      />
-      <ConfirmModal
-        isOpen={Boolean(evaluationToDelete)}
-        title="Delete evaluation"
-        message={`Delete evaluation #${evaluationToDelete?.id ?? ""}? This cannot be undone.`}
-        variant="danger"
-        onCancel={() => {
-          if (!deleting) setEvaluationToDelete(null);
-        }}
-        onConfirm={() => void handleDeleteEvaluation()}
-        confirmLabel={deleting ? "Deleting..." : "Delete"}
-        cancelLabel="Cancel"
-        confirmDisabled={deleting}
       />
       <main className="mx-auto max-w-7xl px-4 py-6 md:py-8">
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -372,6 +334,26 @@ export default function VideoCasesPage() {
               <button type="button" className="btn-primary" disabled={changingTrash} onClick={() => void handleTrashChange(selectedCase, false)}>{changingTrash ? "กำลังกู้คืน..." : "กู้คืนเคส"}</button>
             )}
           </div>
+          {selectedCase && canCombine && (
+            <div className="border-t border-slate-200 p-5 md:p-6">
+              <CaseEvaluationPicker
+                analyses={analyses}
+                selectedIds={selectedAnalysisIds}
+                onChange={setSelectedAnalysisIds}
+                disabled={combining}
+              />
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={combining || combineBlockReason !== null}
+                  onClick={() => setConfirmOpen(true)}
+                >
+                  {combining ? "กำลังรวมผล..." : "รวมเป็นแบบประเมินกลุ่ม"}
+                </button>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-3 border-t border-slate-200">
             <div className="border-r border-slate-200 p-3 sm:p-4">
               <p className="text-xs font-medium text-slate-500">แบบประเมิน</p>

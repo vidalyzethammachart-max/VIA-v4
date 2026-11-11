@@ -9,3 +9,12 @@ test("summary page is the group evaluation and prefills the suggestion", () => {
   assert.match(source, /แบบประเมินกลุ่มวิดีโอ/);
   assert.match(source, /buildCombinedSuggestionDraft\(sourceRuns\)/);
 });
+
+test("video cases page selects and combines evaluations itself", () => {
+  const source = read("../src/page/VideoCasesPage.tsx");
+  assert.match(source, /CaseEvaluationPicker/);
+  assert.match(source, /getCombineBlockReason\(/);
+  assert.match(source, /toCombineSourceRuns\(/);
+  assert.match(source, /รวมเป็นแบบประเมินกลุ่ม/);
+  assert.doesNotMatch(source, /handleDeleteEvaluation|evaluationToDelete/);
+});

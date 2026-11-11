@@ -24,6 +24,7 @@ export type VideoCaseSummaryPayload = {
   section_averages: Record<string, unknown> | null;
   aggregate_analysis: Record<string, unknown> | string | null;
   combine_prompt: string | null;
+  evaluators: Array<{ evaluation_id: number | null; employee_number: string | null; notes: string | null }>;
 };
 
 export function buildVideoCaseSummaryPayload(options: {
@@ -31,3 +32,7 @@ export function buildVideoCaseSummaryPayload(options: {
   requestedByEmployeeNumber: string | null;
   combinePrompt: string | null;
 }): VideoCaseSummaryPayload;
+
+export function buildCombinedSuggestionDraft(
+  sourceRuns: Array<{ employee_number?: string | null; notes?: string | null }>,
+): string;

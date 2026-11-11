@@ -45,3 +45,53 @@ test("summary payload keeps question, section, AI, and leader inputs", () => {
   assert.equal(payload.combine_prompt, "Leader note");
   assert.equal(payload.sender_employee_number, "020943");
 });
+
+import { buildCombinedSuggestionDraft } from "../src/services/videoCaseSummaryPayloadCore.js";
+
+test("draft joins each evaluator's suggestion with their code", () => {
+  assert.equal(
+    buildCombinedSuggestionDraft([
+      { employee_number: "020943", notes: "ดี" },
+      { employee_number: "021111", notes: "ปรับปรุง" },
+    ]),
+    "ผู้ประเมิน 020943: ดี\n\nผู้ประเมิน 021111: ปรับปรุง",
+  );
+});
+
+test("draft skips blank notes and labels missing codes", () => {
+  const draft = buildCombinedSuggestionDraft([
+    { employee_number: "020943", notes: "   " },
+    { employee_number: null, notes: "ok" },
+  ]);
+  assert.equal(draft, "ผู้ประเมิน ไม่ระบุรหัส: ok");
+  assert.doesNotMatch(draft, /undefined/);
+});
+
+test("draft is empty when nobody wrote a suggestion", () => {
+  assert.equal(buildCombinedSuggestionDraft([]), "");
+  assert.equal(buildCombinedSuggestionDraft([{ notes: null }]), "");
+});
+
+test("payload lists the evaluators and keeps existing fields", () => {
+  const payload = buildVideoCaseSummaryPayload({
+    aggregate: {
+      ...aggregate,
+      source_snapshot: {
+        case_title: "Postman Test",
+        source_runs: [
+          { evaluation_id: 224, employee_number: "020943", notes: "ดี" },
+          { id: 225, employee_number: "021111", notes: null },
+        ],
+      },
+    },
+    requestedByEmployeeNumber: "020943",
+    combinePrompt: null,
+  });
+  assert.deepEqual(payload.evaluators, [
+    { evaluation_id: 224, employee_number: "020943", notes: "ดี" },
+    { evaluation_id: 225, employee_number: "021111", notes: null },
+  ]);
+  assert.deepEqual(payload.suggestions, ["ดี"]);
+  assert.equal(payload.aggregate_id, aggregate.id);
+  assert.deepEqual(payload.question_averages, { "1": { q1: 4 } });
+});

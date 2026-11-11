@@ -18,3 +18,10 @@ test("video cases page selects and combines evaluations itself", () => {
   assert.match(source, /รวมเป็นแบบประเมินกลุ่ม/);
   assert.doesNotMatch(source, /handleDeleteEvaluation|evaluationToDelete/);
 });
+
+test("case detail page shares the combine rule and source-run mapping", () => {
+  const source = read("../src/page/VideoCaseDetailPage.tsx");
+  assert.match(source, /getCombineBlockReason\(/);
+  assert.match(source, /toCombineSourceRuns\(/);
+  assert.doesNotMatch(source, /อย่างน้อย 1 รายการ/);
+});

@@ -1,4 +1,3 @@
-import { getAnalysisMatrix } from "../services/aggregateStatistics.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
@@ -8,6 +7,8 @@ import VideoCaseEditor from "../components/VideoCaseEditor";
 import { buildVideoCaseSummaryDocumentPreviewPath } from "../services/videoCaseSummaryDocumentPreviewCore.js";
 import {
   getCombinableEvaluationIds,
+  getCombineBlockReason,
+  toCombineSourceRuns,
   isCombinableEvaluation,
   keepCombinableSelection,
 } from "../services/videoCaseCombineSelectionCore.js";
@@ -30,31 +31,7 @@ import {
   type VideoCaseMemberRole,
   type VideoCaseRow,
 } from "../services/videoCaseService";
-
-function getEvaluationAverage(run: VideoCaseEvaluationRow): number | null {
-  const scores = Object.values(run.rubric || {})
-    .flatMap((section) =>
-      section && typeof section === "object" && !Array.isArray(section)
-        ? Object.values(section)
-        : [],
-    )
-    .map((value) => (typeof value === "string" ? Number(value) : value))
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-
-  if (scores.length === 0) return null;
-
-  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
-}
-
-function getStatusLabel(status: string): string {
-  const labels: Record<string, string> = {
-    pending: "กำลังดำเนินการ",
-    ready: "พร้อมใช้งาน",
-    failed: "ไม่สำเร็จ",
-  };
-
-  return labels[status] || status;
-}
+import { getEvaluationAverage, getStatusLabel } from "../services/videoCaseEvaluationDisplay";
 
 export default function VideoCaseDetailPage() {
   const navigate = useNavigate();
@@ -90,6 +67,7 @@ export default function VideoCaseDetailPage() {
     const combinableIds = keepCombinableSelection(analyses, selectedAnalysisIds);
     return analyses.filter((run) => combinableIds.includes(run.id));
   }, [analyses, selectedAnalysisIds]);
+  const combineBlockReason = getCombineBlockReason(analyses, selectedAnalysisIds);
   const notReadyCount = useMemo(
     () => analyses.filter((run) => !isCombinableEvaluation(run)).length,
     [analyses],
@@ -171,8 +149,9 @@ export default function VideoCaseDetailPage() {
       return;
     }
 
-    if (selectedAnalyses.length === 0) {
-      setErrorMessage("กรุณาเลือกแบบประเมินอย่างน้อย 1 รายการ");
+    if (combineBlockReason) {
+      setErrorMessage(combineBlockReason);
+      setConfirmOpen(false);
       return;
     }
 
@@ -182,20 +161,7 @@ export default function VideoCaseDetailPage() {
       const aggregate = await combineVideoCaseAnalyses({
         videoCaseId: selectedCase.id,
         caseTitle: selectedCase.case_title || selectedCase.case_key,
-        sourceRuns: selectedAnalyses.map((run) => ({
-          id: run.id,
-          user_id: run.user_id,
-          employee_number: run.employee_number,
-          evaluation_id: run.id,
-          run_kind: run.analysis_kind,
-          rubric: run.rubric,
-          matrix: getAnalysisMatrix(run.analysis_ai_output),
-          ai_output: run.analysis_ai_output,
-          ai_raw_text: run.analysis_ai_raw_text,
-          notes: run.overall_suggestion,
-          created_at: run.created_at,
-          order_number: run.order_number,
-        })),
+        sourceRuns: toCombineSourceRuns(selectedAnalyses),
       });
 
       navigate(`/video-cases/${selectedCase.id}/summaries/${aggregate.id}`);
@@ -393,6 +359,9 @@ export default function VideoCaseDetailPage() {
                   <p className="mt-1 text-sm text-slate-500">
                     ตรวจสอบแต่ละแบบประเมินก่อนนำมารวมผลเป็นรายงานสรุปใหม่
                   </p>
+                  {canCombine && combineBlockReason && analyses.length > 0 && (
+                    <p className="mt-1 text-sm text-amber-700">{combineBlockReason}</p>
+                  )}
                   {canCombine && notReadyCount > 0 && (
                     <p className="mt-1 text-sm text-amber-700">
                       เลือกรวมผลได้เฉพาะแบบประเมินที่พร้อมใช้งาน ({notReadyCount} รายการยังไม่พร้อม)
@@ -418,7 +387,7 @@ export default function VideoCaseDetailPage() {
                     <button
                       type="button"
                       onClick={() => setConfirmOpen(true)}
-                      disabled={combining || selectedAnalyses.length === 0}
+                      disabled={combining || combineBlockReason !== null}
                       className="btn-primary text-xs"
                     >
                       {combining ? "กำลังรวมผลแบบประเมิน..." : `รวม ${selectedAnalyses.length} รายการและวิเคราะห์ใหม่`}

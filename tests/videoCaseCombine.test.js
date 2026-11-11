@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { combineAggregateStatistics } from "../src/services/aggregateStatistics.js";
+import * as selectionCore from "../src/services/videoCaseCombineSelectionCore.js";
 
 const compiled = ts.transpileModule(readFileSync(new URL("../src/services/videoCaseService.ts", import.meta.url), "utf8")
   .replaceAll("import.meta.env", "testEnv"), {
@@ -22,7 +23,7 @@ function setup(testEnv, unavailable = false) {
   };
   runInNewContext(compiled, {
     exports, testEnv, URL, window: { location: { origin: "http://localhost:5173" } },
-    require: name => name === "../lib/supabaseClient" ? { supabase } : name === "./aggregateStatistics.js" ? {combineAggregateStatistics} : {},
+    require: name => name === "../lib/supabaseClient" ? { supabase } : name === "./aggregateStatistics.js" ? {combineAggregateStatistics} : name === "./videoCaseCombineSelectionCore.js" ? selectionCore : {},
     fetch: async (url, options) => {
       requests.push({ url, body: JSON.parse(options.body) });
       return { ok: !unavailable, statusText: "Service Unavailable", text: async () => '{"error":"Service unavailable"}', json: async () => result };
@@ -54,4 +55,24 @@ test("database failure rejects the combined report", async () => {
   const { combine, saved } = setup({ VITE_VIDEO_CASE_API_URL: "http://localhost:8080" }, true);
   await assert.rejects(combine(), /Database unavailable/);
   assert.equal(saved.length, 1);
+});
+
+test("combining fewer than two evaluations is rejected before touching the database", async () => {
+  const { saved } = setup({ VITE_VIDEO_CASE_API_URL: "http://localhost:8080" });
+  const exportsHolder = {};
+  runInNewContext(compiled, {
+    exports: exportsHolder, testEnv: {}, URL, window: { location: { origin: "http://localhost:5173" } },
+    require: name => name === "../lib/supabaseClient" ? { supabase: { auth: { getUser: async () => ({ data: { user: { id: "leader" } }, error: null }) }, from() { saved.push("db"); } } } : name === "./aggregateStatistics.js" ? { combineAggregateStatistics } : name === "./videoCaseCombineSelectionCore.js" ? selectionCore : {},
+  });
+  await assert.rejects(
+    exportsHolder.combineVideoCaseAnalyses({ videoCaseId: "case-1", caseTitle: "T", sourceRuns: [{ id: 1, evaluation_id: 1, rubric: { a: { q1: 1 } } }] }),
+    /อย่างน้อย 2/,
+  );
+  assert.equal(saved.length, 0);
+});
+test("null scores are skipped, not counted as zero", () => {
+  const mixed = combineAggregateStatistics([{ rubric: { a: { q1: null } } }, { rubric: { a: { q1: 4 } } }]);
+  assert.equal(mixed.aggregatedScores.a.q1, 4);
+  const none = combineAggregateStatistics([{ rubric: { a: { q1: null } } }, { rubric: { a: { q1: null } } }]);
+  assert.equal(Object.hasOwn(none.aggregatedScores.a ?? {}, "q1"), false);
 });

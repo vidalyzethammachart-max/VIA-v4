@@ -55,3 +55,20 @@ test("pending and failed selections do not count toward the minimum", () => {
 test("the same evaluation selected twice counts once", () => {
   assert.equal(getCombineBlockReason(runs, [333, 333]), COMBINE_MIN_MESSAGE);
 });
+
+import { toCombineSourceRuns } from "../src/services/videoCaseCombineSelectionCore.js";
+
+test("maps evaluation rows to combine source runs", () => {
+  const [run] = toCombineSourceRuns([{
+    id: 7, user_id: "u1", employee_number: "020943", analysis_kind: "human",
+    rubric: { a: { q1: 3 } }, analysis_ai_output: { quality_scores: { a: 1 } },
+    analysis_ai_raw_text: "raw", overall_suggestion: "ดี", created_at: "2026-11-01", order_number: "001",
+  }]);
+  assert.equal(run.id, 7);
+  assert.equal(run.evaluation_id, 7);
+  assert.equal(run.run_kind, "human");
+  assert.deepEqual(run.matrix, { a: 1 });
+  assert.equal(run.notes, "ดี");
+  assert.equal(run.employee_number, "020943");
+  assert.equal(run.ai_raw_text, "raw");
+});

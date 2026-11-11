@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import * as payloadCore from "../src/services/videoCaseSummaryPayloadCore.js";
 import * as sourceIds from "../src/services/videoCaseSourceIds.js";
+import * as selectionCore from "../src/services/videoCaseCombineSelectionCore.js";
 
 // Execute the real service; replace only its external Supabase boundary.
 const compiled = ts.transpileModule(
@@ -52,6 +53,7 @@ function setup({ dispatchError = null, callbackReady = false, dispatchData = {ok
       if (name === "./videoCaseSummaryPayloadCore.js") return payloadCore;
       if (name === "./videoCaseSourceIds.js") return sourceIds;
       if (name === "./aggregateStatistics.js") return {};
+      if (name === "./videoCaseCombineSelectionCore.js") return selectionCore;
       throw new Error(`Unexpected dependency: ${name}`);
     },
   });

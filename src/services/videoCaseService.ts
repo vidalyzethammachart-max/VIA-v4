@@ -1,4 +1,5 @@
 import { combineAggregateStatistics } from "./aggregateStatistics.js";
+import { COMBINE_MIN_MESSAGE, MIN_COMBINE_COUNT } from "./videoCaseCombineSelectionCore.js";
 import { supabase } from "../lib/supabaseClient";
 import { normalizeRole } from "../lib/roles";
 import { buildVideoCaseSummaryPayload } from "./videoCaseSummaryPayloadCore.js";
@@ -382,7 +383,8 @@ export async function combineVideoCaseAnalyses(params: {
   }>;
   prompt?: string;
 }): Promise<VideoCaseAggregateRow> {
-  if (!params.sourceRuns.length) throw new Error("Select at least one evaluation.");
+  const distinctEvaluations = new Set(params.sourceRuns.map((run) => run.evaluation_id ?? run.id));
+  if (distinctEvaluations.size < MIN_COMBINE_COUNT) throw new Error(COMBINE_MIN_MESSAGE);
   const stats = combineAggregateStatistics(params.sourceRuns);
   const result = { ...stats, caseId:params.videoCaseId, caseTitle:params.caseTitle, sourceRunCount:params.sourceRuns.length, model:null, analysis:null, rawText:null };
   // The report submission starts the n8n workflow; combining scores does not call Gemini twice.

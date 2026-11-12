@@ -83,12 +83,11 @@ test("list page uses getVideoGroups and links to the create page", () => {
   assert.match(source, /["'`]\/video-groups\/\$\{/);
 });
 
-test("detail page sends, shows documents and takes sources from the sources table", () => {
+test("detail page sends, links to the document preview and takes sources from the sources table", () => {
   const source = read("../src/page/VideoGroupDetailPage.tsx");
   assert.match(source, /export default function VideoGroupDetailPage/);
   for (const name of [
     "sendVideoGroupToN8n",
-    "getVideoGroupDocumentUrls",
     "getVideoGroupSources",
     "buildCombinedSuggestionDraft",
     "submittingRef",
@@ -178,4 +177,64 @@ test("detail page shows the send button only to the requester or an admin", () =
   const enStart = translations.indexOf("  en: {");
   assert.ok(translations.slice(0, enStart).includes('"videoGroups.sendNotAllowed":'));
   assert.ok(translations.slice(enStart).includes('"videoGroups.sendNotAllowed":'));
+});
+
+test("group preview page polls, previews the PDF and is routed; sending opens it", () => {
+  const page = read("../src/page/VideoGroupDocumentPreviewPage.tsx");
+  assert.match(page, /export default function VideoGroupDocumentPreviewPage/);
+  for (const name of ["getVideoGroup(", "getVideoGroupDocumentUrls", "POLL_INTERVAL_MS", "<iframe", "buildDocumentDownloadUrl"]) {
+    assert.ok(page.includes(name), `${name} missing`);
+  }
+  assert.match(read("../src/App.tsx"), /path="\/video-groups\/:groupId\/preview"/);
+  const detail = read("../src/page/VideoGroupDetailPage.tsx");
+  assert.match(detail, /navigate\(`\/video-groups\/\$\{updated\.id\}\/preview`\)/);
+  assert.match(detail, /\/video-groups\/\$\{group\.id\}\/preview/);
+
+  const keys = [...new Set([...page.matchAll(/t\(\s*"(videoGroups\.[^"]+)"/g)].map((m) => m[1]))];
+  const translations = read("../src/i18n/translations.ts");
+  const enStart = translations.indexOf("  en: {");
+  for (const key of keys) {
+    assert.ok(translations.slice(0, enStart).includes(`"${key}":`), `th missing ${key}`);
+    assert.ok(translations.slice(enStart).includes(`"${key}":`), `en missing ${key}`);
+  }
+});
+
+test("list opens the preview, deletes with confirmation and paints status badges", () => {
+  const list = read("../src/page/VideoGroupsPage.tsx");
+  assert.match(list, /to=\{`\/video-groups\/\$\{group\.id\}\/preview`\}/);
+  assert.doesNotMatch(list, /to=\{`\/video-groups\/\$\{group\.id\}`\}/);
+  for (const name of ["deleteVideoGroup", "ConfirmModal", "STATUS_STYLES", "requested_by === userId"]) {
+    assert.ok(list.includes(name), `${name} missing`);
+  }
+  assert.match(list, /document_status !== "pending"/);
+  const preview = read("../src/page/VideoGroupDocumentPreviewPage.tsx");
+  assert.match(preview, /deleteVideoGroup/);
+  assert.match(preview, /previewReviewAndSend/);
+});
+
+test("create page names the group first and the picker pages by 10", () => {
+  const page = read("../src/page/VideoGroupCreatePage.tsx");
+  const nameAt = page.indexOf('t("videoGroups.step1")');
+  const pickAt = page.indexOf('t("videoGroups.step2")');
+  const reviewAt = page.indexOf('t("videoGroups.step3")');
+  assert.ok(nameAt > 0 && nameAt < pickAt && pickAt < reviewAt, "steps are out of order");
+  assert.ok(page.indexOf("videoGroups.orderNumber") < page.indexOf("<CaseEvaluationPicker"));
+  const picker = read("../src/components/CaseEvaluationPicker.tsx");
+  assert.match(picker, /PAGE_SIZE = 10/);
+  assert.match(picker, /analyses\.slice\(/);
+  const translations = read("../src/i18n/translations.ts");
+  assert.match(translations, /"videoGroups\.step1": "1\. ตั้งชื่อกลุ่ม"/);
+  assert.match(translations, /"videoGroups\.step2": "2\. เลือกแบบประเมิน"/);
+});
+
+test("delete migration only lets the creator or an admin delete non-pending groups", () => {
+  const sql = read("../supabase/migrations/20261112092000_video_group_delete.sql");
+  assert.match(sql, /create policy video_group_evaluations_delete_owner_or_admin/i);
+  assert.match(sql, /for delete/i);
+  assert.match(sql, /document_status <> 'pending'/i);
+  assert.match(sql, /requested_by = auth\.uid\(\)/i);
+  assert.match(sql, /role_at_least\('admin'::public\.app_role\)/i);
+  assert.doesNotMatch(sql, /for\s+(insert|update|all)\b/i);
+  const service = read("../src/services/videoGroupService.ts");
+  assert.match(service, /\.from\("video_group_evaluations"\)\s*\.delete\(\)\s*\.eq\("id", id\)\s*\.select\("id"\)\s*\.maybeSingle\(\)/);
 });

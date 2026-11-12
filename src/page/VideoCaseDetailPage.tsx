@@ -4,21 +4,13 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
 import VideoCaseEditor from "../components/VideoCaseEditor";
-import { buildVideoCaseSummaryDocumentPreviewPath } from "../services/videoCaseSummaryDocumentPreviewCore.js";
 import { normalizeRole, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import {
-  buildVideoCaseAggregateHistoryItem,
-  buildVideoCaseAggregateSummaryPath,
-} from "../services/videoCaseAggregateHistoryCore";
-import {
-  deleteVideoCaseAggregate,
   deleteVideoCaseEvaluation,
   getMyVideoCases,
-  getVideoCaseAggregates,
   getVideoCaseAnalyses,
   getVideoCaseMembership,
-  type VideoCaseAggregateRow,
   type VideoCaseEvaluationRow,
   type VideoCaseMemberRole,
   type VideoCaseRow,
@@ -34,14 +26,10 @@ export default function VideoCaseDetailPage() {
   const [cases, setCases] = useState<VideoCaseRow[]>([]);
   const [selectedRole, setSelectedRole] = useState<VideoCaseMemberRole | null>(null);
   const [analyses, setAnalyses] = useState<VideoCaseEvaluationRow[]>([]);
-  const [aggregates, setAggregates] = useState<VideoCaseAggregateRow[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [evaluationToDelete, setEvaluationToDelete] = useState<VideoCaseEvaluationRow | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [aggregateToDelete, setAggregateToDelete] =
-    useState<VideoCaseAggregateRow | null>(null);
-  const [deletingAggregate, setDeletingAggregate] = useState(false);
 
   const selectedCase = useMemo(
     () => cases.find((item) => item.id === videoCaseId) ?? null,
@@ -51,15 +39,6 @@ export default function VideoCaseDetailPage() {
   const effectiveCaseRole: VideoCaseMemberRole =
     appRole === "admin" ? "leader" : (selectedRole ?? "member");
   const canCombine = effectiveCaseRole === "leader";
-  const latestAggregate = aggregates[0] ?? null;
-  const aggregateHistory = useMemo(
-    () =>
-      aggregates.map((aggregate) => ({
-        aggregate,
-        item: buildVideoCaseAggregateHistoryItem(aggregate),
-      })),
-    [aggregates],
-  );
 
   const loadCases = useCallback(async () => {
     const data = await getMyVideoCases();
@@ -67,15 +46,13 @@ export default function VideoCaseDetailPage() {
   }, []);
 
   const loadCaseData = useCallback(async (currentVideoCaseId: string) => {
-    const [membership, analysisRows, aggregateRows] = await Promise.all([
+    const [membership, analysisRows] = await Promise.all([
       getVideoCaseMembership(currentVideoCaseId),
       getVideoCaseAnalyses(currentVideoCaseId),
-      getVideoCaseAggregates(currentVideoCaseId),
     ]);
 
     setSelectedRole(membership?.member_role ?? null);
     setAnalyses(analysisRows);
-    setAggregates(aggregateRows);
   }, []);
 
   useEffect(() => {
@@ -138,27 +115,6 @@ export default function VideoCaseDetailPage() {
     }
   }
 
-  async function handleDeleteAggregate() {
-    if (!selectedCase || !aggregateToDelete) return;
-
-    try {
-      setDeletingAggregate(true);
-      setErrorMessage(null);
-      await deleteVideoCaseAggregate(aggregateToDelete.id);
-      setSuccessMessage(
-        `Aggregate ${aggregateToDelete.id.slice(0, 8)} was deleted.`,
-      );
-      await loadCaseData(selectedCase.id);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to delete aggregate.",
-      );
-    } finally {
-      setDeletingAggregate(false);
-      setAggregateToDelete(null);
-    }
-  }
-
   if (!videoCaseId) {
     return <Navigate to="/video-cases" replace />;
   }
@@ -189,19 +145,6 @@ export default function VideoCaseDetailPage() {
         confirmLabel={deleting ? "กำลังลบ..." : "ลบ"}
         cancelLabel="ยกเลิก"
         confirmDisabled={deleting}
-      />
-      <ConfirmModal
-        isOpen={Boolean(aggregateToDelete)}
-        title="ลบผลรวม"
-        message={`ลบผลรวม ${aggregateToDelete?.id.slice(0, 8) ?? ""} ใช่ไหม? แบบประเมินต้นทางจะยังอยู่`}
-        variant="danger"
-        onCancel={() => {
-          if (!deletingAggregate) setAggregateToDelete(null);
-        }}
-        onConfirm={() => void handleDeleteAggregate()}
-        confirmLabel={deletingAggregate ? "กำลังลบ..." : "ลบ"}
-        cancelLabel="ยกเลิก"
-        confirmDisabled={deletingAggregate}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-6 md:py-8">
@@ -267,21 +210,15 @@ export default function VideoCaseDetailPage() {
                 </p>
                 </div>
               </div>
-              <div className="grid grid-cols-3 border-t border-slate-200">
+              <div className="grid grid-cols-2 border-t border-slate-200">
                 <div className="border-r border-slate-200 p-3 sm:p-4">
                   <p className="text-xs font-medium text-slate-500">แบบประเมิน</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">{analyses.length}</p>
                 </div>
-                <div className="border-r border-slate-200 p-3 sm:p-4">
+                <div className="p-3 sm:p-4">
                   <p className="text-xs font-medium text-slate-500">ผู้ประเมิน</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">
                     {new Set(analyses.map((analysis) => analysis.user_id).filter(Boolean)).size}
-                  </p>
-                </div>
-                <div className="p-4">
-                  <p className="text-xs font-medium text-slate-500">ผลรวมล่าสุด</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
-                    {latestAggregate ? getStatusLabel(latestAggregate.status) : "ยังไม่มี"}
                   </p>
                 </div>
               </div>
@@ -423,119 +360,6 @@ export default function VideoCaseDetailPage() {
               )}
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">
-                  ประวัติการรวมผลการประเมิน
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  รายงานสรุปผลที่รวมจากแบบประเมินใน Video Case นี้
-                </p>
-              </div>
-
-              {aggregateHistory.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-500">
-                  ยังไม่มีการรวมผลแบบประเมินสำหรับ Video Case นี้
-                </p>
-              ) : (
-                <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full min-w-[1080px] border-collapse text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-600">
-                      <tr>
-                        {[
-                          "ชื่อไฟล์",
-                          "วันที่สร้าง",
-                          "ผู้รวมผล",
-                          "รหัสพนักงาน",
-                          "แบบประเมินที่ใช้",
-                          "สถานะการวิเคราะห์",
-                          "สถานะเอกสาร",
-                          "จัดการ",
-                        ].map((label) => (
-                          <th
-                            key={label}
-                            className="border-b border-r border-slate-200 px-4 py-3 font-semibold"
-                          >
-                            {label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
-                      {aggregateHistory.map(({ aggregate, item }) => (
-                        <tr
-                          key={item.aggregateId}
-                          className="align-top hover:bg-slate-50/70"
-                        >
-                          <td className="border-r border-slate-200 px-4 py-3">
-                            <p className="font-semibold text-slate-900">
-                              {item.fileName}
-                            </p>
-                            <p className="mt-1 break-all text-slate-400">
-                              {item.aggregateId}
-                            </p>
-                            {aggregate.document_status === "ready" && (aggregate.pdf_storage_path || aggregate.docx_storage_path) && (
-                              <Link
-                                to={buildVideoCaseSummaryDocumentPreviewPath(selectedCase.id, item.aggregateId)}
-                                className="btn-primary mt-2 inline-flex text-xs"
-                              >
-                                เปิดไฟล์รวม PDF / DOCX
-                              </Link>
-                            )}
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
-                            {item.createdAt
-                              ? new Date(item.createdAt).toLocaleString()
-                              : "-"}
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3 text-slate-700">
-                            {item.creatorName}
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3 text-slate-700">
-                            {item.employeeNumber}
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
-                            <p>{item.sourceCount} แบบประเมิน</p>
-                            <p className="mt-1">
-                              {item.sourceEvaluationIds.length
-                                ? item.sourceEvaluationIds
-                                    .map((id) => `#${id}`)
-                                    .join(", ")
-                                : "-"}
-                            </p>
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
-                            {getStatusLabel(item.analysisStatus)}
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
-                            {getStatusLabel(item.documentStatus)}
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Link
-                                to={buildVideoCaseAggregateSummaryPath(selectedCase.id, item.aggregateId)}
-                                className="btn-secondary text-xs"
-                              >
-                                ดูสรุปผล
-                              </Link>
-                              {canCombine && (
-                                <button
-                                  type="button"
-                                  onClick={() => setAggregateToDelete(aggregate)}
-                                  className="btn-danger text-xs"
-                                >
-                                  ลบ
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
 
           </div>
         )}

@@ -4,16 +4,13 @@ import { Link, useSearchParams } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
 import VideoCaseEditor from "../components/VideoCaseEditor";
-import { buildVideoCaseSummaryDocumentPreviewPath } from "../services/videoCaseSummaryDocumentPreviewCore.js";
 import { normalizeRole, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import {
   getMyVideoCases,
-  getVideoCaseAggregates,
   getVideoCaseAnalyses,
   getVideoCaseMembership,
   setVideoCaseTrashed,
-  type VideoCaseAggregateRow,
   type VideoCaseEvaluationRow,
   type VideoCaseMemberRole,
   type VideoCaseRow,
@@ -36,7 +33,6 @@ export default function VideoCasesPage() {
   const [selectedCaseId, setSelectedCaseId] = useState<string>("");
   const [selectedRole, setSelectedRole] = useState<VideoCaseMemberRole | null>(null);
   const [analyses, setAnalyses] = useState<VideoCaseEvaluationRow[]>([]);
-  const [aggregates, setAggregates] = useState<VideoCaseAggregateRow[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -80,19 +76,16 @@ export default function VideoCasesPage() {
   const loadCaseData = useCallback(async (videoCaseId: string) => {
     const request = ++detailsRequest.current;
     setAnalyses([]);
-    setAggregates([]);
     setSelectedRole(null);
     try {
-      const [membership, analysisRows, aggregateRows] = await Promise.all([
+      const [membership, analysisRows] = await Promise.all([
         getVideoCaseMembership(videoCaseId),
         getVideoCaseAnalyses(videoCaseId),
-        getVideoCaseAggregates(videoCaseId),
       ]);
 
       if (request !== detailsRequest.current) return;
       setSelectedRole(membership?.member_role ?? null);
       setAnalyses(analysisRows);
-      setAggregates(aggregateRows);
     } catch (error) {
       if (request === detailsRequest.current) setErrorMessage(error instanceof Error ? error.message : "Failed to load case details.");
     }
@@ -128,8 +121,7 @@ export default function VideoCasesPage() {
     if (!selectedCaseId) {
       detailsRequest.current++;
       setAnalyses([]);
-      setAggregates([]);
-      setSelectedRole(null);
+        setSelectedRole(null);
       return;
     }
 
@@ -281,30 +273,16 @@ export default function VideoCasesPage() {
               </Link>
             </div>
           )}
-          <div className="grid grid-cols-3 border-t border-slate-200">
+          <div className="grid grid-cols-2 border-t border-slate-200">
             <div className="border-r border-slate-200 p-3 sm:p-4">
               <p className="text-xs font-medium text-slate-500">แบบประเมิน</p>
               <p className="mt-1 text-2xl font-bold text-slate-900">{analyses.length}</p>
             </div>
-            <div className="border-r border-slate-200 p-3 sm:p-4">
+            <div className="p-3 sm:p-4">
               <p className="text-xs font-medium text-slate-500">ผู้ประเมิน</p>
               <p className="mt-1 text-2xl font-bold text-slate-900">
                 {new Set(analyses.map((analysis) => analysis.user_id).filter(Boolean)).size}
               </p>
-            </div>
-            <div className="p-4">
-              <p className="text-xs font-medium text-slate-500">ผลรวมล่าสุด</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900">
-                {aggregates[0] ? ({ pending: "กำลังดำเนินการ", ready: "พร้อมใช้งาน", failed: "ไม่สำเร็จ" }[aggregates[0].status] ?? aggregates[0].status) : "ยังไม่มี"}
-              </p>
-              {selectedCase && !showTrash && aggregates[0]?.document_status === "ready" && (aggregates[0].pdf_storage_path || aggregates[0].docx_storage_path) && (
-                <Link
-                  to={buildVideoCaseSummaryDocumentPreviewPath(selectedCase.id, aggregates[0].id)}
-                  className="btn-primary mt-2 inline-flex text-xs"
-                >
-                  เปิดไฟล์รวม PDF / DOCX
-                </Link>
-              )}
             </div>
           </div>
         </section>

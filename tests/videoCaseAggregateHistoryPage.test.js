@@ -11,32 +11,6 @@ const serviceSource = readFileSync(
   "utf8",
 );
 
-test("renders the aggregate audit columns", () => {
-  for (const label of [
-    "ประวัติการรวมผลการประเมิน",
-    "ชื่อไฟล์",
-    "วันที่สร้าง",
-    "ผู้รวมผล",
-    "รหัสพนักงาน",
-    "แบบประเมินที่ใช้",
-    "สถานะการวิเคราะห์",
-    "สถานะเอกสาร",
-    "จัดการ",
-  ]) {
-    assert.match(pageSource, new RegExp(label.replace(".", "\\.")));
-  }
-});
-
-test("links each aggregate to its existing summary page", () => {
-  assert.match(
-    pageSource,
-    /buildVideoCaseAggregateSummaryPath\(selectedCase\.id,\s*item\.aggregateId\)/,
-  );
-  assert.match(pageSource, />\s*ดูสรุปผล\s*</);
-  assert.match(pageSource, /className="btn-secondary text-xs"/);
-  assert.match(pageSource, /className="btn-danger text-xs"/);
-});
-
 test("uses Thai evaluation labels and button actions", () => {
   for (const label of [
     "รายการแบบประเมิน",
@@ -62,36 +36,11 @@ test("uses Thai evaluation labels and button actions", () => {
   assert.doesNotMatch(pageSource, /เลือกเพื่อรวม/);
 });
 
-test("guards aggregate deletion with leader permission and confirmation", () => {
-  assert.match(pageSource, /canCombine\s*&&\s*\(/);
-  assert.match(pageSource, /setAggregateToDelete\(aggregate\)/);
-  assert.match(pageSource, /await deleteVideoCaseAggregate\(aggregateToDelete\.id\)/);
-  assert.match(pageSource, /await loadCaseData\(selectedCase\.id\)/);
-  assert.match(pageSource, /title="ลบผลรวม"/);
-  assert.match(
-    serviceSource,
-    /\.delete\(\)\s*\.eq\("id", aggregateId\)\s*\.select\("id"\)\s*\.maybeSingle\(\)/,
-  );
-  assert.match(
-    serviceSource,
-    /Aggregate not found or you do not have permission to delete it\./,
-  );
-});
-
-test("shows an explicit empty aggregate history state", () => {
-  assert.match(
-    pageSource,
-    /ยังไม่มีการรวมผลแบบประเมินสำหรับ Video Case นี้/,
-  );
-});
-
-test("separates aggregate history columns with visible vertical borders", () => {
-  assert.match(
-    pageSource,
-    /className="border-b border-r border-slate-200 px-4 py-3 font-semibold"/,
-  );
-  assert.match(
-    pageSource,
-    /className="border-r border-slate-200 px-4 py-3"/,
-  );
+test("old per-case aggregate history is replaced by video groups", () => {
+  assert.doesNotMatch(pageSource, /ประวัติการรวมผลการประเมิน/);
+  assert.doesNotMatch(pageSource, /deleteVideoCaseAggregate|getVideoCaseAggregates|aggregateToDelete/);
+  assert.match(pageSource, /\/video-groups\/new\?caseId=/);
+  const casesPage = readFileSync(new URL("../src/page/VideoCasesPage.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(casesPage, /getVideoCaseAggregates|ผลรวมล่าสุด/);
+  assert.match(casesPage, /\/video-groups\/new\?caseId=/);
 });

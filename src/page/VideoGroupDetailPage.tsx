@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import MainNavbar from "../components/MainNavbar";
 import { SectionCard } from "../components/SectionCard";
@@ -12,7 +12,6 @@ import { getMyVideoCases } from "../services/videoCaseService";
 import { buildVideoGroupDisplayName } from "../services/videoGroupCore.js";
 import {
   getVideoGroup,
-  getVideoGroupDocumentUrls,
   getVideoGroupSources,
   sendVideoGroupToN8n,
   type VideoGroupRow,
@@ -36,6 +35,7 @@ function toLikertValue(value: unknown): LikertValue | undefined {
 
 export default function VideoGroupDetailPage() {
   const { groupId } = useParams<{ groupId: string }>();
+  const navigate = useNavigate();
   const { t, language } = useLanguage();
   const { role, user } = useAuthRole();
   const [loading, setLoading] = useState(true);
@@ -48,8 +48,6 @@ export default function VideoGroupDetailPage() {
   const [sending, setSending] = useState(false);
   const submittingRef = useRef(false);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [documentUrls, setDocumentUrls] = useState<{ pdfUrl: string | null; docxUrl: string | null } | null>(null);
-  const [documentError, setDocumentError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!groupId) {
@@ -113,35 +111,6 @@ export default function VideoGroupDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId]);
 
-  const groupDocumentReady = group?.document_status === "ready";
-  const groupKey = group?.id ?? null;
-  useEffect(() => {
-    if (!groupKey || !groupDocumentReady) {
-      setDocumentUrls(null);
-      setDocumentError(null);
-      return;
-    }
-
-    let cancelled = false;
-    getVideoGroupDocumentUrls(groupKey)
-      .then((urls) => {
-        if (!cancelled) {
-          setDocumentUrls(urls);
-          setDocumentError(null);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setDocumentUrls(null);
-          setDocumentError(error instanceof Error ? error.message : t("videoGroups.docLoadFailed"));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupKey, groupDocumentReady]);
-
   const snapshot = useMemo(() => (group?.source_snapshot || {}) as GroupSnapshot, [group]);
   const sections = useMemo(() => getSections(language), [language]);
   const sourceRuns = useMemo(
@@ -191,6 +160,7 @@ export default function VideoGroupDetailPage() {
       setSendError(null);
       const updated = await sendVideoGroupToN8n(group.id, overallSuggestion.trim() || null);
       setGroup(updated);
+      navigate(`/video-groups/${updated.id}/preview`);
     } catch (error) {
       setSendError(error instanceof Error ? error.message : t("videoGroups.sendFailed"));
     } finally {
@@ -267,19 +237,11 @@ export default function VideoGroupDetailPage() {
                 </span>
               </div>
 
-              {documentStatus === "ready" && (
+              {(documentStatus === "ready" || documentStatus === "pending") && (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {documentUrls?.pdfUrl && (
-                    <a href={documentUrls.pdfUrl} target="_blank" rel="noreferrer" className="btn-primary">
-                      {t("videoGroups.downloadPdf")}
-                    </a>
-                  )}
-                  {documentUrls?.docxUrl && (
-                    <a href={documentUrls.docxUrl} target="_blank" rel="noreferrer" className="btn-secondary">
-                      {t("videoGroups.downloadDocx")}
-                    </a>
-                  )}
-                  {documentError && <p className="text-sm text-red-700">{documentError}</p>}
+                  <Link to={`/video-groups/${group.id}/preview`} className="btn-primary">
+                    {t("videoGroups.viewPreview")}
+                  </Link>
                 </div>
               )}
               {documentStatus === "draft" && (

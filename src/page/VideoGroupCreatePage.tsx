@@ -133,36 +133,6 @@ export default function VideoGroupCreatePage() {
 
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="text-lg font-semibold text-slate-900">{t("videoGroups.step1")}</h3>
-          <label className="mt-3 block text-sm font-medium text-slate-700">
-            {t("videoGroups.searchLabel")}
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={t("videoGroups.searchPlaceholder")}
-              className={inputClass}
-            />
-          </label>
-          <div className="mt-4">
-            {loading ? (
-              <p className="text-sm text-slate-500" role="status">{t("videoGroups.loading")}</p>
-            ) : filtered.length === 0 && search.trim() ? (
-              <p className="text-sm text-slate-500">{t("videoGroups.noMatch")}</p>
-            ) : (
-              <CaseEvaluationPicker
-                analyses={filtered}
-                selectedIds={selectedIds}
-                onChange={setSelectedIds}
-                blockReason={blockReason}
-                selectedCount={selected.length}
-                disabled={busy}
-              />
-            )}
-          </div>
-        </section>
-
-        <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">{t("videoGroups.step2")}</h3>
           <div className="mt-3 grid gap-4 sm:grid-cols-3">
             <label className="block text-sm font-medium text-slate-700">
               {t("videoGroups.orderNumber")}
@@ -201,6 +171,36 @@ export default function VideoGroupCreatePage() {
           </div>
           {touched && formMessage && <p className="mt-3 text-sm text-amber-700">{formMessage}</p>}
           {duplicateMessage && <p className="mt-3 text-sm text-red-700" role="alert">{duplicateMessage}</p>}
+        </section>
+
+        <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">{t("videoGroups.step2")}</h3>
+          <label className="mt-3 block text-sm font-medium text-slate-700">
+            {t("videoGroups.searchLabel")}
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={t("videoGroups.searchPlaceholder")}
+              className={inputClass}
+            />
+          </label>
+          <div className="mt-4">
+            {loading ? (
+              <p className="text-sm text-slate-500" role="status">{t("videoGroups.loading")}</p>
+            ) : filtered.length === 0 && search.trim() ? (
+              <p className="text-sm text-slate-500">{t("videoGroups.noMatch")}</p>
+            ) : (
+              <CaseEvaluationPicker
+                analyses={filtered}
+                selectedIds={selectedIds}
+                onChange={setSelectedIds}
+                blockReason={blockReason}
+                selectedCount={selected.length}
+                disabled={busy}
+              />
+            )}
+          </div>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

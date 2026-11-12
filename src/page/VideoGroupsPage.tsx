@@ -1,16 +1,25 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
 import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
 import { normalizeRole, roleAtLeast } from "../lib/roles";
 import { buildVideoGroupDisplayName } from "../services/videoGroupCore.js";
 import {
+  deleteVideoGroup,
   getVideoGroups,
   isLeaderOfAnyVideoCase,
   type VideoGroupRow,
 } from "../services/videoGroupService";
+
+const STATUS_STYLES: Record<VideoGroupRow["document_status"], string> = {
+  draft: "bg-slate-100 text-slate-700",
+  pending: "bg-amber-100 text-amber-800",
+  ready: "bg-emerald-100 text-emerald-800",
+  failed: "bg-red-100 text-red-700",
+};
 
 export default function VideoGroupsPage() {
   const { t } = useLanguage();
@@ -19,6 +28,8 @@ export default function VideoGroupsPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [groups, setGroups] = useState<VideoGroupRow[]>([]);
   const [isLeader, setIsLeader] = useState(false);
+  const [groupToDelete, setGroupToDelete] = useState<VideoGroupRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const isAdmin = roleAtLeast(normalizeRole(role), "admin");
   // UX only: the RPC and RLS decide who may actually create a group.
@@ -63,9 +74,41 @@ export default function VideoGroupsPage() {
     };
   }, [userId, isAdmin]);
 
+  async function handleDelete() {
+    if (!groupToDelete || deleting) return;
+    try {
+      setDeleting(true);
+      setErrorMessage(null);
+      await deleteVideoGroup(groupToDelete.id);
+      setGroups((current) => current.filter((group) => group.id !== groupToDelete.id));
+      setGroupToDelete(null);
+    } catch (error) {
+      setGroupToDelete(null);
+      setErrorMessage(error instanceof Error ? error.message : t("videoGroups.deleteFailed"));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <MainNavbar />
+      <ConfirmModal
+        isOpen={Boolean(groupToDelete)}
+        title={t("videoGroups.deleteTitle")}
+        message={
+          groupToDelete
+            ? t("videoGroups.deleteMessage", {
+                name: buildVideoGroupDisplayName(groupToDelete.group_type, groupToDelete.subject_name),
+              })
+            : ""
+        }
+        confirmLabel={deleting ? t("videoGroups.deleting") : t("videoGroups.deleteConfirm")}
+        cancelLabel={t("videoGroups.deleteCancel")}
+        confirmDisabled={deleting}
+        onConfirm={() => void handleDelete()}
+        onCancel={() => setGroupToDelete(null)}
+      />
       <main className="mx-auto max-w-5xl px-4 py-6 md:py-8">
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -95,32 +138,41 @@ export default function VideoGroupsPage() {
           </section>
         ) : (
           <ul className="space-y-3">
-            {groups.map((group) => (
-              <li key={group.id}>
-                <Link
-                  to={`/video-groups/${group.id}`}
-                  className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-[#04418b]/40 md:flex-row md:items-center md:justify-between"
+            {groups.map((group) => {
+              const name = buildVideoGroupDisplayName(group.group_type, group.subject_name);
+              const canDelete = (isAdmin || group.requested_by === userId) && group.document_status !== "pending";
+              return (
+                <li
+                  key={group.id}
+                  className="flex items-stretch overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm hover:border-[#04418b]/40"
                 >
-                  <div>
-                    <p className="font-semibold text-slate-900">
-                      {buildVideoGroupDisplayName(group.group_type, group.subject_name)}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {t("videoGroups.orderNumber")}: {group.order_number}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700">
-                      {t("videoGroups.sourceCount", { count: group.source_count })}
-                    </span>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700">
+                  <Link to={`/video-groups/${group.id}/preview`} className="flex min-w-0 flex-1 flex-col gap-2 p-4 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0">
+                      <p className="break-words text-base font-semibold text-slate-900">{name}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {t("videoGroups.orderNumber")}: {group.order_number} ·{" "}
+                        {t("videoGroups.sourceCount", { count: group.source_count })}
+                      </p>
+                    </div>
+                    <span
+                      className={`w-fit shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${STATUS_STYLES[group.document_status]}`}
+                    >
                       {t(`videoGroups.docStatus.${group.document_status}`)}
                     </span>
-                    <span className="font-semibold text-[#04418b]">{t("videoGroups.open")}</span>
-                  </div>
-                </Link>
-              </li>
-            ))}
+                  </Link>
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => setGroupToDelete(group)}
+                      className="border-l border-slate-200 px-4 text-sm font-semibold text-red-600 hover:bg-red-50"
+                      aria-label={`${t("videoGroups.delete")} ${name}`}
+                    >
+                      {t("videoGroups.delete")}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </main>

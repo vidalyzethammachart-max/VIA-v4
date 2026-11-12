@@ -129,6 +129,23 @@ export async function getVideoGroup(id: string): Promise<VideoGroupRow | null> {
   return (data as VideoGroupRow | null) ?? null;
 }
 
+export async function deleteVideoGroup(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from("video_group_evaluations")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Group not found, still generating its document, or you do not have permission to delete it.");
+  }
+}
+
 export async function getVideoGroupSources(
   id: string,
 ): Promise<Array<{ evaluation_id: number; video_case_id: string; source_position: number }>> {

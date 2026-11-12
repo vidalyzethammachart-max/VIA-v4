@@ -128,3 +128,11 @@ n8n must keep treating `aggregate_id` as an opaque UUID and preserve it
 unchanged through every node and the callback. The n8n workflow itself needs no
 change for groups. This has NOT yet been verified against the live workflow;
 verification is a manual step via the n8n UI.
+
+Deployment order: apply the two migrations
+(`20261112090000_video_group_evaluations.sql`,
+`20261112091000_video_group_dispatch.sql`) first, then deploy the Edge
+Functions (`forward-to-n8n`, `document-generation-callback`,
+`document-artifact-url`), then the frontend. Deploying the functions before the
+migrations makes legacy aggregate sends and callbacks fail, because the
+functions look the id up in `video_group_evaluations` first.

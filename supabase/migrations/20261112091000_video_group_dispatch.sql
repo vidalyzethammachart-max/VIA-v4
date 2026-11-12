@@ -56,6 +56,12 @@ BEGIN
   IF EXISTS(SELECT 1 FROM ai_request_queue WHERE target_kind=p_kind AND target_id=canonical_id) THEN
     RAISE EXCEPTION 'Legacy request exists; inspect its previous delivery before resubmitting' USING ERRCODE='55000';
   END IF;
+  -- A group whose send was rejected or failed can be re-sent: drop the dead row so a fresh
+  -- dispatch (new token) is created below. dispatching/accepted/unknown keep the guard.
+  IF p_kind='group' THEN
+    DELETE FROM document_dispatches
+      WHERE target_kind='group' AND target_id=canonical_id AND state IN ('rejected','failed');
+  END IF;
   SELECT * INTO existing FROM document_dispatches WHERE target_kind=p_kind AND target_id=canonical_id;
   IF FOUND THEN
     RETURN jsonb_build_object('dispatch',false,'status',CASE existing.state

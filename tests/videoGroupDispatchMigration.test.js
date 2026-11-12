@@ -98,3 +98,40 @@ test("grants are repeated for both functions", () => {
   assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.begin_document_dispatch\(text,text,jsonb\) TO authenticated/);
   assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.finish_document_dispatch\(text,text,uuid,text,text\) TO service_role/);
 });
+
+test("begin clears only a rejected/failed group dispatch so the group can be re-sent", () => {
+  const del = begin.match(
+    /IF p_kind='group' THEN\s+DELETE FROM document_dispatches\s+WHERE target_kind='group' AND target_id=canonical_id AND state IN \(([^)]*)\);\s+END IF;/,
+  );
+  assert.ok(del, "group-only delete of a failed dispatch row missing");
+  const states = del[1].split(",").map((s) => s.trim()).sort();
+  assert.deepEqual(states, ["'failed'", "'rejected'"]);
+  for (const state of ["accepted", "unknown", "dispatching", "completed"]) {
+    assert.ok(!del[1].includes(`'${state}'`), `${state} must keep the duplicate guard`);
+  }
+  // Exactly one DELETE, and it precedes the existing-row guard.
+  assert.equal((begin.match(/DELETE FROM document_dispatches/g) || []).length, 1);
+  const guard = begin.indexOf(
+    "SELECT * INTO existing FROM document_dispatches WHERE target_kind=p_kind AND target_id=canonical_id;",
+  );
+  assert.ok(guard > 0, "existing-row guard missing");
+  assert.ok(del.index < guard, "delete must run before the existing-row guard");
+  // The guard itself is unchanged from the original.
+  const guardBlock =
+    "SELECT * INTO existing FROM document_dispatches WHERE target_kind=p_kind AND target_id=canonical_id; IF FOUND THEN RETURN jsonb_build_object('dispatch',false,'status',CASE existing.state WHEN 'completed' THEN 'ready' WHEN 'rejected' THEN 'failed' WHEN 'failed' THEN 'failed' WHEN 'unknown' THEN 'unknown' WHEN 'dispatching' THEN 'dispatching' ELSE 'pending' END); END IF;";
+  assert.ok(norm(fn(original, "begin_document_dispatch")).includes(guardBlock), "original guard text changed");
+  assert.ok(norm(begin).includes(guardBlock), "guard must stay unchanged");
+});
+
+test("begin keeps the evaluation and aggregate paths free of any dispatch delete", () => {
+  const ob = norm(fn(original, "begin_document_dispatch").replace(/--[^\n]*/g, ""));
+  assert.doesNotMatch(ob, /DELETE FROM document_dispatches/);
+  // Removing the group-only delete yields the original text around the guard.
+  const stripped = norm(begin.replace(/--[^\n]*/g, "")).replace(
+    "IF p_kind='group' THEN DELETE FROM document_dispatches WHERE target_kind='group' AND target_id=canonical_id AND state IN ('rejected','failed'); END IF; ",
+    "",
+  );
+  const around = (s) => s.slice(s.indexOf("IF ready THEN RETURN"), s.indexOf("secured := (p_payload"));
+  assert.ok(around(ob).length > 0);
+  assert.equal(around(stripped), around(ob));
+});

@@ -155,3 +155,15 @@ test("RPC execute granted only to authenticated", () => {
   );
   assert.doesNotMatch(sql, /grant[^;]*to (anon|public)\b/i);
 });
+
+test("document_status starts as draft until a send begins", () => {
+  const table = sql.slice(
+    sql.search(/create table if not exists public\.video_group_evaluations\b/i),
+    sql.search(/create table if not exists public\.video_group_evaluation_sources\b/i),
+  );
+  assert.match(
+    table,
+    /document_status text not null default 'draft'\s+check \(document_status in \('draft', 'pending', 'ready', 'failed'\)\)/i,
+  );
+  assert.doesNotMatch(table, /document_status text not null default 'pending'/i);
+});

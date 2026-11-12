@@ -21,8 +21,9 @@ CREATE TABLE IF NOT EXISTS public.video_group_evaluations (
   status text NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending', 'ready', 'failed')),
   error text NULL,
-  document_status text NOT NULL DEFAULT 'pending'
-    CHECK (document_status IN ('pending', 'ready', 'failed')),
+  -- 'draft' = never sent; begin_document_dispatch moves it to 'pending'.
+  document_status text NOT NULL DEFAULT 'draft'
+    CHECK (document_status IN ('draft', 'pending', 'ready', 'failed')),
   document_error text NULL,
   source_doc_id text NULL,
   pdf_storage_path text NULL,

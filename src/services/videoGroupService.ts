@@ -24,7 +24,7 @@ export type VideoGroupRow = {
   ai_raw_text: string | null;
   status: "pending" | "ready" | "failed";
   error: string | null;
-  document_status: "pending" | "ready" | "failed";
+  document_status: "draft" | "pending" | "ready" | "failed";
   document_error: string | null;
   source_doc_id: string | null;
   pdf_storage_path: string | null;
@@ -43,19 +43,22 @@ export async function getSelectableEvaluations(): Promise<SelectableEvaluationRo
   const { data, error } = await supabase
     .from("evaluations")
     .select(
-      "id, user_id, created_by, employee_number, video_case_id, analysis_kind, order_number, subject_name, overall_suggestion, rubric, analysis_ai_model, analysis_ai_output, analysis_ai_raw_text, pdf_storage_path, docx_storage_path, document_status, document_error, created_at, video_cases(case_key, case_title, deleted_at)",
+      "id, user_id, created_by, employee_number, video_case_id, analysis_kind, order_number, subject_name, overall_suggestion, rubric, analysis_ai_model, analysis_ai_output, analysis_ai_raw_text, pdf_storage_path, docx_storage_path, document_status, document_error, created_at, video_cases!inner(case_key, case_title, deleted_at)",
     )
     .eq("document_status", "ready")
     .not("video_case_id", "is", null)
+    // The inner embed is RLS-filtered, so evaluations of cases the user cannot see are dropped
+    // server-side; trashed cases are excluded the same way.
+    .is("video_cases.deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  // Evaluations of trashed cases are not selectable (filtered client-side).
+  // Defensive: never offer a row whose case is hidden (null embed) or trashed.
   return ((data ?? []) as unknown as SelectableEvaluationRow[]).filter(
-    (row) => !row.video_cases?.deleted_at,
+    (row) => row.video_cases != null && !row.video_cases.deleted_at,
   );
 }
 

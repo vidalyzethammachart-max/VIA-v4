@@ -144,3 +144,38 @@ test("detail page reports a sources-load failure separately from an empty list",
   assert.ok(translations.slice(0, enStart).includes('"videoGroups.sourcesLoadFailed":'));
   assert.ok(translations.slice(enStart).includes('"videoGroups.sourcesLoadFailed":'));
 });
+
+test("draft groups show a not-sent label, never the generating notice", () => {
+  const detail = read("../src/page/VideoGroupDetailPage.tsx");
+  assert.match(detail, /documentStatus === "draft" && \(/);
+  assert.match(detail, /t\("videoGroups\.docDraft"\)/);
+  // The generating/refresh-later notice stays limited to pending.
+  assert.match(detail, /documentStatus === "pending" && \(\s*<p[^>]*>\s*\{t\("videoGroups\.docPending"\)\}/);
+  assert.doesNotMatch(detail, /documentStatus !== "ready"[^\n]*docPending/);
+  // The send button is only disabled while sending or when ready (draft stays enabled).
+  assert.match(detail, /disabled=\{sending \|\| documentStatus === "ready"\}/);
+  const service = read("../src/services/videoGroupService.ts");
+  assert.match(service, /document_status: "draft" \| "pending" \| "ready" \| "failed"/);
+  const translations = read("../src/i18n/translations.ts");
+  const enStart = translations.indexOf("  en: {");
+  for (const part of [translations.slice(0, enStart), translations.slice(enStart)]) {
+    assert.ok(part.includes('"videoGroups.docStatus.draft":'));
+    assert.ok(part.includes('"videoGroups.docDraft":'));
+  }
+  assert.match(translations.slice(0, enStart), /"videoGroups\.docStatus\.draft": "ยังไม่ได้ส่ง"/);
+});
+
+test("detail page shows the send button only to the requester or an admin", () => {
+  const detail = read("../src/page/VideoGroupDetailPage.tsx");
+  assert.match(detail, /useAuthRole\(\)/);
+  assert.match(detail, /roleAtLeast\(normalizeRole\(role\), "admin"\)/);
+  assert.match(detail, /const canSend = Boolean\(group && user && \(group\.requested_by === user\.id \|\| isAdmin\)\)/);
+  assert.match(detail, /\{canSend \? \(\s*<>\s*<button type="submit"/);
+  assert.match(detail, /t\("videoGroups\.sendNotAllowed"\)/);
+  // The submit handler also refuses for non-authorized readers.
+  assert.match(detail, /if \(!group \|\| !canSend \|\| submittingRef\.current\)/);
+  const translations = read("../src/i18n/translations.ts");
+  const enStart = translations.indexOf("  en: {");
+  assert.ok(translations.slice(0, enStart).includes('"videoGroups.sendNotAllowed":'));
+  assert.ok(translations.slice(enStart).includes('"videoGroups.sendNotAllowed":'));
+});

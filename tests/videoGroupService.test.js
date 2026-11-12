@@ -60,18 +60,22 @@ test("other RPC errors throw their message", async () => {
   await assert.rejects(svc.createVideoGroupEvaluation(params([run(1, 2), run(2, 4)])), /nope/);
 });
 
-test("getSelectableEvaluations embeds the case, filters trashed cases, newest first", async () => {
+test("getSelectableEvaluations inner-joins visible, non-trashed cases, newest first", async () => {
   const rows = [
     { id: 1, video_cases: { case_key: "k", case_title: "t", deleted_at: null } },
     { id: 2, video_cases: { case_key: "k2", case_title: "t2", deleted_at: "2026-01-01" } },
+    { id: 3, video_cases: null },
   ];
   const { queries } = setup({ tables: { evaluations: { data: rows, error: null } } });
   const out = await svc.getSelectableEvaluations();
+  // Defensive client drop: trashed and RLS-hidden (null embed) rows never reach the picker.
   assert.deepEqual(out.map((r) => r.id), [1]);
   const q = queries.evaluations;
   assert.ok(q.some((c) => c[0] === "eq" && c[1] === "document_status" && c[2] === "ready"));
   assert.ok(q.some((c) => c[0] === "not" && c[1] === "video_case_id"));
-  assert.ok(q.some((c) => c[0] === "select" && /video_cases[^)]*deleted_at/.test(c[1])));
+  // Inner embed: rows whose case the user cannot see (RLS) are removed server-side.
+  assert.ok(q.some((c) => c[0] === "select" && /video_cases!inner\(\s*case_key,\s*case_title,\s*deleted_at\s*\)/.test(c[1])));
+  assert.ok(q.some((c) => c[0] === "is" && c[1] === "video_cases.deleted_at" && c[2] === null));
   assert.ok(q.some((c) => c[0] === "order" && c[1] === "created_at" && c[2].ascending === false));
 });
 

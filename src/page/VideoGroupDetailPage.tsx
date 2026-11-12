@@ -4,7 +4,9 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import MainNavbar from "../components/MainNavbar";
 import { SectionCard } from "../components/SectionCard";
 import { getSections, type LikertValue } from "../config/sections";
+import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
+import { normalizeRole, roleAtLeast } from "../lib/roles";
 import { buildCombinedSuggestionDraft } from "../services/videoCaseSummaryPayloadCore";
 import { getMyVideoCases } from "../services/videoCaseService";
 import { buildVideoGroupDisplayName } from "../services/videoGroupCore.js";
@@ -35,6 +37,7 @@ function toLikertValue(value: unknown): LikertValue | undefined {
 export default function VideoGroupDetailPage() {
   const { groupId } = useParams<{ groupId: string }>();
   const { t, language } = useLanguage();
+  const { role, user } = useAuthRole();
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [group, setGroup] = useState<VideoGroupRow | null>(null);
@@ -173,8 +176,12 @@ export default function VideoGroupDetailPage() {
     [questionAverages, sections],
   );
 
+  const isAdmin = roleAtLeast(normalizeRole(role), "admin");
+  // UX only: begin_document_dispatch still authorizes requested_by or an admin.
+  const canSend = Boolean(group && user && (group.requested_by === user.id || isAdmin));
+
   async function handleSend() {
-    if (!group || submittingRef.current) {
+    if (!group || !canSend || submittingRef.current) {
       return;
     }
 
@@ -275,6 +282,11 @@ export default function VideoGroupDetailPage() {
                   {documentError && <p className="text-sm text-red-700">{documentError}</p>}
                 </div>
               )}
+              {documentStatus === "draft" && (
+                <p className="mt-4 text-sm text-slate-600" role="status">
+                  {t("videoGroups.docDraft")}
+                </p>
+              )}
               {documentStatus === "pending" && (
                 <p className="mt-4 text-sm text-slate-600" role="status">
                   {t("videoGroups.docPending")}
@@ -343,16 +355,24 @@ export default function VideoGroupDetailPage() {
             </section>
 
             <div className="flex flex-wrap items-center gap-3">
-              <button type="submit" className="btn-primary" disabled={sending || documentStatus === "ready"}>
-                {sending
-                  ? t("videoGroups.sending")
-                  : documentStatus === "failed"
-                    ? t("videoGroups.resend")
-                    : t("videoGroups.send")}
-              </button>
-              <p className="text-sm text-slate-500" role="status">
-                {t("videoGroups.sendHint")}
-              </p>
+              {canSend ? (
+                <>
+                  <button type="submit" className="btn-primary" disabled={sending || documentStatus === "ready"}>
+                    {sending
+                      ? t("videoGroups.sending")
+                      : documentStatus === "failed"
+                        ? t("videoGroups.resend")
+                        : t("videoGroups.send")}
+                  </button>
+                  <p className="text-sm text-slate-500" role="status">
+                    {t("videoGroups.sendHint")}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500" role="status">
+                  {t("videoGroups.sendNotAllowed")}
+                </p>
+              )}
             </div>
           </form>
         )}

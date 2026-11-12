@@ -123,6 +123,7 @@ DECLARE
   requester_name text;
   requester_employee_number text;
   found_count integer;
+  inserted_count integer;
   result public.video_group_evaluations;
 BEGIN
   IF caller_id IS NULL THEN
@@ -147,6 +148,13 @@ BEGIN
   END IF;
 
   caller_is_admin := public.role_at_least('admin'::public.app_role);
+
+  -- Lock the sources so they cannot be deleted or switched away from 'ready'
+  -- (e.g. begin_evaluation_retry) between validation and the sources insert.
+  PERFORM 1
+  FROM public.evaluations
+  WHERE id = ANY (p_evaluation_ids)
+  FOR SHARE;
 
   SELECT count(*)::integer
   INTO found_count
@@ -244,6 +252,14 @@ BEGIN
     evaluation.video_case_id
   FROM unnest(p_evaluation_ids) WITH ORDINALITY AS source(evaluation_id, position)
   JOIN public.evaluations evaluation ON evaluation.id = source.evaluation_id;
+
+  GET DIAGNOSTICS inserted_count = ROW_COUNT;
+
+  IF inserted_count <> cardinality(p_evaluation_ids) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'Not every source evaluation could be linked to the group.';
+  END IF;
 
   RETURN result;
 END;

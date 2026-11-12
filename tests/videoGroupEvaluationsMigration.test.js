@@ -104,6 +104,33 @@ test("RPC validates count, duplicates, ready status and visibility", () => {
   assert.match(rpc, /current_video_case_role\([^)]*\)\s*=\s*'leader'/i);
 });
 
+test("RPC locks source evaluations FOR SHARE before any validation query", () => {
+  const lock = rpc.search(
+    /perform 1\s+from public\.evaluations\s+where id = any \(p_evaluation_ids\)\s+for share;/i,
+  );
+  assert.ok(lock >= 0, "lock statement missing");
+  const firstValidation = rpc.search(/select count\(\*\)::integer\s+into found_count/i);
+  assert.ok(firstValidation >= 0);
+  assert.ok(lock < firstValidation, "lock must precede validation");
+  for (const marker of [
+    /document_status\s*<>\s*'ready'/i,
+    /can_view_video_case\(evaluation/i,
+    /current_video_case_role\(/i,
+  ]) {
+    assert.ok(lock < rpc.search(marker));
+  }
+});
+
+test("RPC verifies inserted source row count equals the id count", () => {
+  assert.match(rpc, /get diagnostics\s+inserted_count\s*=\s*row_count/i);
+  assert.match(
+    rpc,
+    /if inserted_count\s*<>\s*cardinality\(p_evaluation_ids\)\s+then\s+raise exception/i,
+  );
+  const insert = rpc.search(/insert into public\.video_group_evaluation_sources/i);
+  assert.ok(insert < rpc.search(/get diagnostics/i));
+});
+
 test("RPC snapshots requester identity from user_information", () => {
   assert.match(rpc, /from public\.user_information profile/i);
   assert.match(rpc, /profile\.auth_user_id::text = /i);

@@ -7,11 +7,14 @@ type Props = {
   selectedIds: number[];
   onChange: (ids: number[]) => void;
   disabled?: boolean;
+  // Optional overrides for callers that show a filtered list but select from a larger one.
+  blockReason?: string | null;
+  selectedCount?: number;
 };
 
 // Checklist of a case's evaluations; only evaluations that finished (ready) can be selected.
-export default function CaseEvaluationPicker({ analyses, selectedIds, onChange, disabled = false }: Props) {
-  const reason = getCombineBlockReason(analyses, selectedIds);
+export default function CaseEvaluationPicker({ analyses, selectedIds, onChange, disabled = false, blockReason: blockReasonOverride, selectedCount }: Props) {
+  const reason = blockReasonOverride !== undefined ? blockReasonOverride : getCombineBlockReason(analyses, selectedIds);
 
   if (analyses.length === 0) {
     return <p className="text-sm text-slate-500">ยังไม่มีแบบประเมินในเคสนี้</p>;
@@ -19,7 +22,7 @@ export default function CaseEvaluationPicker({ analyses, selectedIds, onChange, 
 
   return (
     <div>
-      <p className="text-sm font-semibold text-slate-800">เลือกแบบประเมินที่จะรวม ({selectedIds.length} รายการ)</p>
+      <p className="text-sm font-semibold text-slate-800">เลือกแบบประเมินที่จะรวม ({selectedCount ?? selectedIds.length} รายการ)</p>
       {reason && <p className="mt-1 text-sm text-amber-700">{reason}</p>}
       <ul className="mt-3 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
         {analyses.map((run) => {

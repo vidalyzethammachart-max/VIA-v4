@@ -152,11 +152,9 @@ export default function VideoGroupCreatePage() {
               <CaseEvaluationPicker
                 analyses={filtered}
                 selectedIds={selectedIds}
-                onChange={(ids) => {
-                  // Keep selections hidden by the current search filter.
-                  const visible = new Set(filtered.map((row) => row.id));
-                  setSelectedIds([...selectedIds.filter((id) => !visible.has(id)), ...ids]);
-                }}
+                onChange={setSelectedIds}
+                blockReason={blockReason}
+                selectedCount={selected.length}
                 disabled={busy}
               />
             )}

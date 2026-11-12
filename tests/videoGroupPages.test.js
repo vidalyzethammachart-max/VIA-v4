@@ -29,6 +29,22 @@ test("picker shows the case label when video_cases is present", () => {
   assert.match(source, /case_title \|\| [\w.?]*case_key/);
 });
 
+test("page does not re-merge hidden selected ids when the picker changes", () => {
+  const source = read("../src/page/VideoGroupCreatePage.tsx");
+  assert.match(source, /onChange=\{setSelectedIds\}/);
+  assert.doesNotMatch(source, /selectedIds\.filter\(\(id\) => !visible\.has\(id\)\)/);
+});
+
+test("picker accepts a block reason and count override computed from the full list", () => {
+  const picker = read("../src/components/CaseEvaluationPicker.tsx");
+  assert.match(picker, /blockReason\?: string \| null/);
+  assert.match(picker, /selectedCount\?: number/);
+  assert.match(picker, /blockReasonOverride !== undefined/);
+  const page = read("../src/page/VideoGroupCreatePage.tsx");
+  assert.match(page, /blockReason=\{blockReason\}/);
+  assert.match(page, /selectedCount=\{selected\.length\}/);
+});
+
 test("every videoGroups translation key used by the page exists in th and en", () => {
   const source = read("../src/page/VideoGroupCreatePage.tsx");
   const keys = [...new Set([...source.matchAll(/t\(\s*"(videoGroups\.[^"]+)"/g)].map((m) => m[1]))];

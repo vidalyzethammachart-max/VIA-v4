@@ -1,5 +1,3 @@
-import { combineAggregateStatistics } from "./aggregateStatistics.js";
-import { COMBINE_MIN_MESSAGE, MIN_COMBINE_COUNT } from "./videoCaseCombineSelectionCore.js";
 import { supabase } from "../lib/supabaseClient";
 import { normalizeRole } from "../lib/roles";
 import { buildVideoCaseSummaryPayload } from "./videoCaseSummaryPayloadCore.js";
@@ -362,72 +360,6 @@ export async function getVideoCaseAggregateDocumentUrls(aggregateId: string): Pr
   }
 
   return { pdfUrl: data.pdfUrl, docxUrl: data.docxUrl };
-}
-
-export async function combineVideoCaseAnalyses(params: {
-  videoCaseId: string;
-  caseTitle: string;
-  sourceRuns: Array<{
-    id: number;
-    user_id: string | null;
-    employee_number?: string | null;
-    evaluation_id: number | null;
-    run_kind?: string;
-    rubric?: Record<string, unknown>;
-    matrix?: Record<string, unknown>;
-    ai_output?: Record<string, unknown> | null;
-    ai_raw_text?: string | null;
-    notes?: string | null;
-    created_at?: string | null;
-    order_number?: string | null;
-  }>;
-  prompt?: string;
-}): Promise<VideoCaseAggregateRow> {
-  const distinctEvaluations = new Set(params.sourceRuns.map((run) => run.evaluation_id ?? run.id));
-  if (distinctEvaluations.size < MIN_COMBINE_COUNT) throw new Error(COMBINE_MIN_MESSAGE);
-  const stats = combineAggregateStatistics(params.sourceRuns);
-  const result = { ...stats, caseId:params.videoCaseId, caseTitle:params.caseTitle, sourceRunCount:params.sourceRuns.length, model:null, analysis:null, rawText:null };
-  // The report submission starts the n8n workflow; combining scores does not call Gemini twice.
-  const { data: userData, error: authError } = await supabase.auth.getUser();
-  if (authError || !userData.user) {
-    throw new Error("Authentication required.");
-  }
-
-  const { data, error } = await supabase
-    .from("video_case_aggregates")
-    .insert({
-      video_case_id: params.videoCaseId,
-      requested_by: userData.user.id,
-      source_evaluation_ids: params.sourceRuns
-        .map((run) => run.evaluation_id)
-        .filter((value): value is number => typeof value === "number"),
-      source_count: result.sourceRunCount,
-      source_snapshot: {
-        case_id: result.caseId,
-        case_title: result.caseTitle,
-        source_runs: params.sourceRuns,
-        combine_prompt: params.prompt || null,
-        question_averages_by_section: result.aggregatedScores,
-        question_averages: result.aggregatedScores,
-        section_averages: result.sectionAverages,
-        matrix_averages: result.aggregatedMatrix,
-      },
-      combined_scores: result.aggregatedScores,
-      section_averages: result.sectionAverages,
-      ai_model: result.model,
-      ai_output: typeof result.analysis === "object" && result.analysis !== null ? result.analysis : null,
-      ai_raw_text: typeof result.analysis === "string" ? result.analysis : result.rawText || null,
-      status: "ready",
-      error: null,
-    })
-    .select("*")
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data as VideoCaseAggregateRow;
 }
 
 export async function sendVideoCaseAggregateToN8n(aggregateId: string): Promise<VideoCaseAggregateRow> {

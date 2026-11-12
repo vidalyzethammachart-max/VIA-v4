@@ -1,21 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
-import CaseEvaluationPicker from "../components/CaseEvaluationPicker";
 import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
 import VideoCaseEditor from "../components/VideoCaseEditor";
 import { buildVideoCaseSummaryDocumentPreviewPath } from "../services/videoCaseSummaryDocumentPreviewCore.js";
-import {
-  getCombinableEvaluationIds,
-  getCombineBlockReason,
-  keepCombinableSelection,
-  toCombineSourceRuns,
-} from "../services/videoCaseCombineSelectionCore.js";
 import { normalizeRole, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import {
-  combineVideoCaseAnalyses,
   getMyVideoCases,
   getVideoCaseAggregates,
   getVideoCaseAnalyses,
@@ -28,7 +20,6 @@ import {
 } from "../services/videoCaseService";
 
 export default function VideoCasesPage() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedCaseId = searchParams.get("caseId")?.trim() || "";
   const [loading, setLoading] = useState(true);
@@ -48,9 +39,6 @@ export default function VideoCasesPage() {
   const [aggregates, setAggregates] = useState<VideoCaseAggregateRow[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [combining, setCombining] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [selectedAnalysisIds, setSelectedAnalysisIds] = useState<number[]>([]);
 
   // On phones the selected-case card sits far above the list, so bring it into view.
   const selectCase = (caseId: string) => {
@@ -67,11 +55,6 @@ export default function VideoCasesPage() {
 
   const effectiveCaseRole: VideoCaseMemberRole =
     appRole === "admin" ? "leader" : (selectedRole ?? "member");
-  const selectedAnalyses = useMemo(() => {
-    const combinableIds = keepCombinableSelection(analyses, selectedAnalysisIds);
-    return analyses.filter((run) => combinableIds.includes(run.id));
-  }, [analyses, selectedAnalysisIds]);
-  const combineBlockReason = getCombineBlockReason(analyses, selectedAnalysisIds);
   const canCombine = effectiveCaseRole === "leader" && !showTrash;
 
   const loadCases = useCallback(async () => {
@@ -110,7 +93,6 @@ export default function VideoCasesPage() {
       setSelectedRole(membership?.member_role ?? null);
       setAnalyses(analysisRows);
       setAggregates(aggregateRows);
-      setSelectedAnalysisIds(getCombinableEvaluationIds(analysisRows));
     } catch (error) {
       if (request === detailsRequest.current) setErrorMessage(error instanceof Error ? error.message : "Failed to load case details.");
     }
@@ -148,7 +130,6 @@ export default function VideoCasesPage() {
       setAnalyses([]);
       setAggregates([]);
       setSelectedRole(null);
-      setSelectedAnalysisIds([]);
       return;
     }
 
@@ -190,37 +171,6 @@ export default function VideoCasesPage() {
     }
   }
 
-  async function handleCombine() {
-    if (!selectedCase) {
-      setErrorMessage("กรุณาเลือกเคสก่อน");
-      setConfirmOpen(false);
-      return;
-    }
-
-    if (combineBlockReason) {
-      setErrorMessage(combineBlockReason);
-      setConfirmOpen(false);
-      return;
-    }
-
-    try {
-      setCombining(true);
-      setErrorMessage(null);
-      const aggregate = await combineVideoCaseAnalyses({
-        videoCaseId: selectedCase.id,
-        caseTitle: selectedCase.case_title || selectedCase.case_key,
-        sourceRuns: toCombineSourceRuns(selectedAnalyses),
-      });
-
-      navigate(`/video-cases/${selectedCase.id}/summaries/${aggregate.id}`);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "รวมผลแบบประเมินไม่สำเร็จ");
-    } finally {
-      setCombining(false);
-      setConfirmOpen(false);
-    }
-  }
-
   return (
     <div className="min-h-screen bg-slate-50">
       <MainNavbar />
@@ -243,19 +193,6 @@ export default function VideoCasesPage() {
           }}
         />
       )}
-      <ConfirmModal
-        isOpen={confirmOpen}
-        title="รวมผลและวิเคราะห์ใหม่"
-        message={`รวมแบบประเมิน ${selectedAnalyses.length} รายการที่เลือกเป็นแบบประเมินกลุ่มวิดีโอ แล้วตรวจและส่งให้ AI สรุปในหน้าถัดไป`}
-        variant="primary"
-        onCancel={() => {
-          if (!combining) setConfirmOpen(false);
-        }}
-        onConfirm={() => void handleCombine()}
-        confirmLabel="รวมผล"
-        cancelLabel="ยกเลิก"
-        confirmDisabled={combining}
-      />
       <main className="mx-auto max-w-7xl px-4 py-6 md:py-8">
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -336,22 +273,12 @@ export default function VideoCasesPage() {
           </div>
           {selectedCase && canCombine && (
             <div className="border-t border-slate-200 p-5 md:p-6">
-              <CaseEvaluationPicker
-                analyses={analyses}
-                selectedIds={selectedAnalysisIds}
-                onChange={setSelectedAnalysisIds}
-                disabled={combining}
-              />
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-                <button
-                  type="button"
-                  className="btn-primary"
-                  disabled={combining || combineBlockReason !== null}
-                  onClick={() => setConfirmOpen(true)}
-                >
-                  {combining ? "กำลังรวมผล..." : "รวมเป็นแบบประเมินกลุ่ม"}
-                </button>
-              </div>
+              <Link
+                to={`/video-groups/new?caseId=${selectedCase.id}`}
+                className="btn-primary inline-flex"
+              >
+                รวมเป็นแบบประเมินกลุ่ม
+              </Link>
             </div>
           )}
           <div className="grid grid-cols-3 border-t border-slate-200">

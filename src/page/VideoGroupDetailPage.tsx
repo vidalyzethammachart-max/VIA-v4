@@ -39,6 +39,7 @@ export default function VideoGroupDetailPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [group, setGroup] = useState<VideoGroupRow | null>(null);
   const [sources, setSources] = useState<GroupSource[]>([]);
+  const [sourcesError, setSourcesError] = useState<string | null>(null);
   const [caseLabels, setCaseLabels] = useState<Record<string, string>>({});
   const [overallSuggestion, setOverallSuggestion] = useState("");
   const [sending, setSending] = useState(false);
@@ -58,14 +59,29 @@ export default function VideoGroupDetailPage() {
       try {
         setLoading(true);
         setErrorMessage(null);
+        setGroup(null);
+        setSources([]);
+        setCaseLabels({});
+        setSendError(null);
+        setSourcesError(null);
         const row = await getVideoGroup(groupId);
         if (cancelled) return;
         setGroup(row);
         if (row) {
           // Case information comes from the sources table (video_case_id), not the snapshot.
-          const rows = await getVideoGroupSources(row.id);
-          if (cancelled) return;
-          setSources(rows);
+          try {
+            const rows = await getVideoGroupSources(row.id);
+            if (cancelled) return;
+            setSources(rows);
+          } catch (sourcesLoadError) {
+            if (!cancelled) {
+              setSourcesError(
+                sourcesLoadError instanceof Error && sourcesLoadError.message
+                  ? sourcesLoadError.message
+                  : t("videoGroups.sourcesLoadFailed"),
+              );
+            }
+          }
           try {
             const cases = await getMyVideoCases();
             if (!cancelled) {
@@ -79,6 +95,7 @@ export default function VideoGroupDetailPage() {
         }
       } catch (error) {
         if (!cancelled) {
+          setGroup(null);
           setErrorMessage(error instanceof Error ? error.message : t("videoGroups.detailLoadFailed"));
         }
       } finally {
@@ -288,7 +305,11 @@ export default function VideoGroupDetailPage() {
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">{t("videoGroups.sourcesTitle")}</h2>
-              {sources.length === 0 ? (
+              {sourcesError ? (
+                <p className="mt-3 text-sm text-red-700" role="alert">
+                  {t("videoGroups.sourcesLoadFailed")}: {sourcesError}
+                </p>
+              ) : sources.length === 0 ? (
                 <p className="mt-3 text-sm text-slate-500">{t("videoGroups.noSources")}</p>
               ) : (
                 <ul className="mt-3 divide-y divide-slate-100 text-sm">

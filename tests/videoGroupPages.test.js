@@ -124,3 +124,23 @@ test("every videoGroups key used by list and detail pages exists in th and en", 
     }
   }
 });
+
+test("detail page resets stale state on load and clears the group when the load fails", () => {
+  const source = read("../src/page/VideoGroupDetailPage.tsx");
+  const effect = source.slice(source.indexOf("const load = async"), source.indexOf("void load();"));
+  for (const reset of ["setGroup(null)", "setSources([])", "setCaseLabels({})", "setSendError(null)", "setSourcesError(null)"]) {
+    assert.ok(effect.includes(reset), `${reset} missing from load`);
+  }
+  const catchBlock = effect.slice(effect.lastIndexOf("catch (error)"));
+  assert.match(catchBlock, /setGroup\(null\)/);
+});
+
+test("detail page reports a sources-load failure separately from an empty list", () => {
+  const source = read("../src/page/VideoGroupDetailPage.tsx");
+  assert.match(source, /sourcesError/);
+  assert.match(source, /t\("videoGroups\.sourcesLoadFailed"\)/);
+  const translations = read("../src/i18n/translations.ts");
+  const enStart = translations.indexOf("  en: {");
+  assert.ok(translations.slice(0, enStart).includes('"videoGroups.sourcesLoadFailed":'));
+  assert.ok(translations.slice(enStart).includes('"videoGroups.sourcesLoadFailed":'));
+});

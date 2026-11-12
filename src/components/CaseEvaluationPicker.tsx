@@ -3,7 +3,7 @@ import { getEvaluationAverage, getStatusLabel } from "../services/videoCaseEvalu
 import type { VideoCaseEvaluationRow } from "../services/videoCaseService";
 
 type Props = {
-  analyses: VideoCaseEvaluationRow[];
+  analyses: Array<VideoCaseEvaluationRow & { video_cases?: { case_key: string; case_title: string | null } | null }>;
   selectedIds: number[];
   onChange: (ids: number[]) => void;
   disabled?: boolean;
@@ -48,6 +48,9 @@ export default function CaseEvaluationPicker({ analyses, selectedIds, onChange, 
                   #{run.id} · ผู้ประเมิน {run.employee_number || "ไม่ระบุรหัส"} ·{" "}
                   {new Date(run.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
                 </p>
+                {run.video_cases && (
+                  <p className="mt-1 break-words text-xs font-medium text-[#04418b]">{run.video_cases.case_title || run.video_cases.case_key}</p>
+                )}
                 {run.overall_suggestion?.trim() && (
                   <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-slate-600">{run.overall_suggestion.trim()}</p>
                 )}

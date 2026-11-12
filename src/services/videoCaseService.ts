@@ -79,7 +79,7 @@ export type VideoCaseEvaluationRow = {
   created_at: string;
 };
 
-async function getCurrentUserEmployeeNumber(): Promise<string | null> {
+export async function getCurrentUserEmployeeNumber(): Promise<string | null> {
   const { data: userData, error: authError } = await supabase.auth.getUser();
   if (authError || !userData.user) {
     throw new Error("Authentication required.");

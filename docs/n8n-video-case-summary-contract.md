@@ -107,3 +107,24 @@ Successful callback:
 
 The callback updates `evaluations` for an evaluation and
 `video_case_aggregates` for a video case summary.
+
+## Video Group Evaluations
+
+For document type `video_case_summary`, the `aggregate_id` UUID may identify
+either a legacy video case aggregate (table `video_case_aggregates`) or a video
+group evaluation (table `video_group_evaluations`). The Edge Functions
+(`forward-to-n8n` dispatch, `document-generation-callback`,
+`document-artifact-url`) tell them apart by looking the UUID up in
+`video_group_evaluations` first.
+
+| Field | Value for a group |
+| --- | --- |
+| `aggregate_id` | UUID of the group evaluation (opaque to n8n) |
+| `order_number` | The group's order number |
+| `subject_name` | `<type label> <subject>`; type labels: `กลุ่ม`, `รวมรอบ`, `สรุปปลายปี` |
+| `evaluation_id` | Never present |
+
+n8n must keep treating `aggregate_id` as an opaque UUID and preserve it
+unchanged through every node and the callback. The n8n workflow itself needs no
+change for groups. This has NOT yet been verified against the live workflow;
+verification is a manual step via the n8n UI.

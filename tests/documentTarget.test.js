@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveDocumentTarget } from "../supabase/functions/_shared/documentTarget.js";
+import { resolveDocumentTarget, resolveDocumentTargetWithGroups } from "../supabase/functions/_shared/documentTarget.js";
 
 test("resolves an individual evaluation", () => {
   assert.deepEqual(
@@ -72,4 +72,42 @@ test("rejects an identifier that does not match document_type", () => {
       }),
     /evaluation_id is required/,
   );
+});
+
+const GROUP_ID = "71abc689-868a-4bc7-a0b0-000000000001";
+
+test("a UUID that is a group resolves to the group kind", async () => {
+  const seen = [];
+  const target = await resolveDocumentTargetWithGroups(
+    { document_type: "video_case_summary", aggregate_id: GROUP_ID },
+    async (id) => { seen.push(id); return true; },
+  );
+  assert.deepEqual(target, {
+    kind: "group", table: "video_group_evaluations", id: GROUP_ID, documentType: "video_case_summary",
+  });
+  assert.deepEqual(seen, [GROUP_ID]);
+});
+
+test("an unknown UUID stays a legacy aggregate", async () => {
+  const target = await resolveDocumentTargetWithGroups(
+    { document_type: "video_case_summary", aggregate_id: GROUP_ID },
+    async () => false,
+  );
+  assert.deepEqual(target, {
+    kind: "aggregate", table: "video_case_aggregates", id: GROUP_ID, documentType: "video_case_summary",
+  });
+});
+
+test("evaluation payloads never look up groups", async () => {
+  let calls = 0;
+  const target = await resolveDocumentTargetWithGroups(
+    { document_type: "evaluation", evaluation_id: 5 },
+    async () => { calls += 1; return true; },
+  );
+  assert.equal(target.kind, "evaluation");
+  assert.equal(calls, 0);
+});
+
+test("invalid payloads still throw", async () => {
+  await assert.rejects(resolveDocumentTargetWithGroups({ document_type: "x" }, async () => true));
 });

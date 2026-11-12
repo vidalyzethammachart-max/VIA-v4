@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { resolveDocumentTarget } from "../_shared/documentTarget.js";
+import { resolveDocumentTargetWithGroups } from "../_shared/documentTarget.js";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -81,9 +81,17 @@ serve(async (req) => {
 
   try {
     const payload = (await req.json()) as CallbackPayload;
-    let target: ReturnType<typeof resolveDocumentTarget>;
+    let target: Awaited<ReturnType<typeof resolveDocumentTargetWithGroups>>;
     try {
-      target = resolveDocumentTarget(payload);
+      target = await resolveDocumentTargetWithGroups(payload, async (id: string) => {
+        const { data, error } = await adminSupabase
+          .from("video_group_evaluations")
+          .select("id")
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw new Error("Unable to resolve document target.");
+        return Boolean(data);
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return new Response(JSON.stringify({ ok: false, error: message }), {
@@ -158,7 +166,8 @@ serve(async (req) => {
       JSON.stringify({
         ok: true,
         evaluationId: target.kind === "evaluation" ? target.id : null,
-        aggregateId: target.kind === "aggregate" ? target.id : null,
+        aggregateId: target.kind === "aggregate" || target.kind === "group" ? target.id : null,
+        groupId: target.kind === "group" ? target.id : null,
         status: updateValues.document_status,
         docId: docId ?? null,
         sourceDocId,

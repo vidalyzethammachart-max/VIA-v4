@@ -5,16 +5,19 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as targets from '../supabase/functions/_shared/documentTarget.js';
 
-async function setup({auth=true, claim, beginError, finishStatus, upstreamStatus=200, networkError=false, webhook='https://workflow.invalid/hook'}={}) {
+async function setup({kind='evaluation',groupIds=[],auth=true, claim, beginError, finishStatus, upstreamStatus=200, networkError=false, webhook='https://workflow.invalid/hook'}={}) {
   let handler;
   const sent=[];
   const transitions=[];
-  const payload={evaluation_id:246,document_type:'evaluation',actor_user_id:'actor',notes:'Keep this'};
-  const userClient={auth:{getUser:async()=>({data:{user:auth?{id:'actor'}:null},error:null})},rpc:async(name,args)=>{
+  const begins=[];
+  const AGG='00000000-0000-4000-8000-000000000004';
+  const payload=kind==='evaluation'?{evaluation_id:246,document_type:'evaluation',actor_user_id:'actor',notes:'Keep this'}:{aggregate_id:AGG,document_type:'video_case_summary',actor_user_id:'actor'};
+  const lookups=[];
+  const userClient={from:table=>{const q={select(){return q;},eq(_c,id){q.id=id;return q;},async maybeSingle(){lookups.push({table,id:q.id});return {data:groupIds.includes(q.id)?{id:q.id}:null,error:null};}};return q;},auth:{getUser:async()=>({data:{user:auth?{id:'actor'}:null},error:null})},rpc:async(name,args)=>{
     if(name==='enqueue_ai_document')return {data:'old-job',error:null};
     assert.equal(name,'begin_document_dispatch');
-    assert.equal(args.p_kind,'evaluation');
-    assert.equal(args.p_id,'246');
+    begins.push(args);
+    if(kind==='evaluation'){assert.equal(args.p_kind,'evaluation');assert.equal(args.p_id,'246');}
     return {data:claim||{dispatch:true,status:'pending',token:'lease-token',payload},error:beginError||null};
   }};
   const adminClient={rpc:async(name,args)=>{
@@ -38,7 +41,7 @@ async function setup({auth=true, claim, beginError, finishStatus, upstreamStatus
     },
   });
   const request=async(body={evaluation_id:246},authorization='Bearer user-token')=>handler(new Request('https://edge.invalid',{method:'POST',headers:{'content-type':'application/json',authorization},body:JSON.stringify(body)}));
-  return {request,sent,transitions};
+  return {request,sent,transitions,begins,lookups,AGG};
 }
 
 test('authorized submissions reach n8n immediately with server-owned callback settings',async()=>{
@@ -101,4 +104,30 @@ test('a completed callback wins over a late webhook failure',async()=>{
 test('missing webhook configuration fails before a dispatch claim',async()=>{
   const {request,sent,transitions}=await setup({webhook:''});
   assert.equal((await request()).status,503);assert.equal(sent.length,0);assert.equal(transitions.length,0);
+});
+
+test('a group id sent as aggregate_id dispatches with p_kind group and replies with groupId',async()=>{
+  const AGG='00000000-0000-4000-8000-000000000004';
+  const {request,sent,transitions,begins,lookups}=await setup({kind:'aggregate',groupIds:[AGG]});
+  const response=await request({aggregate_id:AGG,document_type:'video_case_summary'});
+  assert.equal(response.status,202);
+  const json=await response.json();
+  assert.equal(json.groupId,AGG);assert.equal(json.aggregateId,null);assert.equal(json.evaluationId,null);
+  assert.equal(begins[0].p_kind,'group');assert.equal(begins[0].p_id,AGG);
+  assert.equal(transitions[0].p_kind,'group');
+  assert.equal(lookups[0].table,'video_group_evaluations');
+  assert.equal(sent.length,1);
+});
+test('a legacy aggregate still dispatches with p_kind aggregate',async()=>{
+  const {request,sent,transitions,begins,AGG}=await setup({kind:'aggregate'});
+  const response=await request({aggregate_id:AGG,document_type:'video_case_summary'});
+  assert.equal(response.status,202);
+  const json=await response.json();
+  assert.equal(json.aggregateId,AGG);assert.equal(json.groupId??null,null);
+  assert.equal(begins[0].p_kind,'aggregate');assert.equal(transitions[0].p_kind,'aggregate');
+  assert.equal(sent.length,1);
+});
+test('evaluation dispatch never queries the group table',async()=>{
+  const {request,lookups}=await setup();
+  await request();assert.equal(lookups.length,0);
 });

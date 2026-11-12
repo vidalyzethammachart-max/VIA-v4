@@ -1,4 +1,4 @@
-import { resolveDocumentTarget } from './documentTarget.js';
+import { resolveDocumentTargetWithGroups } from './documentTarget.js';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -48,10 +48,15 @@ export function createForwardHandler({createClient, env, fetchImpl = globalThis.
       const body=JSON.parse(raw);
       payload=Array.isArray(body) && body.length===1 ? body[0] : body;
       if (!payload || Array.isArray(payload) || typeof payload!=='object') throw new Error('One document payload is required.');
-      target=resolveDocumentTarget(payload);
+      target=await resolveDocumentTargetWithGroups(payload,async(id)=>{
+        const lookup=await client.from('video_group_evaluations').select('id').eq('id',id).maybeSingle();
+        if (lookup.error) throw new Error('Unable to resolve document target.');
+        return Boolean(lookup.data);
+      });
       validateVideo(payload);
     } catch (error) { return reply(400, {ok:false,error:error.message || 'Invalid document payload'}); }
     const identities={evaluationId:target.kind==='evaluation'?target.id:null,aggregateId:target.kind==='aggregate'?target.id:null};
+    if (target.kind==='group') identities.groupId=target.id;
     let claim;
     try {
       const result=await client.rpc('begin_document_dispatch',{p_kind:target.kind,p_id:String(target.id),p_payload:{...payload,actor_user_id:user.id}});

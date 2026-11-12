@@ -65,6 +65,12 @@ export default function Home() {
                 >
                   {language === "th" ? "จัดการกลุ่มวิดีโอ" : "Video cases"}
                 </Link>
+                <Link
+                  to="/video-groups"
+                  className="ui-hover-button inline-flex min-h-12 items-center justify-center rounded-lg border border-slate-300 bg-white px-6 py-3 text-center text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                >
+                  {t("videoGroups.navLabel")}
+                </Link>
               </div>
             </div>
 

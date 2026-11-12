@@ -59,3 +59,68 @@ test("every videoGroups translation key used by the page exists in th and en", (
     assert.ok(en.includes(`"${key}":`), `en missing ${key}`);
   }
 });
+
+test("App registers the three group routes with a plain ProtectedRoute", () => {
+  const app = read("../src/App.tsx");
+  for (const [path, component] of [
+    ["/video-groups", "VideoGroupsPage"],
+    ["/video-groups/new", "VideoGroupCreatePage"],
+    ["/video-groups/:groupId", "VideoGroupDetailPage"],
+  ]) {
+    const re = new RegExp(
+      `path="${path}"\\s+element=\\{\\s*<ProtectedRoute>\\s*<${component} />\\s*</ProtectedRoute>`,
+    );
+    assert.match(app, re, `${path} route missing or not a plain ProtectedRoute`);
+  }
+});
+
+test("list page uses getVideoGroups and links to the create page", () => {
+  const source = read("../src/page/VideoGroupsPage.tsx");
+  assert.match(source, /export default function VideoGroupsPage/);
+  assert.match(source, /getVideoGroups/);
+  assert.match(source, /buildVideoGroupDisplayName/);
+  assert.match(source, /["'`]\/video-groups\/new["'`]/);
+  assert.match(source, /["'`]\/video-groups\/\$\{/);
+});
+
+test("detail page sends, shows documents and takes sources from the sources table", () => {
+  const source = read("../src/page/VideoGroupDetailPage.tsx");
+  assert.match(source, /export default function VideoGroupDetailPage/);
+  for (const name of [
+    "sendVideoGroupToN8n",
+    "getVideoGroupDocumentUrls",
+    "getVideoGroupSources",
+    "buildCombinedSuggestionDraft",
+    "submittingRef",
+    "SectionCard",
+  ]) {
+    assert.match(source, new RegExp(name), `${name} missing`);
+  }
+  assert.match(source, /finally\s*{[^}]*submittingRef\.current = false/);
+  assert.doesNotMatch(source, /source_runs[^;\n]*(case_title|case_key|video_case)/);
+  assert.match(source, /video_case_id/);
+});
+
+test("navigation links to /video-groups from the dropdown and Home", () => {
+  assert.match(read("../src/components/ProfileDropdown.tsx"), /\/video-groups/);
+  assert.match(read("../src/page/Home.tsx"), /\/video-groups/);
+});
+
+test("every videoGroups key used by list and detail pages exists in th and en", () => {
+  const translations = read("../src/i18n/translations.ts");
+  const enStart = translations.indexOf("  en: {");
+  const th = translations.slice(0, enStart);
+  const en = translations.slice(enStart);
+  for (const file of [
+    "../src/page/VideoGroupsPage.tsx",
+    "../src/page/VideoGroupDetailPage.tsx",
+    "../src/components/ProfileDropdown.tsx",
+    "../src/page/Home.tsx",
+  ]) {
+    const keys = [...new Set([...read(file).matchAll(/t\(\s*"(videoGroups\.[^"]+)"/g)].map((m) => m[1]))];
+    for (const key of keys) {
+      assert.ok(th.includes(`"${key}":`), `th missing ${key}`);
+      assert.ok(en.includes(`"${key}":`), `en missing ${key}`);
+    }
+  }
+});

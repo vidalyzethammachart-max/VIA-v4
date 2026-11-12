@@ -11,6 +11,9 @@ import AdminStuckJobsPage from "./page/AdminStuckJobsPage";
 import RoleRequestsPage from "./page/RoleRequestsPage";
 import VideoCasesPage from "./page/VideoCasesPage";
 import VideoCaseDetailPage from "./page/VideoCaseDetailPage";
+import VideoGroupsPage from "./page/VideoGroupsPage";
+import VideoGroupCreatePage from "./page/VideoGroupCreatePage";
+import VideoGroupDetailPage from "./page/VideoGroupDetailPage";
 import VideoCaseSummaryPage from "./page/VideoCaseSummaryPage";
 import VideoCaseSummaryDocumentPreviewPage from "./page/VideoCaseSummaryDocumentPreviewPage";
 import ForgotPassword from "./page/ForgotPassword";
@@ -140,6 +143,30 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <VideoCaseSummaryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/video-groups"
+            element={
+              <ProtectedRoute>
+                <VideoGroupsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/video-groups/new"
+            element={
+              <ProtectedRoute>
+                <VideoGroupCreatePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/video-groups/:groupId"
+            element={
+              <ProtectedRoute>
+                <VideoGroupDetailPage />
               </ProtectedRoute>
             }
           />

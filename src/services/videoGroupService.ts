@@ -198,3 +198,19 @@ export async function sendVideoGroupToN8n(
   }
   return latestGroup;
 }
+
+// UX only: whether to show the "create" link. The RPC and RLS stay the authority.
+export async function isLeaderOfAnyVideoCase(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("video_case_members")
+    .select("video_case_id")
+    .eq("user_id", userId)
+    .eq("member_role", "leader")
+    .limit(1);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).length > 0;
+}

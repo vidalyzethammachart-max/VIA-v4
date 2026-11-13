@@ -50,3 +50,9 @@ test("the PDF tick table gets the same rounded scores the group detail page show
   // The decimal averages are still sent for the statistics.
   assert.deepEqual(p.question_averages, g.combined_scores);
 });
+
+test("x.5 and above rounds up, below x.5 rounds down", () => {
+  const g = { ...group, combined_scores: { "1": { a: 2.49, b: 2.5, c: 2.51, d: 3.33, e: 3.67, f: 4.5 } } };
+  const p = buildVideoGroupSummaryPayload({ group: g, requestedByEmployeeNumber: null, combinePrompt: null });
+  assert.deepEqual(p.rubric, { "1": { a: 2, b: 3, c: 3, d: 3, e: 4, f: 5 } });
+});

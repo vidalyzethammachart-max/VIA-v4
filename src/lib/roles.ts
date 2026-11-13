@@ -1,4 +1,7 @@
-export const ROLES = ["user", "editor", "admin"] as const;
+export const ROLES = ["user", "editor", "admin", "super_admin"] as const;
+
+// Roles any role picker may offer. super_admin is set only by the database owner, never in the app.
+export const ASSIGNABLE_ROLES = ["user", "editor", "admin"] as const;
 
 export type AppRole = (typeof ROLES)[number];
 
@@ -6,6 +9,7 @@ const ROLE_RANK: Record<AppRole, number> = {
   user: 1,
   editor: 2,
   admin: 3,
+  super_admin: 4,
 };
 
 export function isAppRole(value: unknown): value is AppRole {

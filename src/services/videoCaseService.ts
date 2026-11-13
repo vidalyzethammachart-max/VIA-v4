@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
-import { normalizeRole } from "../lib/roles";
+import { normalizeRole, roleAtLeast } from "../lib/roles";
 import { buildVideoCaseSummaryPayload } from "./videoCaseSummaryPayloadCore.js";
 import { resolveAggregateSourceIds } from "./videoCaseSourceIds.js";
 
@@ -167,7 +167,7 @@ export async function getMyVideoCases(options?: { trashed?: boolean }): Promise<
     throw new Error(roleError.message);
   }
 
-  if (normalizeRole(roleData?.role) === "admin") {
+  if (roleAtLeast(normalizeRole(roleData?.role), "admin")) {
     const query = supabase
       .from("video_cases")
       .select("id, case_key, case_title, description, deleted_at, deleted_by, source_file_name, video_object_key, created_by, created_at, updated_at")

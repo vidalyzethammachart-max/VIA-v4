@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import ConfirmModal from "../components/ConfirmModal";
+import ErrorNoticeModal from "../components/ErrorNoticeModal";
 import MainNavbar from "../components/MainNavbar";
 import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
 import { normalizeRole, roleAtLeast } from "../lib/roles";
+import { reportError } from "../services/errorReporter";
 import { buildVideoGroupDisplayName } from "../services/videoGroupCore.js";
 import {
   deleteVideoGroup,
@@ -30,6 +32,7 @@ export default function VideoGroupsPage() {
   const [isLeader, setIsLeader] = useState(false);
   const [groupToDelete, setGroupToDelete] = useState<VideoGroupRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const isAdmin = roleAtLeast(normalizeRole(role), "admin");
   // UX only: the RPC and RLS decide who may actually create a group.
@@ -84,7 +87,8 @@ export default function VideoGroupsPage() {
       setGroupToDelete(null);
     } catch (error) {
       setGroupToDelete(null);
-      setErrorMessage(error instanceof Error ? error.message : t("videoGroups.deleteFailed"));
+      reportError(error, { source: "popup", context: { action: "delete_group", groupId: groupToDelete.id } });
+      setDeleteError(error instanceof Error ? error.message : t("videoGroups.deleteFailed"));
     } finally {
       setDeleting(false);
     }
@@ -93,6 +97,7 @@ export default function VideoGroupsPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <MainNavbar />
+      <ErrorNoticeModal isOpen={deleteError !== null} detail={deleteError} onClose={() => setDeleteError(null)} />
       <ConfirmModal
         isOpen={Boolean(groupToDelete)}
         title={t("videoGroups.deleteTitle")}

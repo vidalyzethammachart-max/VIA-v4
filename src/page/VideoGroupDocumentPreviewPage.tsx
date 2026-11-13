@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import ConfirmModal from "../components/ConfirmModal";
+import ErrorNoticeModal from "../components/ErrorNoticeModal";
 import MainNavbar from "../components/MainNavbar";
 import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
 import { normalizeRole, roleAtLeast } from "../lib/roles";
+import { reportError } from "../services/errorReporter";
 import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
 import { buildVideoGroupDisplayName } from "../services/videoGroupCore.js";
 import { deleteVideoGroup, getVideoGroup, getVideoGroupDocumentUrls, type VideoGroupRow } from "../services/videoGroupService";
@@ -23,6 +25,7 @@ export default function VideoGroupDocumentPreviewPage() {
   const { role, user } = useAuthRole();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [group, setGroup] = useState<VideoGroupRow | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
@@ -140,7 +143,8 @@ export default function VideoGroupDocumentPreviewPage() {
       navigate("/video-groups");
     } catch (error) {
       setConfirmDelete(false);
-      setQueryError(error instanceof Error ? error.message : t("videoGroups.deleteFailed"));
+      reportError(error, { source: "popup", context: { action: "delete_group_preview", groupId } });
+      setDeleteError(error instanceof Error ? error.message : t("videoGroups.deleteFailed"));
     } finally {
       setDeleting(false);
     }
@@ -167,6 +171,7 @@ export default function VideoGroupDocumentPreviewPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <MainNavbar />
+      <ErrorNoticeModal isOpen={deleteError !== null} detail={deleteError} onClose={() => setDeleteError(null)} />
       <ConfirmModal
         isOpen={confirmDelete}
         title={t("videoGroups.deleteTitle")}

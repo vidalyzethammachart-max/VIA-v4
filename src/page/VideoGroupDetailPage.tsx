@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
+import ConfirmModal from "../components/ConfirmModal";
+import ErrorNoticeModal from "../components/ErrorNoticeModal";
 import MainNavbar from "../components/MainNavbar";
 import { SectionCard } from "../components/SectionCard";
-import { getSections, type LikertValue } from "../config/sections";
+import { getLikertLabels, getSections, type LikertValue } from "../config/sections";
 import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
 import { normalizeRole, roleAtLeast } from "../lib/roles";
+import { reportError } from "../services/errorReporter";
 import { buildCombinedSuggestionDraft } from "../services/videoCaseSummaryPayloadCore";
 import { getMyVideoCases } from "../services/videoCaseService";
 import { buildVideoGroupDisplayName } from "../services/videoGroupCore.js";
 import {
+  deleteVideoGroup,
   getVideoGroup,
   getVideoGroupSources,
   sendVideoGroupToN8n,
@@ -48,6 +52,8 @@ export default function VideoGroupDetailPage() {
   const [sending, setSending] = useState(false);
   const submittingRef = useRef(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [confirmBack, setConfirmBack] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
 
   useEffect(() => {
     if (!groupId) {
@@ -113,6 +119,7 @@ export default function VideoGroupDetailPage() {
 
   const snapshot = useMemo(() => (group?.source_snapshot || {}) as GroupSnapshot, [group]);
   const sections = useMemo(() => getSections(language), [language]);
+  const likertLabels = useMemo(() => getLikertLabels(language), [language]);
   const sourceRuns = useMemo(
     () =>
       (Array.isArray(snapshot.source_runs) ? snapshot.source_runs : []).filter(
@@ -162,10 +169,34 @@ export default function VideoGroupDetailPage() {
       setGroup(updated);
       navigate(`/video-groups/${updated.id}/preview`);
     } catch (error) {
+      reportError(error, { source: "popup", context: { action: "send_group", groupId: group.id } });
       setSendError(error instanceof Error ? error.message : t("videoGroups.sendFailed"));
     } finally {
       submittingRef.current = false;
       setSending(false);
+    }
+  }
+
+  // Back from a draft: discard it (delete policy) and reopen the create form with the same values.
+  async function handleDiscardDraft() {
+    if (!group || discarding) return;
+    try {
+      setDiscarding(true);
+      await deleteVideoGroup(group.id);
+      navigate("/video-groups/new", {
+        state: {
+          orderNumber: group.order_number,
+          groupType: group.group_type,
+          subjectName: group.subject_name,
+          evaluationIds: sources.map((source) => source.evaluation_id),
+        },
+      });
+    } catch (error) {
+      setConfirmBack(false);
+      reportError(error, { source: "popup", context: { action: "discard_group_draft", groupId: group.id } });
+      setSendError(error instanceof Error ? error.message : t("videoGroups.deleteFailed"));
+    } finally {
+      setDiscarding(false);
     }
   }
 
@@ -174,11 +205,23 @@ export default function VideoGroupDetailPage() {
   }
 
   const documentStatus = group?.document_status;
+  const canGoBack = Boolean(canSend && documentStatus === "draft" && !sourcesError && sources.length > 0);
 
   return (
     <div className="min-h-screen bg-slate-50">
       <MainNavbar />
-      <main className="mx-auto max-w-7xl px-4 py-6 md:py-8">
+      <ErrorNoticeModal isOpen={sendError !== null} detail={sendError} onClose={() => setSendError(null)} />
+      <ConfirmModal
+        isOpen={confirmBack}
+        title={t("videoGroups.backTitle")}
+        message={t("videoGroups.backMessage")}
+        confirmLabel={discarding ? t("videoGroups.deleting") : t("videoGroups.backConfirm")}
+        cancelLabel={t("videoGroups.deleteCancel")}
+        confirmDisabled={discarding}
+        onConfirm={() => void handleDiscardDraft()}
+        onCancel={() => setConfirmBack(false)}
+      />
+      <main className="mx-auto max-w-5xl px-4 py-6 md:py-8">
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
@@ -194,11 +237,6 @@ export default function VideoGroupDetailPage() {
         {errorMessage && (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
             {errorMessage}
-          </div>
-        )}
-        {sendError && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-            {sendError}
           </div>
         )}
 
@@ -224,7 +262,7 @@ export default function VideoGroupDetailPage() {
               void handleSend();
             }}
           >
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <section className="ui-hover-card space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700">
                   {t("videoGroups.orderNumber")}: {group.order_number}
@@ -262,8 +300,28 @@ export default function VideoGroupDetailPage() {
               )}
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">{t("videoGroups.combinedRubric")}</h2>
+            <section className="ui-hover-card space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+              <div className="space-y-2">
+                <h2 className="text-sm font-semibold text-slate-900 md:text-base">{t("form.rubricTitle")}</h2>
+                <p className="text-xs text-slate-600 md:text-sm">{t("form.rubricDescription")}</p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs text-slate-600 md:text-sm">
+                {([1, 2, 3, 4, 5] as LikertValue[]).map((value) => (
+                  <div
+                    key={value}
+                    className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1"
+                  >
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-white">
+                      {value}
+                    </span>
+                    <span>{likertLabels[value]}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="ui-hover-card space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+              <h2 className="text-sm font-semibold text-slate-900 md:text-base">{t("videoGroups.combinedRubric")}</h2>
               <div className="mt-4 space-y-5">
                 {sections.map((section) => (
                   <div key={section.id} className="pointer-events-none">
@@ -277,8 +335,8 @@ export default function VideoGroupDetailPage() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">{t("videoGroups.sourcesTitle")}</h2>
+            <section className="ui-hover-card space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+              <h2 className="text-sm font-semibold text-slate-900 md:text-base">{t("videoGroups.sourcesTitle")}</h2>
               {sourcesError ? (
                 <p className="mt-3 text-sm text-red-700" role="alert">
                   {t("videoGroups.sourcesLoadFailed")}: {sourcesError}
@@ -301,7 +359,7 @@ export default function VideoGroupDetailPage() {
               )}
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <section className="ui-hover-card space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
               <label htmlFor="group-overall-suggestion" className="text-sm font-semibold text-slate-800">
                 {t("videoGroups.overallSuggestion")}
               </label>
@@ -316,26 +374,40 @@ export default function VideoGroupDetailPage() {
               />
             </section>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {canGoBack && (
+                <button
+                  type="button"
+                  className="btn-secondary rounded-full px-6 py-2 text-base"
+                  disabled={sending || discarding}
+                  onClick={() => setConfirmBack(true)}
+                >
+                  {t("common.back")}
+                </button>
+              )}
               {canSend ? (
-                <>
-                  <button type="submit" className="btn-primary" disabled={sending || documentStatus === "ready"}>
-                    {sending
-                      ? t("videoGroups.sending")
-                      : documentStatus === "failed"
-                        ? t("videoGroups.resend")
-                        : t("videoGroups.send")}
-                  </button>
-                  <p className="text-sm text-slate-500" role="status">
-                    {t("videoGroups.sendHint")}
-                  </p>
-                </>
+                <button
+                  type="submit"
+                  className="btn-primary rounded-full px-6 py-2 text-base shadow-md"
+                  disabled={sending || documentStatus === "ready"}
+                >
+                  {sending
+                    ? t("videoGroups.sending")
+                    : documentStatus === "failed"
+                      ? t("videoGroups.resend")
+                      : t("videoGroups.send")}
+                </button>
               ) : (
                 <p className="text-sm text-slate-500" role="status">
                   {t("videoGroups.sendNotAllowed")}
                 </p>
               )}
             </div>
+            {canSend && (
+              <p className="text-center text-sm text-slate-500" role="status">
+                {t("videoGroups.sendHint")}
+              </p>
+            )}
           </form>
         )}
       </main>

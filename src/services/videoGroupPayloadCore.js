@@ -22,6 +22,16 @@ function roundRubricForDocument(combinedScores) {
   return rubric;
 }
 
+function sectionAveragesOf(rubric) {
+  const result = {};
+  for (const [sectionId, questions] of Object.entries(rubric)) {
+    const scores = Object.values(questions);
+    if (scores.length === 0) continue;
+    result[sectionId] = Number((scores.reduce((sum, value) => sum + value, 0) / scores.length).toFixed(2));
+  }
+  return result;
+}
+
 export function buildVideoGroupSummaryPayload({ group, requestedByEmployeeNumber, combinePrompt }) {
   const snapshot = group.source_snapshot || {};
   const sourceRuns = Array.isArray(snapshot.source_runs) ? snapshot.source_runs : [];
@@ -32,6 +42,10 @@ export function buildVideoGroupSummaryPayload({ group, requestedByEmployeeNumber
     ? sources.map((source) => source.evaluation_id)
     : sourceRuns.map((run) => run.evaluation_id ?? run.id).filter((id) => id != null);
   const displayName = buildVideoGroupDisplayName(group.group_type, group.subject_name);
+  // Round once, before sending, so every score n8n and the Apps Script see is the whole score the
+  // group detail page shows; no decimal reaches the document.
+  const roundedScores = roundRubricForDocument(group.combined_scores);
+  const roundedSectionAverages = sectionAveragesOf(roundedScores);
 
   const payload = buildVideoCaseSummaryPayload({
     aggregate: {
@@ -40,8 +54,8 @@ export function buildVideoGroupSummaryPayload({ group, requestedByEmployeeNumber
       source_evaluation_ids: evaluationIds,
       source_count: group.source_count,
       source_snapshot: { ...snapshot, case_title: displayName },
-      combined_scores: group.combined_scores,
-      section_averages: group.section_averages,
+      combined_scores: roundedScores,
+      section_averages: roundedSectionAverages,
       ai_output: group.ai_output ?? null,
       ai_raw_text: group.ai_raw_text ?? null,
     },
@@ -57,6 +71,6 @@ export function buildVideoGroupSummaryPayload({ group, requestedByEmployeeNumber
     subject_name: displayName,
     source_evaluation_ids: evaluationIds,
     source_count: group.source_count,
-    rubric: roundRubricForDocument(group.combined_scores),
+    rubric: roundedScores,
   };
 }

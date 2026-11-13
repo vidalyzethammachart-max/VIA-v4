@@ -20,6 +20,7 @@ import ForgotPassword from "./page/ForgotPassword";
 import ResetPassword from "./page/ResetPassword";
 import MyFormsDashboard from "./page/MyFormsDashboard";
 import PreviewPage from "./page/PreviewPage";
+import SuperAdminErrorsPage from "./page/SuperAdminErrorsPage";
 import SessionMonitor from "./components/SessionMonitor";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -183,6 +184,14 @@ export default function App() {
             element={
               <ProtectedRoute requiredRole="admin">
                 <AdminStuckJobsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/super-admin/errors"
+            element={
+              <ProtectedRoute requiredRole="super_admin">
+                <SuperAdminErrorsPage />
               </ProtectedRoute>
             }
           />

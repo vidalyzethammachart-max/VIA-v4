@@ -36,7 +36,8 @@ export default function VideoGroupsPage() {
 
   const isAdmin = roleAtLeast(normalizeRole(role), "admin");
   // UX only: the RPC and RLS decide who may actually create a group.
-  const canCreate = isAdmin || isLeader;
+  const isEditor = roleAtLeast(normalizeRole(role), "editor");
+  const canCreate = isEditor || isLeader;
   const userId = user?.id ?? null;
 
   useEffect(() => {

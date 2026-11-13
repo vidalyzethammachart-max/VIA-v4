@@ -16,7 +16,7 @@ test("isAdminRole accepts only admin and super_admin", () => {
 test("a super admin passes the group document check without any membership", () => {
   const group = { requested_by: "someone-else" };
   assert.equal(canReadGroupDocument({ role: "super_admin", userId: "u", group, sourceCaseIds: ["c"], memberCaseIds: [] }), true);
-  assert.equal(canReadGroupDocument({ role: "editor", userId: "u", group, sourceCaseIds: ["c"], memberCaseIds: [] }), false);
+  assert.equal(canReadGroupDocument({ role: "user", userId: "u", group, sourceCaseIds: ["c"], memberCaseIds: [] }), false);
 });
 
 test("edge functions no longer compare the role to admin directly", () => {

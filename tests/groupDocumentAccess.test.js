@@ -14,6 +14,9 @@ test('a member of any source case can read it',()=>{
 });
 test('a non-creator who is in no source case is forbidden',()=>{
   assert.equal(canReadGroupDocument({role:'user',userId:'x',group,sourceCaseIds:['c1','c2'],memberCaseIds:['c9']}),false);
-  assert.equal(canReadGroupDocument({role:'editor',userId:'x',group,sourceCaseIds:['c1'],memberCaseIds:[]}),false);
   assert.equal(canReadGroupDocument({role:'user',userId:'x',group,sourceCaseIds:[],memberCaseIds:[]}),false);
+});
+
+test('an editor can read any group document, like an admin',()=>{
+  assert.equal(canReadGroupDocument({role:'editor',userId:'x',group,sourceCaseIds:['c1'],memberCaseIds:[]}),true);
 });

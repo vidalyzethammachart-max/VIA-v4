@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isAdminRole } from "../_shared/roleAccess.js";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -14,7 +15,8 @@ const corsHeaders = {
 const authSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-type AppRole = "user" | "editor" | "admin";
+// "super_admin" is only ever read from the database here; it is never accepted from a request.
+type AppRole = "user" | "editor" | "admin" | "super_admin";
 
 type AdminActionPayload =
   | {
@@ -38,7 +40,7 @@ function jsonResponse(status: number, body: Record<string, unknown>) {
 }
 
 function normalizeRole(value: unknown): AppRole {
-  return value === "editor" || value === "admin" ? value : "user";
+  return value === "editor" || value === "admin" || value === "super_admin" ? value : "user";
 }
 
 serve(async (req) => {
@@ -76,7 +78,7 @@ serve(async (req) => {
       .maybeSingle();
 
     const actorRole = normalizeRole(roleRow?.role);
-    if (actorRole !== "admin") {
+    if (!isAdminRole(actorRole)) {
       return jsonResponse(403, { ok: false, error: "Admin permission required" });
     }
 
@@ -93,7 +95,26 @@ serve(async (req) => {
       return jsonResponse(400, { ok: false, error: "You cannot manage your own admin account here" });
     }
 
+    // The super admin is protected: it cannot be modified or deleted here, and nobody can be
+    // promoted to it from the app (only the database owner can, see the guard trigger).
+    if (action === "update_role" || action === "delete_user") {
+      const { data: targetRow, error: targetError } = await adminSupabase
+        .from("user_information")
+        .select("role")
+        .eq("auth_user_id", targetAuthUserId)
+        .maybeSingle();
+      if (targetError) {
+        return jsonResponse(500, { ok: false, error: targetError.message });
+      }
+      if (targetRow?.role === "super_admin") {
+        return jsonResponse(403, { ok: false, error: "Cannot modify the super admin" });
+      }
+    }
+
     if (action === "update_role") {
+      if ((payload as { role?: unknown }).role === "super_admin") {
+        return jsonResponse(403, { ok: false, error: "Cannot assign super_admin" });
+      }
       const nextRole = normalizeRole(payload.role);
 
       const { error } = await adminSupabase

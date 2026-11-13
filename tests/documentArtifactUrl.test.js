@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as access from '../supabase/functions/_shared/groupDocumentAccess.js';
+import * as roleAccess from '../supabase/functions/_shared/roleAccess.js';
 
 const G = '71abc689-868a-4bc7-a0b0-000000000001';
 const A = '61abc689-868a-4bc7-a0b0-000000000000';
@@ -42,6 +43,7 @@ function setup({ role = 'user', userId = 'u1', group = null, sources = [], membe
     if (name.includes('/http/server.ts')) return { serve: fn => { handler = fn; } };
     if (name.includes('@supabase/supabase-js')) return { createClient: (_u, key) => key === 'service' ? admin : auth };
     if (name.endsWith('groupDocumentAccess.js')) return access;
+    if (name.endsWith('roleAccess.js')) return roleAccess;
     throw new Error(name);
   } });
   const call = body => handler(new Request('https://x.invalid', { method: 'POST', headers: { authorization: 'Bearer t', 'content-type': 'application/json' }, body: JSON.stringify(body) }));
@@ -97,4 +99,11 @@ test('an unknown group id falls through to the legacy aggregate path', async () 
   assert.deepEqual(signed, ['agg/a.pdf']);
   const tables = queries.map(q => q.table);
   assert.ok(tables.indexOf('video_group_evaluations') < tables.indexOf('video_case_aggregates'));
+});
+
+test('a super admin reads a group document like an admin, without membership lookups', async () => {
+  const { call, queries, signed } = setup({ role: 'super_admin', group: grp, sources });
+  await assertOk(await call({ aggregateId: G }));
+  assert.deepEqual(signed, ['groups/g.pdf', 'groups/g.docx']);
+  assert.equal(queries.some(q => q.table === 'video_case_members'), false);
 });

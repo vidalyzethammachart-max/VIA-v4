@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { canReadGroupDocument } from "../_shared/groupDocumentAccess.js";
+import { isAdminRole } from "../_shared/roleAccess.js";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -110,7 +111,7 @@ serve(async (req) => {
 
     const role = typeof roleRow?.role === "string" ? roleRow.role : "user";
 
-    const canReadAll = role === "editor" || role === "admin";
+    const canReadAll = role === "editor" || isAdminRole(role);
     let pdfPath: string | null = null;
     let docxPath: string | null = null;
 
@@ -133,7 +134,7 @@ serve(async (req) => {
         .eq("group_id", group.id);
       const sourceCaseIds = ((sources ?? []) as { video_case_id: string }[]).map((row) => row.video_case_id);
       let memberCaseIds: string[] = [];
-      if (role !== "admin" && group.requested_by !== user.id && sourceCaseIds.length > 0) {
+      if (!isAdminRole(role) && group.requested_by !== user.id && sourceCaseIds.length > 0) {
         const { data: memberships } = await adminSupabase
           .from("video_case_members")
           .select("video_case_id")

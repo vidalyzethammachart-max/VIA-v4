@@ -5,6 +5,23 @@ import { buildVideoGroupDisplayName } from "./videoGroupCore.js";
 // keyed by group id (aggregate_id) and never carrying an evaluation_id.
 // `group.sources` (optional, ordered rows of video_group_evaluation_sources) supplies the
 // first source's case; the snapshot's source_runs supply the evaluation ids and notes.
+// The tick table must show what the group detail page shows: each question average rounded to the
+// nearest whole score (Math.round, like toLikertValue there). n8n reads `rubric` before
+// `question_averages`, and would otherwise tick the decimal average's truncated column.
+function roundRubricForDocument(combinedScores) {
+  const rubric = {};
+  for (const [sectionId, questions] of Object.entries(combinedScores || {})) {
+    if (!questions || typeof questions !== "object") continue;
+    const rounded = {};
+    for (const [questionId, value] of Object.entries(questions)) {
+      const score = Math.round(Number(value));
+      if (Number.isFinite(score) && score >= 1 && score <= 5) rounded[questionId] = score;
+    }
+    rubric[sectionId] = rounded;
+  }
+  return rubric;
+}
+
 export function buildVideoGroupSummaryPayload({ group, requestedByEmployeeNumber, combinePrompt }) {
   const snapshot = group.source_snapshot || {};
   const sourceRuns = Array.isArray(snapshot.source_runs) ? snapshot.source_runs : [];
@@ -40,5 +57,6 @@ export function buildVideoGroupSummaryPayload({ group, requestedByEmployeeNumber
     subject_name: displayName,
     source_evaluation_ids: evaluationIds,
     source_count: group.source_count,
+    rubric: roundRubricForDocument(group.combined_scores),
   };
 }

@@ -26,6 +26,7 @@ export default function VideoGroupDocumentPreviewPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [loadErrorPopup, setLoadErrorPopup] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [group, setGroup] = useState<VideoGroupRow | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
@@ -53,7 +54,12 @@ export default function VideoGroupDocumentPreviewPage() {
         const row = await getVideoGroup(groupId);
         if (active) setGroup(row);
       } catch (error) {
-        if (active) setQueryError(error instanceof Error ? error.message : t("videoGroups.detailLoadFailed"));
+        if (active) {
+          const message = error instanceof Error ? error.message : t("videoGroups.detailLoadFailed");
+          reportError(error, { source: "popup", context: { action: "load_group_preview", groupId } });
+          setQueryError(message);
+          setLoadErrorPopup(message);
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -171,6 +177,7 @@ export default function VideoGroupDocumentPreviewPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <MainNavbar />
+      <ErrorNoticeModal isOpen={loadErrorPopup !== null} detail={loadErrorPopup} onClose={() => setLoadErrorPopup(null)} />
       <ErrorNoticeModal isOpen={deleteError !== null} detail={deleteError} onClose={() => setDeleteError(null)} />
       <ConfirmModal
         isOpen={confirmDelete}

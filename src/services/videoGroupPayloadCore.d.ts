@@ -18,4 +18,4 @@ export function buildVideoGroupSummaryPayload(options: {
   group: VideoGroupSummaryGroup;
   requestedByEmployeeNumber: string | null;
   combinePrompt: string | null;
-}): Omit<VideoCaseSummaryPayload, "video_case_id"> & { video_case_id: string | null };
+}): Omit<VideoCaseSummaryPayload, "video_case_id"> & { video_case_id: string | null; rubric: Record<string, Record<string, number>> };

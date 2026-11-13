@@ -42,3 +42,17 @@ test("group payload reuses the summary shape with group identity", () => {
   assert.match(p.overallSuggestionRaw, /สรุป/);
   assert.equal(p.sender_employee_number, "E9");
 });
+
+test("the PDF tick table gets the same rounded scores the group detail page shows", () => {
+  const g = { ...group, combined_scores: { "1": { q1: 2.5, q2: 2.4, q3: 4.67, q4: "x" }, "2": { q1: 1 } } };
+  const p = buildVideoGroupSummaryPayload({ group: g, requestedByEmployeeNumber: "E9", combinePrompt: "สรุป" });
+  assert.deepEqual(p.rubric, { "1": { q1: 3, q2: 2, q3: 5 }, "2": { q1: 1 } });
+  // The decimal averages are still sent for the statistics.
+  assert.deepEqual(p.question_averages, g.combined_scores);
+});
+
+test("x.5 and above rounds up, below x.5 rounds down", () => {
+  const g = { ...group, combined_scores: { "1": { a: 2.49, b: 2.5, c: 2.51, d: 3.33, e: 3.67, f: 4.5 } } };
+  const p = buildVideoGroupSummaryPayload({ group: g, requestedByEmployeeNumber: null, combinePrompt: null });
+  assert.deepEqual(p.rubric, { "1": { a: 2, b: 3, c: 3, d: 3, e: 4, f: 5 } });
+});

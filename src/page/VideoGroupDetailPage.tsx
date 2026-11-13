@@ -52,6 +52,7 @@ export default function VideoGroupDetailPage() {
   const [sending, setSending] = useState(false);
   const submittingRef = useRef(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [loadErrorPopup, setLoadErrorPopup] = useState<string | null>(null);
   const [confirmBack, setConfirmBack] = useState(false);
   const [discarding, setDiscarding] = useState(false);
 
@@ -103,7 +104,10 @@ export default function VideoGroupDetailPage() {
       } catch (error) {
         if (!cancelled) {
           setGroup(null);
-          setErrorMessage(error instanceof Error ? error.message : t("videoGroups.detailLoadFailed"));
+          const message = error instanceof Error ? error.message : t("videoGroups.detailLoadFailed");
+          reportError(error, { source: "popup", context: { action: "load_group", groupId } });
+          setErrorMessage(message);
+          setLoadErrorPopup(message);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -210,6 +214,7 @@ export default function VideoGroupDetailPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <MainNavbar />
+      <ErrorNoticeModal isOpen={loadErrorPopup !== null} detail={loadErrorPopup} onClose={() => setLoadErrorPopup(null)} />
       <ErrorNoticeModal isOpen={sendError !== null} detail={sendError} onClose={() => setSendError(null)} />
       <ConfirmModal
         isOpen={confirmBack}

@@ -109,6 +109,8 @@ test("the app is wrapped in the error boundary and installs the global handlers"
   const boundary = read("../src/components/AppErrorBoundary.tsx");
   assert.match(boundary, /componentDidCatch/);
   assert.match(boundary, /reportError\(error, \{ source: "react", context: \{ componentStack/);
-  assert.match(boundary, /t\("common\.errorOccurred"\)/);
-  assert.match(boundary, /window\.location\.reload\(\)/);
+  assert.match(boundary, /AppErrorFallback/);
+  const fallback = read("../src/components/AppErrorFallback.tsx");
+  assert.match(fallback, /t\("common\.errorOccurred"\)/);
+  assert.match(fallback, /window\.location\.reload\(\)/);
 });

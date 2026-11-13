@@ -47,12 +47,19 @@ test("the PDF tick table gets the same rounded scores the group detail page show
   const g = { ...group, combined_scores: { "1": { q1: 2.5, q2: 2.4, q3: 4.67, q4: "x" }, "2": { q1: 1 } } };
   const p = buildVideoGroupSummaryPayload({ group: g, requestedByEmployeeNumber: "E9", combinePrompt: "สรุป" });
   assert.deepEqual(p.rubric, { "1": { q1: 3, q2: 2, q3: 5 }, "2": { q1: 1 } });
-  // The decimal averages are still sent for the statistics.
-  assert.deepEqual(p.question_averages, g.combined_scores);
+  // n8n must never see a decimal score: question_averages is rounded the same way.
+  assert.deepEqual(p.question_averages, p.rubric);
 });
 
 test("x.5 and above rounds up, below x.5 rounds down", () => {
   const g = { ...group, combined_scores: { "1": { a: 2.49, b: 2.5, c: 2.51, d: 3.33, e: 3.67, f: 4.5 } } };
   const p = buildVideoGroupSummaryPayload({ group: g, requestedByEmployeeNumber: null, combinePrompt: null });
   assert.deepEqual(p.rubric, { "1": { a: 2, b: 3, c: 3, d: 3, e: 4, f: 5 } });
+});
+
+test("section averages are computed from the rounded scores sent to the document", () => {
+  const g = { ...group, combined_scores: { "1": { q1: 2.33, q2: 2.67, q3: 2.33, q4: 2.67, q5: 2.33 } }, section_averages: { "1": 2.47 } };
+  const p = buildVideoGroupSummaryPayload({ group: g, requestedByEmployeeNumber: null, combinePrompt: null });
+  assert.deepEqual(p.question_averages, { "1": { q1: 2, q2: 3, q3: 2, q4: 3, q5: 2 } });
+  assert.deepEqual(p.section_averages, { "1": 2.4 });
 });

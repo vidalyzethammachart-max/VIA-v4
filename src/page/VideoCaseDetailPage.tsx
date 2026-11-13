@@ -4,7 +4,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
 import VideoCaseEditor from "../components/VideoCaseEditor";
-import { normalizeRole, type AppRole } from "../lib/roles";
+import { normalizeRole, roleAtLeast, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import {
   deleteVideoCaseEvaluation,
@@ -36,8 +36,9 @@ export default function VideoCaseDetailPage() {
     [cases, videoCaseId],
   );
 
+  const isAdminRole = roleAtLeast(appRole, "admin");
   const effectiveCaseRole: VideoCaseMemberRole =
-    appRole === "admin" ? "leader" : (selectedRole ?? "member");
+    isAdminRole ? "leader" : (selectedRole ?? "member");
   const canCombine = effectiveCaseRole === "leader";
 
   const loadCases = useCallback(async () => {
@@ -202,11 +203,11 @@ export default function VideoCaseDetailPage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-start gap-3">
-                {(appRole === "admin" || selectedCase.created_by === currentUserId) && (
+                {(isAdminRole || selectedCase.created_by === currentUserId) && (
                   <button type="button" className="btn-secondary" onClick={() => setEditingCase(selectedCase)}>แก้ไขเคส</button>
                 )}
                 <p className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                  บทบาทของคุณ: {effectiveCaseRole === "leader" ? "หัวหน้าเคส" : "สมาชิก"}{appRole === "admin" ? " (ผู้ดูแลระบบ)" : ""}
+                  บทบาทของคุณ: {effectiveCaseRole === "leader" ? "หัวหน้าเคส" : "สมาชิก"}{isAdminRole ? " (ผู้ดูแลระบบ)" : ""}
                 </p>
                 </div>
               </div>

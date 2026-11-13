@@ -65,7 +65,7 @@ app_error_logs(
   source text not null,         -- popup | window_error | unhandled_rejection | react | network
   message text not null,        -- truncated to 2000 chars
   stack text null,              -- truncated to 8000 chars
-  page_path text null,          -- location.pathname + search, truncated to 500
+  page_path text null,          -- location.pathname only (query strings can hold auth tokens), truncated to 500
   user_agent text null,         -- truncated to 300
   context jsonb not null default '{}',   -- <= 8 KB; action name, group id, HTTP status, endpoint
   fingerprint text not null     -- hash of source + message + first stack line

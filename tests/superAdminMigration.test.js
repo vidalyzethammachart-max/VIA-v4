@@ -52,19 +52,51 @@ test("at most one super admin can exist", () => {
   );
 });
 
-test("only the database owner can set or clear super_admin", () => {
-  assert.match(roleSql, /create trigger trg_guard_super_admin_role\s+before insert or update of role on public\.user_information/i);
+test("only the database owner session can set, clear or delete the super_admin row", () => {
+  assert.match(roleSql, /create trigger trg_guard_super_admin_role\s+before insert or update of role or delete on public\.user_information/i);
   const start = roleSql.search(/create or replace function public\.guard_super_admin_role/i);
   const fn = roleSql.slice(start, roleSql.indexOf("$$;", start) + 3);
   assert.match(fn, /new\.role = 'super_admin'::public\.app_role/i);
-  assert.match(fn, /tg_op = 'UPDATE' and old\.role = 'super_admin'::public\.app_role/i);
-  assert.match(fn, /current_user not in \('postgres', 'supabase_admin'\)/i);
+  assert.match(fn, /tg_op = 'UPDATE' and new\.role is distinct from old\.role and \(\s*new\.role = 'super_admin'::public\.app_role or old\.role = 'super_admin'::public\.app_role/i);
+  assert.match(fn, /tg_op = 'DELETE' and old\.role = 'super_admin'::public\.app_role/i);
+  // session_user survives SECURITY DEFINER functions such as review_role_request; current_user does not.
+  assert.match(fn, /session_user not in \('postgres', 'supabase_admin'\)/i);
+  assert.doesNotMatch(fn, /current_user/i);
   assert.match(fn, /raise exception/i);
+  assert.match(fn, /return old/i);
+});
+
+test("the role request flow cannot be used to take or strip super_admin", () => {
+  assert.match(
+    roleSql,
+    /alter table public\.role_requests\s+add constraint role_requests_no_super_admin\s+check \(requested_role <> 'super_admin'::public\.app_role\)/i,
+  );
+  const start = roleSql.search(/create or replace function public\.review_role_request/i);
+  assert.ok(start >= 0, "review_role_request is not redefined");
+  const fn = roleSql.slice(start, roleSql.indexOf("$$;", start) + 3);
+  assert.match(fn, /security definer/i);
+  assert.match(fn, /set search_path = public/i);
+  assert.match(fn, /requested_role = 'super_admin'::public\.app_role/i);
+  assert.match(fn, /ui\.role = 'super_admin'::public\.app_role/i);
+  assert.match(fn, /role_at_least\('admin'::public\.app_role\)/i);
+  assert.match(roleSql, /grant execute on function public\.review_role_request\(uuid, text\) to authenticated/i);
 });
 
 test("the account is assigned by hand, never in a migration", () => {
   for (const sql of [enumSql, roleSql]) {
     assert.doesNotMatch(sql, /phirapon/i);
-    assert.doesNotMatch(sql, /update public\.user_information/i);
+    assert.doesNotMatch(sql, /set role = 'super_admin'/i);
   }
+});
+
+test("the rollout assigns the account only after the edge functions and web app are deployed", () => {
+  const doc = readFileSync(
+    new URL("../docs/superpowers/plans/2026-11-13-super-admin-rollout.md", import.meta.url),
+    "utf8",
+  );
+  const assign = doc.indexOf("UPDATE public.user_information SET role = 'super_admin'");
+  assert.ok(assign > 0, "assignment SQL missing");
+  assert.ok(assign > doc.indexOf("## 2. Edge functions"), "assign before the edge deploy");
+  assert.ok(assign > doc.indexOf("## 3. Web app"), "assign before the web deploy");
+  assert.ok(assign > doc.indexOf("20261113102000_app_error_logs.sql"), "assign before the error log migration");
 });

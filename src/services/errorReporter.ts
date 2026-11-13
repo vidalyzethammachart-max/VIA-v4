@@ -13,7 +13,8 @@ const shouldSend = createDedupe();
 
 function currentPagePath(): string | null {
   if (typeof window === "undefined" || !window.location) return null;
-  return `${window.location.pathname}${window.location.search ?? ""}`;
+  // Pathname only: the query string can carry auth tokens (password reset links).
+  return window.location.pathname;
 }
 
 function currentUserAgent(): string | null {

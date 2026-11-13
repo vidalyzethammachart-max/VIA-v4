@@ -36,7 +36,8 @@ test("reportError sends the seven log_app_error parameters", async () => {
   ]);
   assert.equal(args.p_source, "popup");
   assert.equal(args.p_message, "first failure");
-  assert.equal(args.p_page_path, "/video-groups/1?tab=a");
+  // Only the pathname: query strings can carry auth tokens (password reset links).
+  assert.equal(args.p_page_path, "/video-groups/1");
   assert.deepEqual(args.p_context, { action: "create_group" });
   assert.match(args.p_fingerprint, /^[0-9a-f]{8}$/);
 });

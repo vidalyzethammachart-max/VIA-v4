@@ -5,22 +5,16 @@ Nothing here is applied by Claude. Run the SQL yourself in the Supabase SQL Edit
 
 ## 1. SQL, in order
 
+Run the three migrations first; they do not change any account's role, so the old front end and edge
+functions keep working.
+
 1. **`supabase/migrations/20261113100000_super_admin_enum.sql`** — run it **on its own** and let it finish.
    Check: `SELECT unnest(enum_range(NULL::public.app_role));` lists `user, editor, admin, super_admin`.
 2. **`supabase/migrations/20261113101000_super_admin_role.sql`** — updates `role_at_least`, adds
-   `is_super_admin()`, the single-holder index and the guard trigger.
-3. **Assign the account** (run as the SQL Editor's default `postgres` role; the guard trigger refuses
-   every other role):
-
-   ```sql
-   UPDATE public.user_information SET role = 'super_admin' WHERE email = 'phirapon.t@gmail.com';
-
-   SELECT auth_user_id, email, role FROM public.user_information WHERE role = 'super_admin';
-   ```
-
-   Expect exactly **one** row. If the `UPDATE` touches 0 rows, the email in `user_information` differs
-   from the sign-in email; check with `SELECT auth_user_id, email, role FROM public.user_information WHERE email ILIKE 'phirapon%';`.
-4. **`supabase/migrations/20261113102000_app_error_logs.sql`** — table, RLS, `log_app_error`.
+   `is_super_admin()`, the single-holder index, the guard trigger (insert / update / delete of the
+   super admin row, refused for every session except the SQL Editor's `postgres`), the
+   `role_requests` hardening and the guarded `review_role_request`.
+3. **`supabase/migrations/20261113102000_app_error_logs.sql`** — table, RLS, `log_app_error`.
    Check: `SELECT policyname, cmd FROM pg_policies WHERE tablename = 'app_error_logs';` shows one `SELECT`
    and one `DELETE` policy, nothing else.
 
@@ -34,14 +28,32 @@ Redeploy these two (the `_shared/roleAccess.js` and `_shared/groupDocumentAccess
 - `admin-user-management`
 - `document-artifact-url`
 
-`retry-n8n-execution` needs no redeploy: it checks `role_at_least('admin')`, which step 2 updated.
+`retry-n8n-execution` needs no redeploy: it checks `role_at_least('admin')`, which step 1.2 updated.
 Deploy with the Supabase CLI from a terminal where you are logged in, from a temporary project directory
 that holds only the function folders plus a minimal `config.toml` (the repo's `config.toml` has a legacy
 `[inbucket]` section the new CLI rejects). Keep each function's existing `verify_jwt` setting.
 
 ## 3. Web app
 
-Deploy the web app after steps 1 and 2. Until then the old front end still works against the new database.
+Deploy the web app after steps 1 and 2. Do this **before** assigning the account: an old front end or old
+edge function treats the unknown `super_admin` role as a plain user, so the account would lose its admin
+screens until both are deployed.
+
+## 3b. Assign the super admin (last)
+
+Run as the SQL Editor's default `postgres` role (the guard trigger refuses every other session):
+
+```sql
+UPDATE public.user_information SET role = 'super_admin' WHERE email = 'phirapon.t@gmail.com';
+
+SELECT auth_user_id, email, role FROM public.user_information WHERE role = 'super_admin';
+```
+
+Expect exactly **one** row. If the `UPDATE` touches 0 rows, the email in `user_information` differs from the
+sign-in email; check with
+`SELECT auth_user_id, email, role FROM public.user_information WHERE email ILIKE 'phirapon%';`.
+Sign out and back in so the app reloads the role. Note: while the role is `super_admin`, deleting that Auth
+user is refused; demote the account first if you ever need to delete it.
 
 ## 4. Manual check
 

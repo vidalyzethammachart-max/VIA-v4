@@ -78,6 +78,8 @@ export function shouldIgnoreNetworkError({ url, aborted }) {
   const target = String(url ?? "");
   // The log endpoint itself: reporting its failure would loop forever.
   if (target.includes("/rest/v1/rpc/log_app_error")) return true;
+  // The error log page's own reads and deletes must not be logged as errors.
+  if (target.includes("/rest/v1/app_error_logs")) return true;
   // Sign-in, sign-up and token refresh failures are expected user noise, not application errors.
   if (target.includes("/auth/v1/")) return true;
   return false;

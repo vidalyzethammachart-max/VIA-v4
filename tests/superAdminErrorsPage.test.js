@@ -90,6 +90,9 @@ test("the page filters, lists, expands, deletes with confirmation and paginates"
   assert.match(page, /<pre[^>]*>\s*\{row\.stack/);
   assert.match(page, /JSON\.stringify\(row\.context/);
   assert.doesNotMatch(page, /reportError/, "the page must not report its own failures (loop)");
+  // Deleting the last row of the last page must step back instead of requesting an empty range.
+  assert.match(page, /rows\.length === 1 && page > 1/);
+  assert.match(page, /setPage\(page - 1\)/);
 });
 
 test("every superAdmin translation key used by the page and menu exists in both languages", () => {

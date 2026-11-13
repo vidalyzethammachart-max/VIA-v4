@@ -64,6 +64,8 @@ test("network failures of the log endpoint, auth calls and aborted requests are 
   assert.equal(shouldIgnoreNetworkError({ ...base, status: 400, url: "https://p.supabase.co/auth/v1/token?grant_type=password" }), true);
   assert.equal(shouldIgnoreNetworkError({ ...base, status: 401, url: "https://p.supabase.co/auth/v1/token?grant_type=refresh_token" }), true);
   assert.equal(shouldIgnoreNetworkError({ ...base, aborted: true, url: "https://p.supabase.co/rest/v1/evaluations" }), true);
+  // The error log page must not log its own failed reads and deletes.
+  assert.equal(shouldIgnoreNetworkError({ ...base, url: "https://p.supabase.co/rest/v1/app_error_logs?select=*" }), true);
   assert.equal(shouldIgnoreNetworkError({ ...base, url: "https://p.supabase.co/rest/v1/evaluations" }), false);
   assert.equal(shouldIgnoreNetworkError({ ...base, status: 403, url: "https://p.supabase.co/functions/v1/forward-to-n8n" }), false);
 });

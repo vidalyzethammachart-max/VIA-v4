@@ -87,7 +87,9 @@ export default function SuperAdminErrorsPage() {
     try {
       await deleteErrorLog(id);
       setExpandedId(null);
-      reload();
+      // Removing the last row of the last page would otherwise request an empty range.
+      if (rows.length === 1 && page > 1) setPage(page - 1);
+      else reload();
     } catch (error) {
       setPopupError(error instanceof Error ? error.message : t("superAdmin.deleteFailed"));
     }

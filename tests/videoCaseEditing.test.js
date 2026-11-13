@@ -39,7 +39,7 @@ function setup({ actor = "owner", role = "user", uploadFails = false, conflict =
     window: { location: { origin: "http://localhost:5173" } },
     require(name) {
       if (name === "../lib/supabaseClient") return { supabase };
-      if (name === "../lib/roles") return { normalizeRole: r => r || "user" };
+      if (name === "../lib/roles") return { normalizeRole: r => r || "user", roleAtLeast: (role, required) => role === required };
       throw Error(name);
     },
     fetch: async (url, options) => {

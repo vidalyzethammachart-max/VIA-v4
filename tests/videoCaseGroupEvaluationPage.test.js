@@ -11,7 +11,6 @@ test("summary page is the group evaluation and prefills the suggestion", () => {
 });
 
 for (const [name, path] of [
-  ["video cases page", "../src/page/VideoCasesPage.tsx"],
   ["case detail page", "../src/page/VideoCaseDetailPage.tsx"],
 ]) {
   test(`${name} sends combining to the video group create page`, () => {
@@ -22,8 +21,12 @@ for (const [name, path] of [
   });
 }
 
-test("video cases page keeps the trash flow without the per-case evaluation delete", () => {
-  const source = read("../src/page/VideoCasesPage.tsx");
-  assert.match(source, /handleTrashChange/);
-  assert.doesNotMatch(source, /handleDeleteEvaluation|evaluationToDelete/);
+test("the /video-cases list page is gone and its links point at video groups", () => {
+  const app = read("../src/App.tsx");
+  assert.doesNotMatch(app, /VideoCasesPage/);
+  assert.doesNotMatch(app, /path="\/video-cases"/);
+  assert.match(app, /path="\/video-cases\/:videoCaseId"/);
+  for (const path of ["../src/page/FormSubmit.tsx", "../src/page/Home.tsx", "../src/page/MyFormsDashboard.tsx", "../src/components/ProfileDropdown.tsx"]) {
+    assert.doesNotMatch(read(path), /to="\/video-cases"|closeAndNavigate\("\/video-cases"\)/, path);
+  }
 });

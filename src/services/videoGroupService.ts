@@ -2,10 +2,11 @@ import { combineAggregateStatistics } from "./aggregateStatistics.js";
 import { COMBINE_MIN_MESSAGE, MIN_COMBINE_COUNT, toCombineSourceRuns } from "./videoCaseCombineSelectionCore.js";
 import { supabase } from "../lib/supabaseClient";
 import { getCurrentUserEmployeeNumber, type VideoCaseEvaluationRow } from "./videoCaseService";
-import { buildVideoGroupDisplayName } from "./videoGroupCore.js";
+import { buildVideoGroupDisplayName, resolveGroupType } from "./videoGroupCore.js";
 import { buildVideoGroupSummaryPayload } from "./videoGroupPayloadCore.js";
 
-export type VideoGroupType = "group" | "round" | "year_end";
+// Free text: "group" | "round" | "year_end" are the suggested (stored) values, anything else is custom.
+export type VideoGroupType = string;
 
 export type VideoGroupRow = {
   id: string;
@@ -73,11 +74,12 @@ export async function createVideoGroupEvaluation(params: {
 
   const combineRuns = toCombineSourceRuns(params.sourceRuns);
   const stats = combineAggregateStatistics(combineRuns);
-  const displayName = buildVideoGroupDisplayName(params.groupType, params.subjectName);
+  const groupType = resolveGroupType(params.groupType);
+  const displayName = buildVideoGroupDisplayName(groupType, params.subjectName);
 
   const { data, error } = await supabase.rpc("create_video_group_evaluation", {
     p_order_number: params.orderNumber,
-    p_group_type: params.groupType,
+    p_group_type: groupType,
     p_subject_name: params.subjectName,
     p_evaluation_ids: params.sourceRuns.map((run) => run.id),
     p_source_snapshot: {

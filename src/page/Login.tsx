@@ -72,7 +72,7 @@ export default function Login() {
       setLoading(false);
 
       if (roleAtLeast(role, "admin")) {
-        navigate("/admin", { replace: true });
+        navigate("/home", { replace: true });
         return;
       }
 

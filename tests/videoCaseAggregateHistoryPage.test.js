@@ -40,7 +40,4 @@ test("old per-case aggregate history is replaced by video groups", () => {
   assert.doesNotMatch(pageSource, /ประวัติการรวมผลการประเมิน/);
   assert.doesNotMatch(pageSource, /deleteVideoCaseAggregate|getVideoCaseAggregates|aggregateToDelete/);
   assert.match(pageSource, /\/video-groups\/new\?caseId=/);
-  const casesPage = readFileSync(new URL("../src/page/VideoCasesPage.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(casesPage, /getVideoCaseAggregates|ผลรวมล่าสุด/);
-  assert.match(casesPage, /\/video-groups\/new\?caseId=/);
 });

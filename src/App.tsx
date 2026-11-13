@@ -9,7 +9,6 @@ import Dashboard from "./page/Dashboard";
 import AdminDashboard from "./page/AdminDashboard";
 import AdminStuckJobsPage from "./page/AdminStuckJobsPage";
 import RoleRequestsPage from "./page/RoleRequestsPage";
-import VideoCasesPage from "./page/VideoCasesPage";
 import VideoCaseDetailPage from "./page/VideoCaseDetailPage";
 import VideoGroupsPage from "./page/VideoGroupsPage";
 import VideoGroupCreatePage from "./page/VideoGroupCreatePage";
@@ -104,14 +103,6 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <PreviewPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/video-cases"
-            element={
-              <ProtectedRoute>
-                <VideoCasesPage />
               </ProtectedRoute>
             }
           />

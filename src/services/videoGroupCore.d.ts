@@ -1,6 +1,11 @@
-export type VideoGroupType = "group" | "round" | "year_end";
+// Free text; the suggestions in GROUP_TYPES resolve to their stored values.
+export type VideoGroupType = string;
 
-export const GROUP_TYPES: ReadonlyArray<{ value: VideoGroupType; label: string }>;
+export const GROUP_TYPES: ReadonlyArray<{ value: string; label: string }>;
+
+export const GROUP_TYPE_MAX_LENGTH: number;
+
+export function resolveGroupType(input: string): string;
 
 export function normalizeGroupPart(value: string): string;
 

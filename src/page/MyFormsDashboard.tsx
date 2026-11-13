@@ -254,8 +254,8 @@ export default function MyFormsDashboard() {
               <Link to="/form-submit" className="btn-primary inline-flex">
                 {t("myForms.submitNewForm")}
               </Link>
-              <Link to="/video-cases" className="btn-secondary inline-flex">
-                {t("myForms.videoCases")}
+              <Link to="/video-groups" className="btn-secondary inline-flex">
+                {t("videoGroups.navLabel")}
               </Link>
             </div>
             <p className="mt-2 text-sm text-slate-500">{t("myForms.quickActionDesc")}</p>

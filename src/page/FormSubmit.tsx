@@ -860,8 +860,8 @@ function FormSubmit() {
               </p>
             )}
             <div className="mt-3">
-              <Link to="/video-cases" className="btn-secondary text-center">
-                {language === "th" ? "เปิดหน้าจัดการเคส" : "Open video cases"}
+              <Link to="/video-groups" className="btn-secondary text-center">
+                {language === "th" ? "เปิดหน้ากลุ่มวิดีโอ" : "Open video groups"}
               </Link>
             </div>
           </section>
@@ -881,7 +881,7 @@ function FormSubmit() {
               </p>
             )}
             <div className="mt-3">
-              <Link to="/video-cases" className="btn-secondary text-center">
+              <Link to="/video-groups" className="btn-secondary text-center">
                 à¹€à¸›à¸´à¸”à¸«à¸™à¹‰à¸²à¸ˆà¸±à¸”à¸à¸²à¸£à¹€à¸„à¸ª
               </Link>
             </div>

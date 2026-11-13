@@ -116,7 +116,7 @@ export default function VideoCaseDetailPage() {
   }
 
   if (!videoCaseId) {
-    return <Navigate to="/video-cases" replace />;
+    return <Navigate to="/video-groups" replace />;
   }
 
   return (
@@ -159,7 +159,7 @@ export default function VideoCaseDetailPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/video-cases" className="btn-secondary">
+            <Link to="/video-groups" className="btn-secondary">
               กลับไปรายการเคส
             </Link>
             {selectedCase && (

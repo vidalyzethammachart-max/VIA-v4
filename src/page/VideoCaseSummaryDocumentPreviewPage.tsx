@@ -223,7 +223,7 @@ export default function VideoCaseSummaryDocumentPreviewPage() {
   ]);
 
   if (!videoCaseId || !summaryId) {
-    return <Navigate to="/video-cases" replace />;
+    return <Navigate to="/video-groups" replace />;
   }
 
   const stateError = getStateMessage(documentState);

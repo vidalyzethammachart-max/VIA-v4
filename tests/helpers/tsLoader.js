@@ -7,11 +7,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // Fakes are read from globalThis at call time:
 //   globalThis.__fakeSupabase   -> `supabase` export of lib/supabaseClient
 //   globalThis.__fakeAccounting -> `accountingService` export
+//   globalThis.__networkListener -> last listener given to `setNetworkErrorListener`
 //   globalThis.__denoServe      -> receives the handler passed to Deno `serve`
 const STUBS = {
   "stub:supabaseClient":
     'export const supabase = new Proxy({}, { get: (_, k) => globalThis.__fakeSupabase[k] });\n' +
-    'export const supabaseAuthStorageKey = "test-auth";\n',
+    'export const supabaseAuthStorageKey = "test-auth";\n' +
+    'export const setNetworkErrorListener = (listener) => { globalThis.__networkListener = listener; };\n',
   "stub:accounting":
     'export const accountingService = { logActivity: (...a) => globalThis.__fakeAccounting.logActivity(...a) };\n',
   "stub:denoServe":

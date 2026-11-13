@@ -7,6 +7,10 @@ import "./index.css";
 import { AuthRoleProvider } from "./hooks/useAuthRole";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { LanguageProvider } from "./i18n/LanguageProvider";
+import AppErrorBoundary from "./components/AppErrorBoundary";
+import { installGlobalErrorHandlers } from "./services/errorReporter";
+
+installGlobalErrorHandlers();
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -14,7 +18,9 @@ createRoot(document.getElementById("root")!).render(
       <ThemeProvider>
         <LanguageProvider>
           <AuthRoleProvider>
-            <App />
+            <AppErrorBoundary>
+              <App />
+            </AppErrorBoundary>
           </AuthRoleProvider>
         </LanguageProvider>
       </ThemeProvider>

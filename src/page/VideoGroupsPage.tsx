@@ -33,6 +33,7 @@ export default function VideoGroupsPage() {
   const [groupToDelete, setGroupToDelete] = useState<VideoGroupRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [loadErrorPopup, setLoadErrorPopup] = useState<string | null>(null);
 
   const isAdmin = roleAtLeast(normalizeRole(role), "admin");
   // UX only: the RPC and RLS decide who may actually create a group.
@@ -50,7 +51,10 @@ export default function VideoGroupsPage() {
         if (!cancelled) setGroups(rows);
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(error instanceof Error ? error.message : t("videoGroups.listLoadFailed"));
+          const message = error instanceof Error ? error.message : t("videoGroups.listLoadFailed");
+          reportError(error, { source: "popup", context: { action: "load_groups" } });
+          setErrorMessage(message);
+          setLoadErrorPopup(message);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -98,6 +102,7 @@ export default function VideoGroupsPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <MainNavbar />
+      <ErrorNoticeModal isOpen={loadErrorPopup !== null} detail={loadErrorPopup} onClose={() => setLoadErrorPopup(null)} />
       <ErrorNoticeModal isOpen={deleteError !== null} detail={deleteError} onClose={() => setDeleteError(null)} />
       <ConfirmModal
         isOpen={Boolean(groupToDelete)}

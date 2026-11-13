@@ -46,6 +46,7 @@ export default function VideoGroupCreatePage() {
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorPopup, setErrorPopup] = useState<string | null>(null);
+  const [loadErrorPopup, setLoadErrorPopup] = useState<string | null>(null);
   const [evaluations, setEvaluations] = useState<SelectableEvaluationRow[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>(() => (Array.isArray(prefill.evaluationIds) ? prefill.evaluationIds : []));
   const [search, setSearch] = useState("");
@@ -69,7 +70,12 @@ export default function VideoGroupCreatePage() {
           setSelectedIds(rows.filter((row) => row.video_case_id === requestedCaseId).map((row) => row.id));
         }
       } catch (error) {
-        if (active) setErrorMessage(error instanceof Error ? error.message : t("videoGroups.loadFailed"));
+        if (active) {
+          const message = error instanceof Error ? error.message : t("videoGroups.loadFailed");
+          reportError(error, { source: "popup", context: { action: "load_selectable_evaluations" } });
+          setErrorMessage(message);
+          setLoadErrorPopup(message);
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -133,6 +139,7 @@ export default function VideoGroupCreatePage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <MainNavbar />
+      <ErrorNoticeModal isOpen={loadErrorPopup !== null} detail={loadErrorPopup} onClose={() => setLoadErrorPopup(null)} />
       <ErrorNoticeModal isOpen={errorPopup !== null} detail={errorPopup} onClose={() => setErrorPopup(null)} />
       <main className="mx-auto max-w-5xl px-4 py-6 md:py-8">
         <section className="ui-hover-card mb-6 rounded-2xl border border-slate-200 bg-white p-4 md:p-6">

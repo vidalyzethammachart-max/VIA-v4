@@ -100,3 +100,11 @@ test("the rollout assigns the account only after the edge functions and web app 
   assert.ok(assign > doc.indexOf("## 3. Web app"), "assign before the web deploy");
   assert.ok(assign > doc.indexOf("20261113102000_app_error_logs.sql"), "assign before the error log migration");
 });
+
+test("the older role guard lets the database owner (SQL Editor) change roles", () => {
+  const sql = read("20261113103000_role_guard_owner_bypass.sql");
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.guard_user_role_changes/);
+  assert.match(sql, /session_user IN \('postgres', 'supabase_admin'\)/);
+  assert.match(sql, /auth\.role\(\) = 'service_role'/);
+  assert.match(sql, /Only admins can change user roles/);
+});

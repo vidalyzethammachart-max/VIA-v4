@@ -9,14 +9,18 @@ import Dashboard from "./page/Dashboard";
 import AdminDashboard from "./page/AdminDashboard";
 import AdminStuckJobsPage from "./page/AdminStuckJobsPage";
 import RoleRequestsPage from "./page/RoleRequestsPage";
-import VideoCasesPage from "./page/VideoCasesPage";
 import VideoCaseDetailPage from "./page/VideoCaseDetailPage";
+import VideoGroupsPage from "./page/VideoGroupsPage";
+import VideoGroupCreatePage from "./page/VideoGroupCreatePage";
+import VideoGroupDetailPage from "./page/VideoGroupDetailPage";
+import VideoGroupDocumentPreviewPage from "./page/VideoGroupDocumentPreviewPage";
 import VideoCaseSummaryPage from "./page/VideoCaseSummaryPage";
 import VideoCaseSummaryDocumentPreviewPage from "./page/VideoCaseSummaryDocumentPreviewPage";
 import ForgotPassword from "./page/ForgotPassword";
 import ResetPassword from "./page/ResetPassword";
 import MyFormsDashboard from "./page/MyFormsDashboard";
 import PreviewPage from "./page/PreviewPage";
+import SuperAdminErrorsPage from "./page/SuperAdminErrorsPage";
 import SessionMonitor from "./components/SessionMonitor";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -104,14 +108,6 @@ export default function App() {
             }
           />
           <Route
-            path="/video-cases"
-            element={
-              <ProtectedRoute>
-                <VideoCasesPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/video-cases/:videoCaseId"
             element={
               <ProtectedRoute>
@@ -144,6 +140,38 @@ export default function App() {
             }
           />
           <Route
+            path="/video-groups"
+            element={
+              <ProtectedRoute>
+                <VideoGroupsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/video-groups/new"
+            element={
+              <ProtectedRoute>
+                <VideoGroupCreatePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/video-groups/:groupId/preview"
+            element={
+              <ProtectedRoute>
+                <VideoGroupDocumentPreviewPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/video-groups/:groupId"
+            element={
+              <ProtectedRoute>
+                <VideoGroupDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin"
             element={
               <ProtectedRoute requiredRole="admin">
@@ -156,6 +184,14 @@ export default function App() {
             element={
               <ProtectedRoute requiredRole="admin">
                 <AdminStuckJobsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/super-admin/errors"
+            element={
+              <ProtectedRoute requiredRole="super_admin">
+                <SuperAdminErrorsPage />
               </ProtectedRoute>
             }
           />

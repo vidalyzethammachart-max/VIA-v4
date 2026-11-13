@@ -202,7 +202,7 @@ export default function VideoCaseSummaryPage() {
   );
 
   if (!videoCaseId || !summaryKey) {
-    return <Navigate to="/video-cases" replace />;
+    return <Navigate to="/video-groups" replace />;
   }
 
   const documentActionLabel =

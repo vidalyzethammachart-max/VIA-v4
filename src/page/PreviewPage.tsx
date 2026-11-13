@@ -5,6 +5,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
 import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
+import { normalizeRole, roleAtLeast } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
 import { findSupersedingEvaluation } from "../services/evaluationSupersedeCore.js";
@@ -56,7 +57,7 @@ export default function PreviewPage() {
   const dispatchError = (location.state as { dispatchError?: string } | null)?.dispatchError;
   const hasStorageArtifact = Boolean(record?.pdf_storage_path || record?.docx_storage_path);
   const isStuck = isEvaluationStuck(record);
-  const isAdmin = authRole === "admin";
+  const isAdmin = roleAtLeast(normalizeRole(authRole), "admin");
   const canReportStuck = Boolean(record && authUser && (record.user_id === authUser.id || isAdmin));
 
   useEffect(() => {

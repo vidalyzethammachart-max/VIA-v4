@@ -1,17 +1,33 @@
+import { useState } from "react";
+
+import { useLanguage } from "../i18n/useLanguage";
 import { getCombineBlockReason, isCombinableEvaluation } from "../services/videoCaseCombineSelectionCore.js";
 import { getEvaluationAverage, getStatusLabel } from "../services/videoCaseEvaluationDisplay";
 import type { VideoCaseEvaluationRow } from "../services/videoCaseService";
 
 type Props = {
-  analyses: VideoCaseEvaluationRow[];
+  analyses: Array<VideoCaseEvaluationRow & { video_cases?: { case_key: string; case_title: string | null } | null }>;
   selectedIds: number[];
   onChange: (ids: number[]) => void;
   disabled?: boolean;
+  // Optional overrides for callers that show a filtered list but select from a larger one.
+  blockReason?: string | null;
+  selectedCount?: number;
 };
 
+const PAGE_SIZE = 10;
+
 // Checklist of a case's evaluations; only evaluations that finished (ready) can be selected.
-export default function CaseEvaluationPicker({ analyses, selectedIds, onChange, disabled = false }: Props) {
-  const reason = getCombineBlockReason(analyses, selectedIds);
+export default function CaseEvaluationPicker({ analyses, selectedIds, onChange, disabled = false, blockReason: blockReasonOverride, selectedCount }: Props) {
+  const { t } = useLanguage();
+  // The page belongs to the list it was chosen in, so a new list (search or reload) starts at
+  // page 1 while the selection itself is kept by the parent.
+  const [pageState, setPageState] = useState({ list: analyses, page: 1 });
+  const totalPages = Math.max(1, Math.ceil(analyses.length / PAGE_SIZE));
+  const currentPage = Math.min(pageState.list === analyses ? pageState.page : 1, totalPages);
+  const setPage = (page: number) => setPageState({ list: analyses, page });
+  const pageItems = analyses.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const reason = blockReasonOverride !== undefined ? blockReasonOverride : getCombineBlockReason(analyses, selectedIds);
 
   if (analyses.length === 0) {
     return <p className="text-sm text-slate-500">ยังไม่มีแบบประเมินในเคสนี้</p>;
@@ -19,10 +35,10 @@ export default function CaseEvaluationPicker({ analyses, selectedIds, onChange, 
 
   return (
     <div>
-      <p className="text-sm font-semibold text-slate-800">เลือกแบบประเมินที่จะรวม ({selectedIds.length} รายการ)</p>
+      <p className="text-sm font-semibold text-slate-800">เลือกแบบประเมินที่จะรวม ({selectedCount ?? selectedIds.length} รายการ)</p>
       {reason && <p className="mt-1 text-sm text-amber-700">{reason}</p>}
       <ul className="mt-3 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200">
-        {analyses.map((run) => {
+        {pageItems.map((run) => {
           const combinable = isCombinableEvaluation(run);
           const score = getEvaluationAverage(run);
           return (
@@ -48,6 +64,9 @@ export default function CaseEvaluationPicker({ analyses, selectedIds, onChange, 
                   #{run.id} · ผู้ประเมิน {run.employee_number || "ไม่ระบุรหัส"} ·{" "}
                   {new Date(run.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
                 </p>
+                {run.video_cases && (
+                  <p className="mt-1 break-words text-xs font-medium text-[#04418b]">{run.video_cases.case_title || run.video_cases.case_key}</p>
+                )}
                 {run.overall_suggestion?.trim() && (
                   <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-slate-600">{run.overall_suggestion.trim()}</p>
                 )}
@@ -60,6 +79,27 @@ export default function CaseEvaluationPicker({ analyses, selectedIds, onChange, 
           );
         })}
       </ul>
+      {totalPages > 1 && (
+        <nav className="mt-3 flex items-center justify-between gap-3 text-sm" aria-label="pagination">
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={currentPage <= 1}
+            onClick={() => setPage(currentPage - 1)}
+          >
+            {t("videoGroups.prevPage")}
+          </button>
+          <span className="text-slate-600">{t("videoGroups.page", { page: currentPage, total: totalPages })}</span>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={currentPage >= totalPages}
+            onClick={() => setPage(currentPage + 1)}
+          >
+            {t("videoGroups.nextPage")}
+          </button>
+        </nav>
+      )}
     </div>
   );
 }

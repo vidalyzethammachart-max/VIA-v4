@@ -110,7 +110,7 @@ export default function Dashboard() {
             <button type="button" className="btn-secondary" disabled={refreshing} onClick={() => void fetchDashboard()}>
               {refreshing ? (th ? "กำลังอัปเดต..." : "Updating...") : (th ? "รีเฟรชข้อมูล" : "Refresh")}
             </button>
-            <Link to="/video-cases" className="btn-secondary">{th ? "จัดการ Video Case" : "Manage video cases"}</Link>
+            <Link to="/video-groups" className="btn-secondary">{th ? "แบบประเมินกลุ่มวิดีโอ" : "Video group evaluations"}</Link>
             {updatedAt && <span className="text-xs text-slate-500">{th ? "อัปเดตล่าสุด" : "Last updated"} {updatedAt.toLocaleTimeString()}</span>}
           </div>
         </div>

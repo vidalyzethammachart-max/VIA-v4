@@ -18,7 +18,7 @@
 | --- | --- |
 | กับ `video_case_aggregates` เดิม | ตารางกลุ่มใหม่รับหน้าที่รวมแทนทั้งหมด ปิดการสร้างรายการใหม่ของเดิม ข้อมูลเก่ายังอ่านและเปิดเอกสารได้ ไม่ย้ายข้อมูล |
 | field ก่อน `subjectName` | dropdown ค่าคงที่: "กลุ่ม", "รวมรอบ", "สรุปปลายปี" |
-| ความซ้ำ | ถือว่าซ้ำเมื่อ `orderNumber` + ประเภท + `subjectName` ตรงกันหลัง normalize |
+| ความซ้ำ | ถือว่าซ้ำเมื่อ `orderNumber` + ประเภท + `subjectName` ตรงกันหลัง normalize (บังคับด้วย unique expression index สามส่วน ไม่ใช้ `group_key`) |
 | ผู้สร้าง | แอดมิน และหัวหน้าเคส (leader) หัวหน้าเลือกได้เฉพาะใบในเคสที่ตนมองเห็น แอดมินเลือกได้ทุกใบ |
 | ผู้อ่าน | ผู้ที่มองเห็นเคสต้นทางอย่างน้อยหนึ่งเคส และแอดมินทุกกลุ่ม |
 | ผลลัพธ์ | pipeline เดิมทั้งชุด: เฉลี่ย 9 หมวด 45 ข้อ → ร่างข้อเสนอแนะรวมแก้ได้ → `forward-to-n8n` → AI สรุป → PDF/DOCX |
@@ -31,8 +31,10 @@
 - `id uuid` primary key (ค่านี้คือที่ส่งเป็น `aggregate_id`)
 - `order_number text not null`, `group_type text not null` (CHECK ใน `'group','round','year_end'` โดยแสดงผลเป็นไทยที่ UI),
   `subject_name text not null`
-- `group_key text not null unique`: ค่า normalize ของ `order_number` + `group_type` + `subject_name` ด้วยกฎเดียวกับ
-  `build_video_case_key` (trim, lower, ช่องว่างเป็น `-`; คงตัวอักษรไทยและเครื่องหมาย) ฟังก์ชัน SQL และ TS ต้องให้ผลตรงกัน (มีเทสต์)
+- ไม่มีคอลัมน์ `group_key`: ใช้ unique expression index `video_group_evaluations_identity_idx` บน
+  `(normalize_video_case_key_part(order_number), group_type, normalize_video_case_key_part(subject_name))`
+  (trim, lower, ช่องว่างเป็น `-`; คงตัวอักษรไทยและเครื่องหมาย) เพราะคีย์ต่อสายเดียวอาจชนกันได้
+  เช่น `("1","round","group-x")` กับ `("1-round","group","x")` ฟังก์ชัน SQL และ TS (`normalizeGroupPart`) ต้องให้ผลตรงกัน (มีเทสต์)
 - `requested_by uuid`, `requested_by_name`, `requested_by_employee_number`
 - ผลรวม: `source_snapshot jsonb`, `combined_scores jsonb`, `section_averages jsonb`, `source_count int`
 - `ai_model`, `ai_output jsonb`, `ai_raw_text`, `status` (คงคอลัมน์ให้ตรงกับแถวเดิมเพื่อใช้ร่วมกับโค้ดแสดงผล)
@@ -50,7 +52,7 @@
 ฟังก์ชัน Postgres เดียว (SECURITY DEFINER ตรวจ `auth.uid()` เอง) ทำในธุรกรรมเดียว:
 1. ตรวจผู้เรียก: แอดมิน หรือเป็น leader ของอย่างน้อยหนึ่งเคสที่ใบต้นทางอยู่
 2. ตรวจใบต้นทางทุกใบ: มีอยู่จริง `document_status = 'ready'` และ (แอดมิน หรือ `can_view_video_case` ของเคสนั้น) ไม่ซ้ำกัน และอย่างน้อย 2 ใบ
-3. คำนวณ `group_key`; ซ้ำ → error `unique_violation` ที่แมปเป็นข้อความไทย
+3. เขียนแล้วให้ unique index ตัดสินความซ้ำ; ซ้ำ → error `unique_violation` ที่แมปเป็นข้อความไทย
 4. เขียนกลุ่มและ sources พร้อมกัน; ผลเฉลี่ยคำนวณฝั่ง client ด้วย `combineAggregateStatistics` เดิมแล้วส่งเข้ามาเป็นพารามิเตอร์ เหมือนที่ `combineVideoCaseAnalyses` ทำอยู่ (ไม่ย้ายตรรกะเฉลี่ยไป SQL ในรอบนี้)
 
 ### RLS
@@ -67,7 +69,8 @@
 - `/video-groups/new` สามขั้นในหน้าเดียว
   1. เลือกแบบประเมินข้ามเคส (ค้นหาด้วยเลขที่สั่งงาน/ชื่อหัวข้อ/เคส มีป้ายเคส; ติ๊กได้เฉพาะ `ready`; ขั้นต่ำ `MIN_COMBINE_COUNT` = 2)
   2. ตั้งชื่อ: เลขที่สั่งงาน → ประเภท (dropdown) → ชื่อหัวข้อ; ตรวจซ้ำทันที
-  3. ตรวจและรวม: คะแนนเฉลี่ยรายหมวด + ร่างข้อเสนอแนะรวม (`buildCombinedSuggestionDraft`) แก้ได้ก่อนส่ง
+  3. ตรวจและรวม: แสดงเฉพาะคะแนนเฉลี่ยรายหมวด; ร่างข้อเสนอแนะรวม (`buildCombinedSuggestionDraft`) ที่แก้ได้และปุ่มส่ง
+     อยู่ที่หน้ารายละเอียดกลุ่ม ยังคงอยู่ก่อนที่อะไรจะถูกส่งไป n8n
 - `/video-groups/:groupId`: หน้าสรุปกลุ่ม 9 หมวด 45 ข้อ รายชื่อต้นทาง สถานะ/ดาวน์โหลด PDF/DOCX และปุ่มส่งใหม่เมื่อล้มเหลว
 - `CaseEvaluationPicker` ขยายให้แสดงป้ายเคสและรับรายการข้ามเคส (ใช้ซ้ำ ไม่เขียนใหม่)
 - ปุ่มรวมใน `VideoCasesPage` และ `VideoCaseDetailPage` เปลี่ยนเป็นลิงก์ไป `/video-groups/new` โดยติ๊กใบของเคสปัจจุบันไว้ล่วงหน้า; ลบโค้ดรวมซ้ำสองที่
@@ -97,9 +100,9 @@
 
 ## การทดสอบ (`node --test "tests/**/*.test.js"`, TDD)
 
-- TS/JS: normalize `group_key` เท่ากับกฎ SQL, ค่า dropdown ที่ถูกต้อง, เลือกข้ามเคส + ขั้นต่ำ 2 ใบ, payload ครบและไม่มี `evaluation_id`
+- TS/JS: normalize ส่วนของ identity เท่ากับกฎ SQL, ค่า dropdown ที่ถูกต้อง, เลือกข้ามเคส + ขั้นต่ำ 2 ใบ, payload ครบและไม่มี `evaluation_id`
 - `resolveGroupTarget`: UUID ในตารางกลุ่ม → `group`, ไม่อยู่ → `aggregate`, ไม่ใช่ UUID → error
-- migration (รูปแบบเดียวกับ `videoCaseAggregateHistoryMigration.test.js`): ตรวจข้อความ SQL ว่ามี unique บน `group_key`, ไม่มี trigger เคสเดียวกัน,
+- migration (รูปแบบเดียวกับ `videoCaseAggregateHistoryMigration.test.js`): ตรวจข้อความ SQL ว่ามี unique expression index บน identity, ไม่มี trigger เคสเดียวกัน,
   RPC ตรวจสิทธิ์, `begin/finish_document_dispatch` รองรับ `group`, policy insert เดิมถูกปิด
 - ทดสอบมือหลังทำเสร็จ: สร้างกลุ่มจริงและส่งผ่าน n8n จริง (ไม่เรียก n8n/AI/รัน migration บน Supabase จริงโดยไม่ถามผู้ใช้ก่อน)
 

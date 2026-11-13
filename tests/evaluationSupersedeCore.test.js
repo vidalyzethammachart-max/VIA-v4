@@ -76,3 +76,23 @@ test("superseded ids lists the copies that collapsing hides", () => {
   ];
   assert.deepEqual([...findSupersededIds(rows)].sort((a, b) => a - b), [276, 282]);
 });
+
+import { findStuckSupersededByReady } from "../src/services/evaluationSupersedeCore.js";
+
+test("a stuck job disappears once a ready evaluation exists for the same order number and subject", () => {
+  const stuck = [
+    { evaluation_id: 1, order_number: " 8-8 ", subject_name: "Alpha" },
+    { evaluation_id: 2, order_number: "9-9", subject_name: "Beta" },
+    { evaluation_id: 3, order_number: null, subject_name: "Gamma" },
+  ];
+  const ready = [
+    { order_number: "8-8", subject_name: "alpha " },
+    { order_number: "9-9", subject_name: "Other" },
+  ];
+  assert.deepEqual([...findStuckSupersededByReady(stuck, ready)], [1]);
+});
+
+test("a stuck job without an order number or subject is never hidden by that rule", () => {
+  const stuck = [{ evaluation_id: 5, order_number: null, subject_name: null }];
+  assert.equal(findStuckSupersededByReady(stuck, [{ order_number: null, subject_name: null }]).size, 0);
+});

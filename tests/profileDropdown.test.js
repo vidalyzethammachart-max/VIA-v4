@@ -7,10 +7,8 @@ const source = readFileSync(
   "utf8",
 );
 
-test("adds a video case shortcut to the profile dropdown", () => {
-  assert.match(
-    source,
-    /label=\{language === "th" \? "กลุ่มวิดีโอ" : "Video cases"\}/,
-  );
-  assert.match(source, /onClick=\{\(\) => closeAndNavigate\("\/video-cases"\)\}/);
+test("links the profile dropdown to video groups, not the removed video cases list", () => {
+  assert.match(source, /label=\{t\("videoGroups\.navLabel"\)\}/);
+  assert.match(source, /onClick=\{\(\) => closeAndNavigate\("\/video-groups"\)\}/);
+  assert.doesNotMatch(source, /closeAndNavigate\("\/video-cases"\)/);
 });

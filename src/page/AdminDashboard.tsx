@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import MainNavbar from "../components/MainNavbar";
 import { useLanguage } from "../i18n/useLanguage";
-import { normalizeRole, roleAtLeast, type AppRole } from "../lib/roles";
+import { ASSIGNABLE_ROLES, ROLES, normalizeRole, roleAtLeast, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import { useTheme } from "../theme/useTheme";
 
@@ -297,9 +297,11 @@ export default function AdminDashboard() {
                   className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#04418b]/30 focus:ring-4 focus:ring-[#04418b]/5"
                 >
                   <option value="all">{t("admin.allRoles")}</option>
-                  <option value="user">User</option>
-                  <option value="editor">Editor</option>
-                  <option value="admin">Admin</option>
+                  {ROLES.map((roleOption) => (
+                    <option key={roleOption} value={roleOption}>
+                      {roleOption}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -348,6 +350,11 @@ export default function AdminDashboard() {
                       <td className="px-4 py-3 text-slate-800">{formatGender(row.gender, t)}</td>
                       <td className="px-4 py-3 text-slate-800">{row.email ?? "-"}</td>
                       <td className="px-4 py-3">
+                        {row.role === "super_admin" ? (
+                          <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                            super_admin
+                          </span>
+                        ) : (
                         <select
                           value={pendingRoleByUser[row.auth_user_id] ?? row.role}
                           onChange={(e) =>
@@ -359,10 +366,13 @@ export default function AdminDashboard() {
                           disabled={row.auth_user_id === currentAdminId || busyUserId === row.auth_user_id}
                           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#04418b]/30 focus:ring-4 focus:ring-[#04418b]/5 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                         >
-                          <option value="user">user</option>
-                          <option value="editor">editor</option>
-                          <option value="admin">admin</option>
+                          {ASSIGNABLE_ROLES.map((roleOption) => (
+                            <option key={roleOption} value={roleOption}>
+                              {roleOption}
+                            </option>
+                          ))}
                         </select>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2">

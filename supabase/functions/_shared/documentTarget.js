@@ -58,3 +58,18 @@ export function resolveDocumentTarget(payload) {
 
   throw new Error("Unsupported document_type.");
 }
+
+// n8n only knows aggregate_id, so a group's UUID arrives in that slot. Tell a
+// group from a legacy aggregate by looking the UUID up; evaluations never do.
+export async function resolveDocumentTargetWithGroups(payload, groupExists) {
+  const target = resolveDocumentTarget(payload);
+  if (target.kind === "aggregate" && (await groupExists(target.id))) {
+    return {
+      kind: "group",
+      table: "video_group_evaluations",
+      id: target.id,
+      documentType: "video_case_summary",
+    };
+  }
+  return target;
+}

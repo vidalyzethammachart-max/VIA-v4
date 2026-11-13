@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { canReadGroupDocument } from "../_shared/groupDocumentAccess.js";
+import { isAdminRole } from "../_shared/roleAccess.js";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -30,6 +32,13 @@ type EvaluationRow = {
 type AggregateRow = {
   id: string;
   video_case_id: string;
+  pdf_storage_path: string | null;
+  docx_storage_path: string | null;
+};
+
+type GroupRow = {
+  id: string;
+  requested_by: string;
   pdf_storage_path: string | null;
   docx_storage_path: string | null;
 };
@@ -102,11 +111,43 @@ serve(async (req) => {
 
     const role = typeof roleRow?.role === "string" ? roleRow.role : "user";
 
-    const canReadAll = role === "editor" || role === "admin";
+    const canReadAll = role === "editor" || isAdminRole(role);
     let pdfPath: string | null = null;
     let docxPath: string | null = null;
 
-    if (aggregateId) {
+    const groupResult = aggregateId
+      ? await adminSupabase
+          .from("video_group_evaluations")
+          .select("id, requested_by, pdf_storage_path, docx_storage_path")
+          .eq("id", aggregateId)
+          .maybeSingle()
+      : null;
+    if (groupResult?.error) {
+      return new Response(JSON.stringify({ ok: false, error: groupResult.error.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const group = groupResult?.data as GroupRow | null | undefined;
+
+    if (group) {
+      const { data: sources } = await adminSupabase
+        .from("video_group_evaluation_sources")
+        .select("video_case_id")
+        .eq("group_id", group.id);
+      const sourceCaseIds = ((sources ?? []) as { video_case_id: string }[]).map((row) => row.video_case_id);
+      let memberCaseIds: string[] = [];
+      if (!isAdminRole(role) && group.requested_by !== user.id && sourceCaseIds.length > 0) {
+        const { data: memberships } = await adminSupabase
+          .from("video_case_members")
+          .select("video_case_id")
+          .eq("user_id", user.id)
+          .in("video_case_id", sourceCaseIds);
+        memberCaseIds = ((memberships ?? []) as { video_case_id: string }[]).map((row) => row.video_case_id);
+      }
+      if (!canReadGroupDocument({ role, userId: user.id, group, sourceCaseIds, memberCaseIds })) {
+        return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      pdfPath = group.pdf_storage_path;
+      docxPath = group.docx_storage_path;
+    } else if (aggregateId) {
       const { data, error } = await adminSupabase
         .from("video_case_aggregates")
         .select("id, video_case_id, pdf_storage_path, docx_storage_path")

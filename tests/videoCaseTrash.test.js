@@ -28,7 +28,7 @@ function setup({ role = "user", fail = false } = {}) {
   };
   runInNewContext(compiled, { exports, require(name) {
     if (name === "../lib/supabaseClient") return { supabase };
-    if (name === "../lib/roles") return { normalizeRole: value => value };
+    if (name === "../lib/roles") return { normalizeRole: value => value, roleAtLeast: (role, required) => role === required };
     return {};
   } });
   return { service: exports, calls };

@@ -10,18 +10,23 @@ test("summary page is the group evaluation and prefills the suggestion", () => {
   assert.match(source, /buildCombinedSuggestionDraft\(sourceRuns\)/);
 });
 
-test("video cases page selects and combines evaluations itself", () => {
-  const source = read("../src/page/VideoCasesPage.tsx");
-  assert.match(source, /CaseEvaluationPicker/);
-  assert.match(source, /getCombineBlockReason\(/);
-  assert.match(source, /toCombineSourceRuns\(/);
-  assert.match(source, /รวมเป็นแบบประเมินกลุ่ม/);
-  assert.doesNotMatch(source, /handleDeleteEvaluation|evaluationToDelete/);
-});
+for (const [name, path] of [
+  ["case detail page", "../src/page/VideoCaseDetailPage.tsx"],
+]) {
+  test(`${name} sends combining to the video group create page`, () => {
+    const source = read(path);
+    assert.match(source, /\/video-groups\/new\?caseId=\$\{selectedCase\.id\}/);
+    assert.match(source, /รวมเป็นแบบประเมินกลุ่ม/);
+    assert.doesNotMatch(source, /combineVideoCaseAnalyses|handleCombine|CaseEvaluationPicker/);
+  });
+}
 
-test("case detail page shares the combine rule and source-run mapping", () => {
-  const source = read("../src/page/VideoCaseDetailPage.tsx");
-  assert.match(source, /getCombineBlockReason\(/);
-  assert.match(source, /toCombineSourceRuns\(/);
-  assert.doesNotMatch(source, /อย่างน้อย 1 รายการ/);
+test("the /video-cases list page is gone and its links point at video groups", () => {
+  const app = read("../src/App.tsx");
+  assert.doesNotMatch(app, /VideoCasesPage/);
+  assert.doesNotMatch(app, /path="\/video-cases"/);
+  assert.match(app, /path="\/video-cases\/:videoCaseId"/);
+  for (const path of ["../src/page/FormSubmit.tsx", "../src/page/Home.tsx", "../src/page/MyFormsDashboard.tsx", "../src/components/ProfileDropdown.tsx"]) {
+    assert.doesNotMatch(read(path), /to="\/video-cases"|closeAndNavigate\("\/video-cases"\)/, path);
+  }
 });

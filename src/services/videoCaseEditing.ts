@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
-import { normalizeRole } from "../lib/roles";
+import { normalizeRole, roleAtLeast } from "../lib/roles";
 import type { VideoCaseRow } from "./videoCaseService";
 
 export function validateCaseVideo(file: File): string | null {
@@ -33,7 +33,7 @@ export async function updateVideoCase(input: {
   if (current.created_by !== auth.user.id) {
     const { data: profile, error } = await supabase.from("user_information")
       .select("role").eq("auth_user_id", auth.user.id).maybeSingle();
-    if (error || normalizeRole(profile?.role) !== "admin") {
+    if (error || !roleAtLeast(normalizeRole(profile?.role), "admin")) {
       throw new Error("เฉพาะผู้สร้างเคสหรือแอดมินเท่านั้นที่แก้ไขได้");
     }
   }

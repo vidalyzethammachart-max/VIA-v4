@@ -212,7 +212,6 @@ function FormSubmit() {
         analyzing: "Analyzing video",
       };
   const videoCaseId = new URLSearchParams(location.search).get("caseId") || null;
-  const showLegacyCaseSummary = new URLSearchParams(location.search).has("legacyCaseSummary");
 
   const [orderNumber, setOrderNumber] = useState("");
   const [subjectName, setSubjectName] = useState("");
@@ -835,54 +834,6 @@ function FormSubmit() {
               </div>
               <Link to="/my-forms" className="btn-primary text-center">
                 {t("form.goToMyForms")}
-              </Link>
-            </div>
-          </section>
-        )}
-
-        {(videoCaseId || generatedCaseKey) && (
-          <section className="ui-hover-card mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
-            <h2 className="text-sm font-semibold text-slate-900">
-              {language === "th" ? "เชื่อมกับ Video Case แล้ว" : "Video case linked"}
-            </h2>
-            <p className="mt-1 text-xs text-slate-500">
-              {language === "th"
-                ? videoCaseId
-                  ? `แบบประเมินนี้จะถูกบันทึกในเคส ID ${videoCaseId}`
-                  : "แบบประเมินนี้จะถูกบันทึกในเคสที่สร้างจากเลขที่สั่งงานและชื่อหัวข้อ"
-                : videoCaseId
-                  ? `This evaluation will be saved to case ID ${videoCaseId}.`
-                  : "This evaluation will be saved to the case generated from the order number and subject name."}
-            </p>
-            {displayCaseLabel && (
-              <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                {displayCaseLabel}
-              </p>
-            )}
-            <div className="mt-3">
-              <Link to="/video-cases" className="btn-secondary text-center">
-                {language === "th" ? "เปิดหน้าจัดการเคส" : "Open video cases"}
-              </Link>
-            </div>
-          </section>
-        )}
-
-        {showLegacyCaseSummary && (videoCaseId || generatedCaseKey) && (
-          <section className="ui-hover-card mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
-            <h2 className="text-sm font-semibold text-slate-900">à¸œà¸¹à¸à¸à¸±à¸š Video case à¹à¸¥à¹‰à¸§</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              {videoCaseId
-                ? `à¸£à¸²à¸¢à¸à¸²à¸£à¸™à¸µà¹‰à¸ˆà¸°à¸–à¸¹à¸à¸œà¸¹à¸à¸à¸±à¸šà¹€à¸„à¸ª ID ${videoCaseId}.`
-                : "à¸£à¸²à¸¢à¸à¸²à¸£à¸™à¸µà¹‰à¸ˆà¸°à¸–à¸¹à¸à¸œà¸¹à¸à¸à¸±à¸šà¹€à¸„à¸ªà¸—à¸µà¹ˆà¸ªà¸£à¹‰à¸²à¸‡à¸ˆà¸²à¸à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¹ƒà¸™à¸Ÿà¸­à¸£à¹Œà¸¡"}
-            </p>
-            {displayCaseLabel && (
-              <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700">
-                {displayCaseLabel}
-              </p>
-            )}
-            <div className="mt-3">
-              <Link to="/video-cases" className="btn-secondary text-center">
-                à¹€à¸›à¸´à¸”à¸«à¸™à¹‰à¸²à¸ˆà¸±à¸”à¸à¸²à¸£à¹€à¸„à¸ª
               </Link>
             </div>
           </section>

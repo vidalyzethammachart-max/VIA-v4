@@ -40,3 +40,22 @@ export function findSupersededIds(rows) {
   const visible = new Set(collapseSupersededEvaluations(rows).map((row) => row.id));
   return new Set((rows ?? []).filter((row) => !visible.has(row.id)).map((row) => row.id));
 }
+
+const normalizeText = (value) => (typeof value === "string" ? value.trim().toLowerCase() : "");
+const orderSubjectKey = (row) => {
+  const order = normalizeText(row?.order_number);
+  const subject = normalizeText(row?.subject_name);
+  return order && subject ? `${order}\u0000${subject}` : null;
+};
+
+// Stuck jobs whose work has since been completed: some ready evaluation (any submitter) carries the
+// same order number and subject name. Returns the evaluation_ids to hide from the stuck-jobs list.
+export function findStuckSupersededByReady(stuckRows, readyRows) {
+  const readyKeys = new Set((readyRows ?? []).map(orderSubjectKey).filter(Boolean));
+  const hidden = new Set();
+  for (const row of stuckRows ?? []) {
+    const key = orderSubjectKey(row);
+    if (key && readyKeys.has(key)) hidden.add(row.evaluation_id);
+  }
+  return hidden;
+}

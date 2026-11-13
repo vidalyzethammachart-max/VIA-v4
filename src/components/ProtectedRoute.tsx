@@ -11,7 +11,7 @@ type ProtectedRouteProps = {
 };
 
 function getHomeRouteForRole(role: AppRole): string {
-  if (roleAtLeast(role, "admin")) return "/admin";
+  if (roleAtLeast(role, "admin")) return "/home";
   if (roleAtLeast(role, "editor")) return "/form-submit";
   return "/dashboard";
 }

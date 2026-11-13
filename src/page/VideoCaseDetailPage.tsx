@@ -1,32 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 
 import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
 import VideoCaseEditor from "../components/VideoCaseEditor";
-import { buildVideoCaseSummaryDocumentPreviewPath } from "../services/videoCaseSummaryDocumentPreviewCore.js";
-import {
-  getCombinableEvaluationIds,
-  getCombineBlockReason,
-  toCombineSourceRuns,
-  isCombinableEvaluation,
-  keepCombinableSelection,
-} from "../services/videoCaseCombineSelectionCore.js";
-import { normalizeRole, type AppRole } from "../lib/roles";
+import { normalizeRole, roleAtLeast, type AppRole } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import {
-  buildVideoCaseAggregateHistoryItem,
-  buildVideoCaseAggregateSummaryPath,
-} from "../services/videoCaseAggregateHistoryCore";
-import {
-  combineVideoCaseAnalyses,
-  deleteVideoCaseAggregate,
   deleteVideoCaseEvaluation,
   getMyVideoCases,
-  getVideoCaseAggregates,
   getVideoCaseAnalyses,
   getVideoCaseMembership,
-  type VideoCaseAggregateRow,
   type VideoCaseEvaluationRow,
   type VideoCaseMemberRole,
   type VideoCaseRow,
@@ -34,7 +18,6 @@ import {
 import { getEvaluationAverage, getStatusLabel } from "../services/videoCaseEvaluationDisplay";
 
 export default function VideoCaseDetailPage() {
-  const navigate = useNavigate();
   const { videoCaseId } = useParams<{ videoCaseId: string }>();
   const [loading, setLoading] = useState(true);
   const [appRole, setAppRole] = useState<AppRole>("user");
@@ -43,44 +26,20 @@ export default function VideoCaseDetailPage() {
   const [cases, setCases] = useState<VideoCaseRow[]>([]);
   const [selectedRole, setSelectedRole] = useState<VideoCaseMemberRole | null>(null);
   const [analyses, setAnalyses] = useState<VideoCaseEvaluationRow[]>([]);
-  const [aggregates, setAggregates] = useState<VideoCaseAggregateRow[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [combining, setCombining] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [selectedAnalysisIds, setSelectedAnalysisIds] = useState<number[]>([]);
   const [evaluationToDelete, setEvaluationToDelete] = useState<VideoCaseEvaluationRow | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [aggregateToDelete, setAggregateToDelete] =
-    useState<VideoCaseAggregateRow | null>(null);
-  const [deletingAggregate, setDeletingAggregate] = useState(false);
 
   const selectedCase = useMemo(
     () => cases.find((item) => item.id === videoCaseId) ?? null,
     [cases, videoCaseId],
   );
 
+  const isAdminRole = roleAtLeast(appRole, "admin");
   const effectiveCaseRole: VideoCaseMemberRole =
-    appRole === "admin" ? "leader" : (selectedRole ?? "member");
+    isAdminRole ? "leader" : (selectedRole ?? "member");
   const canCombine = effectiveCaseRole === "leader";
-  const selectedAnalyses = useMemo(() => {
-    const combinableIds = keepCombinableSelection(analyses, selectedAnalysisIds);
-    return analyses.filter((run) => combinableIds.includes(run.id));
-  }, [analyses, selectedAnalysisIds]);
-  const combineBlockReason = getCombineBlockReason(analyses, selectedAnalysisIds);
-  const notReadyCount = useMemo(
-    () => analyses.filter((run) => !isCombinableEvaluation(run)).length,
-    [analyses],
-  );
-  const latestAggregate = aggregates[0] ?? null;
-  const aggregateHistory = useMemo(
-    () =>
-      aggregates.map((aggregate) => ({
-        aggregate,
-        item: buildVideoCaseAggregateHistoryItem(aggregate),
-      })),
-    [aggregates],
-  );
 
   const loadCases = useCallback(async () => {
     const data = await getMyVideoCases();
@@ -88,16 +47,13 @@ export default function VideoCaseDetailPage() {
   }, []);
 
   const loadCaseData = useCallback(async (currentVideoCaseId: string) => {
-    const [membership, analysisRows, aggregateRows] = await Promise.all([
+    const [membership, analysisRows] = await Promise.all([
       getVideoCaseMembership(currentVideoCaseId),
       getVideoCaseAnalyses(currentVideoCaseId),
-      getVideoCaseAggregates(currentVideoCaseId),
     ]);
 
     setSelectedRole(membership?.member_role ?? null);
     setAnalyses(analysisRows);
-    setAggregates(aggregateRows);
-    setSelectedAnalysisIds(getCombinableEvaluationIds(analysisRows));
   }, []);
 
   useEffect(() => {
@@ -143,36 +99,6 @@ export default function VideoCaseDetailPage() {
     });
   }, [loadCaseData, videoCaseId]);
 
-  async function handleCombine() {
-    if (!selectedCase) {
-      setErrorMessage("กรุณาเลือกเคสก่อน");
-      return;
-    }
-
-    if (combineBlockReason) {
-      setErrorMessage(combineBlockReason);
-      setConfirmOpen(false);
-      return;
-    }
-
-    try {
-      setCombining(true);
-      setErrorMessage(null);
-      const aggregate = await combineVideoCaseAnalyses({
-        videoCaseId: selectedCase.id,
-        caseTitle: selectedCase.case_title || selectedCase.case_key,
-        sourceRuns: toCombineSourceRuns(selectedAnalyses),
-      });
-
-      navigate(`/video-cases/${selectedCase.id}/summaries/${aggregate.id}`);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "รวมผลแบบประเมินไม่สำเร็จ");
-    } finally {
-      setCombining(false);
-      setConfirmOpen(false);
-    }
-  }
-
   async function handleDeleteEvaluation() {
     if (!selectedCase || !evaluationToDelete) return;
 
@@ -190,29 +116,8 @@ export default function VideoCaseDetailPage() {
     }
   }
 
-  async function handleDeleteAggregate() {
-    if (!selectedCase || !aggregateToDelete) return;
-
-    try {
-      setDeletingAggregate(true);
-      setErrorMessage(null);
-      await deleteVideoCaseAggregate(aggregateToDelete.id);
-      setSuccessMessage(
-        `Aggregate ${aggregateToDelete.id.slice(0, 8)} was deleted.`,
-      );
-      await loadCaseData(selectedCase.id);
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to delete aggregate.",
-      );
-    } finally {
-      setDeletingAggregate(false);
-      setAggregateToDelete(null);
-    }
-  }
-
   if (!videoCaseId) {
-    return <Navigate to="/video-cases" replace />;
+    return <Navigate to="/video-groups" replace />;
   }
 
   return (
@@ -230,19 +135,6 @@ export default function VideoCaseDetailPage() {
         />
       )}
       <ConfirmModal
-        isOpen={confirmOpen}
-        title="รวมผลแบบประเมิน"
-        message={`รวมผลแบบประเมิน ${selectedAnalyses.length} รายการที่เลือกของเคสนี้`}
-        variant="primary"
-        onCancel={() => {
-          if (!combining) setConfirmOpen(false);
-        }}
-        onConfirm={() => void handleCombine()}
-        confirmLabel="รวมผล"
-        cancelLabel="ยกเลิก"
-        confirmDisabled={combining}
-      />
-      <ConfirmModal
         isOpen={Boolean(evaluationToDelete)}
         title="ลบแบบประเมิน"
         message={`ลบแบบประเมิน #${evaluationToDelete?.id ?? ""} ใช่ไหม? ลบแล้วกู้คืนไม่ได้`}
@@ -254,19 +146,6 @@ export default function VideoCaseDetailPage() {
         confirmLabel={deleting ? "กำลังลบ..." : "ลบ"}
         cancelLabel="ยกเลิก"
         confirmDisabled={deleting}
-      />
-      <ConfirmModal
-        isOpen={Boolean(aggregateToDelete)}
-        title="ลบผลรวม"
-        message={`ลบผลรวม ${aggregateToDelete?.id.slice(0, 8) ?? ""} ใช่ไหม? แบบประเมินต้นทางจะยังอยู่`}
-        variant="danger"
-        onCancel={() => {
-          if (!deletingAggregate) setAggregateToDelete(null);
-        }}
-        onConfirm={() => void handleDeleteAggregate()}
-        confirmLabel={deletingAggregate ? "กำลังลบ..." : "ลบ"}
-        cancelLabel="ยกเลิก"
-        confirmDisabled={deletingAggregate}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-6 md:py-8">
@@ -281,7 +160,7 @@ export default function VideoCaseDetailPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/video-cases" className="btn-secondary">
+            <Link to="/video-groups" className="btn-secondary">
               กลับไปรายการเคส
             </Link>
             {selectedCase && (
@@ -324,29 +203,23 @@ export default function VideoCaseDetailPage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-start gap-3">
-                {(appRole === "admin" || selectedCase.created_by === currentUserId) && (
+                {(isAdminRole || selectedCase.created_by === currentUserId) && (
                   <button type="button" className="btn-secondary" onClick={() => setEditingCase(selectedCase)}>แก้ไขเคส</button>
                 )}
                 <p className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                  บทบาทของคุณ: {effectiveCaseRole === "leader" ? "หัวหน้าเคส" : "สมาชิก"}{appRole === "admin" ? " (ผู้ดูแลระบบ)" : ""}
+                  บทบาทของคุณ: {effectiveCaseRole === "leader" ? "หัวหน้าเคส" : "สมาชิก"}{isAdminRole ? " (ผู้ดูแลระบบ)" : ""}
                 </p>
                 </div>
               </div>
-              <div className="grid grid-cols-3 border-t border-slate-200">
+              <div className="grid grid-cols-2 border-t border-slate-200">
                 <div className="border-r border-slate-200 p-3 sm:p-4">
                   <p className="text-xs font-medium text-slate-500">แบบประเมิน</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">{analyses.length}</p>
                 </div>
-                <div className="border-r border-slate-200 p-3 sm:p-4">
+                <div className="p-3 sm:p-4">
                   <p className="text-xs font-medium text-slate-500">ผู้ประเมิน</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">
                     {new Set(analyses.map((analysis) => analysis.user_id).filter(Boolean)).size}
-                  </p>
-                </div>
-                <div className="p-4">
-                  <p className="text-xs font-medium text-slate-500">ผลรวมล่าสุด</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
-                    {latestAggregate ? getStatusLabel(latestAggregate.status) : "ยังไม่มี"}
                   </p>
                 </div>
               </div>
@@ -359,40 +232,14 @@ export default function VideoCaseDetailPage() {
                   <p className="mt-1 text-sm text-slate-500">
                     ตรวจสอบแต่ละแบบประเมินก่อนนำมารวมผลเป็นรายงานสรุปใหม่
                   </p>
-                  {canCombine && combineBlockReason && analyses.length > 0 && (
-                    <p className="mt-1 text-sm text-amber-700">{combineBlockReason}</p>
-                  )}
-                  {canCombine && notReadyCount > 0 && (
-                    <p className="mt-1 text-sm text-amber-700">
-                      เลือกรวมผลได้เฉพาะแบบประเมินที่พร้อมใช้งาน ({notReadyCount} รายการยังไม่พร้อม)
-                    </p>
-                  )}
                 </div>
-                {canCombine && analyses.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedAnalysisIds(getCombinableEvaluationIds(analyses))}
-                      className="btn-secondary text-xs"
-                    >
-                      เลือกทั้งหมด
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedAnalysisIds([])}
-                      className="btn-secondary text-xs"
-                    >
-                      ล้างการเลือก
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmOpen(true)}
-                      disabled={combining || combineBlockReason !== null}
-                      className="btn-primary text-xs"
-                    >
-                      {combining ? "กำลังรวมผลแบบประเมิน..." : `รวม ${selectedAnalyses.length} รายการและวิเคราะห์ใหม่`}
-                    </button>
-                  </div>
+                {canCombine && selectedCase && (
+                  <Link
+                    to={`/video-groups/new?caseId=${selectedCase.id}`}
+                    className="btn-primary text-center text-xs"
+                  >
+                    รวมเป็นแบบประเมินกลุ่ม
+                  </Link>
                 )}
               </div>
 
@@ -403,7 +250,6 @@ export default function VideoCaseDetailPage() {
                 <ul className="mt-4 divide-y divide-slate-200 rounded-xl border border-slate-200 md:hidden">
                   {analyses.map((run) => {
                     const overallScore = getEvaluationAverage(run);
-                    const combinable = isCombinableEvaluation(run);
                     const statusClass =
                       run.document_status === "ready"
                         ? "bg-emerald-50 text-emerald-700"
@@ -413,22 +259,6 @@ export default function VideoCaseDetailPage() {
                     return (
                       <li key={run.id} className="space-y-2 p-4 text-sm">
                         <div className="flex items-start gap-3">
-                          {canCombine && (
-                            <input
-                              type="checkbox"
-                              checked={combinable && selectedAnalysisIds.includes(run.id)}
-                              disabled={!combinable}
-                              onChange={(event) => {
-                                setSelectedAnalysisIds((current) =>
-                                  event.target.checked
-                                    ? [...new Set([...current, run.id])]
-                                    : current.filter((id) => id !== run.id),
-                                );
-                              }}
-                              aria-label={`เลือกแบบประเมิน #${run.id} เพื่อรวมผล`}
-                              className="mt-1 h-5 w-5 shrink-0 accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
-                            />
-                          )}
                           <div className="min-w-0 flex-1">
                             <p className="break-words font-semibold text-slate-900">{run.subject_name || "ไม่มีชื่อหัวข้อ"}</p>
                             <p className="mt-1 text-xs text-slate-500">
@@ -466,14 +296,12 @@ export default function VideoCaseDetailPage() {
                         <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">คะแนนเฉลี่ย</th>
                         <th className="min-w-80 border-b border-l border-slate-200 px-4 py-3 font-semibold">ข้อเสนอแนะโดยรวม</th>
                         <th className="min-w-28 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">ดูสรุปผล</th>
-                        {canCombine && <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">เลือก</th>}
                         {canCombine && <th className="min-w-20 border-b border-l border-slate-200 px-3 py-3 text-center font-semibold">ลบ</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 bg-white">
                       {analyses.map((run) => {
                         const overallScore = getEvaluationAverage(run);
-                        const combinable = isCombinableEvaluation(run);
                         const statusClass =
                           run.document_status === "ready"
                             ? "bg-emerald-50 text-emerald-700"
@@ -514,25 +342,6 @@ export default function VideoCaseDetailPage() {
                             </td>
                             {canCombine && (
                               <td className="border-l border-slate-200 px-3 py-3 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={combinable && selectedAnalysisIds.includes(run.id)}
-                                  disabled={!combinable}
-                                  title={combinable ? undefined : "แบบประเมินนี้ยังไม่พร้อม จึงนำมารวมผลไม่ได้"}
-                                  onChange={(event) => {
-                                    setSelectedAnalysisIds((current) =>
-                                      event.target.checked
-                                        ? [...new Set([...current, run.id])]
-                                        : current.filter((id) => id !== run.id),
-                                    );
-                                  }}
-                                  aria-label={`เลือกแบบประเมิน #${run.id} เพื่อรวมผล`}
-                                  className="h-5 w-5 accent-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
-                                />
-                              </td>
-                            )}
-                            {canCombine && (
-                              <td className="border-l border-slate-200 px-3 py-3 text-center">
                                 <button
                                   type="button"
                                   onClick={() => setEvaluationToDelete(run)}
@@ -552,119 +361,6 @@ export default function VideoCaseDetailPage() {
               )}
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">
-                  ประวัติการรวมผลการประเมิน
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  รายงานสรุปผลที่รวมจากแบบประเมินใน Video Case นี้
-                </p>
-              </div>
-
-              {aggregateHistory.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-500">
-                  ยังไม่มีการรวมผลแบบประเมินสำหรับ Video Case นี้
-                </p>
-              ) : (
-                <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full min-w-[1080px] border-collapse text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-600">
-                      <tr>
-                        {[
-                          "ชื่อไฟล์",
-                          "วันที่สร้าง",
-                          "ผู้รวมผล",
-                          "รหัสพนักงาน",
-                          "แบบประเมินที่ใช้",
-                          "สถานะการวิเคราะห์",
-                          "สถานะเอกสาร",
-                          "จัดการ",
-                        ].map((label) => (
-                          <th
-                            key={label}
-                            className="border-b border-r border-slate-200 px-4 py-3 font-semibold"
-                          >
-                            {label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
-                      {aggregateHistory.map(({ aggregate, item }) => (
-                        <tr
-                          key={item.aggregateId}
-                          className="align-top hover:bg-slate-50/70"
-                        >
-                          <td className="border-r border-slate-200 px-4 py-3">
-                            <p className="font-semibold text-slate-900">
-                              {item.fileName}
-                            </p>
-                            <p className="mt-1 break-all text-slate-400">
-                              {item.aggregateId}
-                            </p>
-                            {aggregate.document_status === "ready" && (aggregate.pdf_storage_path || aggregate.docx_storage_path) && (
-                              <Link
-                                to={buildVideoCaseSummaryDocumentPreviewPath(selectedCase.id, item.aggregateId)}
-                                className="btn-primary mt-2 inline-flex text-xs"
-                              >
-                                เปิดไฟล์รวม PDF / DOCX
-                              </Link>
-                            )}
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
-                            {item.createdAt
-                              ? new Date(item.createdAt).toLocaleString()
-                              : "-"}
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3 text-slate-700">
-                            {item.creatorName}
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3 text-slate-700">
-                            {item.employeeNumber}
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
-                            <p>{item.sourceCount} แบบประเมิน</p>
-                            <p className="mt-1">
-                              {item.sourceEvaluationIds.length
-                                ? item.sourceEvaluationIds
-                                    .map((id) => `#${id}`)
-                                    .join(", ")
-                                : "-"}
-                            </p>
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
-                            {getStatusLabel(item.analysisStatus)}
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3 text-slate-600">
-                            {getStatusLabel(item.documentStatus)}
-                          </td>
-                          <td className="border-r border-slate-200 px-4 py-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Link
-                                to={buildVideoCaseAggregateSummaryPath(selectedCase.id, item.aggregateId)}
-                                className="btn-secondary text-xs"
-                              >
-                                ดูสรุปผล
-                              </Link>
-                              {canCombine && (
-                                <button
-                                  type="button"
-                                  onClick={() => setAggregateToDelete(aggregate)}
-                                  className="btn-danger text-xs"
-                                >
-                                  ลบ
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
 
           </div>
         )}

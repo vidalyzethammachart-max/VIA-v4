@@ -5,7 +5,7 @@ import { fakeQuery, installTsLoader } from "./helpers/tsLoader.js";
 installTsLoader();
 
 // UC-20: admin-user-management Edge Function, run with fake Deno + Supabase.
-const state = { authUser: null, actorRole: "admin", calls: [], deleteUserError: null, updateError: null, ownedCases: [], ownedCasesError: null };
+const state = { authUser: null, actorRole: "admin", roleRows: [], calls: [], deleteUserError: null, updateError: null, ownedCases: [], ownedCasesError: null };
 
 globalThis.Deno = { env: { get: (k) => `fake-${k}` } };
 globalThis.__createClient = (_url, key) => {
@@ -15,8 +15,9 @@ globalThis.__createClient = (_url, key) => {
   return {
     from: (table) => {
       state.calls.push(["from", table]);
+      // roleRows lets a test give the actor lookup and the target lookup different roles.
       const result = table === "user_information"
-        ? { data: { role: state.actorRole }, error: state.updateError }
+        ? { data: { role: state.roleRows.length ? state.roleRows.shift() : state.actorRole }, error: state.updateError }
         : table === "video_cases"
           ? { data: state.ownedCases, error: state.ownedCasesError }
           : { data: null, error: null };
@@ -39,7 +40,7 @@ function call(body, { token = "jwt", method = "POST" } = {}) {
 }
 
 function reset(over = {}) {
-  Object.assign(state, { authUser: { id: "admin-1" }, actorRole: "admin", calls: [], deleteUserError: null, updateError: null, ownedCases: [], ownedCasesError: null }, over);
+  Object.assign(state, { authUser: { id: "admin-1" }, actorRole: "admin", roleRows: [], calls: [], deleteUserError: null, updateError: null, ownedCases: [], ownedCasesError: null }, over);
 }
 
 test("UC-20 rejects missing token, bad token and non-POST methods", async () => {
@@ -124,4 +125,29 @@ test("UC-20 delete_user stops with 500 and deletes nothing if the video case che
   const res = await call({ action: "delete_user", targetAuthUserId: "u2" });
   assert.equal(res.status, 500);
   assert.ok(!state.calls.some((c) => c[0] === "delete" || c[0] === "auth.deleteUser"));
+});
+
+test("super_admin can manage roles like an admin", async () => {
+  reset({ roleRows: ["super_admin", "user"] });
+  const res = await call({ action: "update_role", targetAuthUserId: "u2", role: "editor" });
+  assert.equal(res.status, 200);
+  assert.deepEqual(state.calls.find((c) => c[0] === "update")[1], { role: "editor" });
+});
+
+test("nobody can change or delete the super admin through this function", async () => {
+  for (const action of ["update_role", "delete_user"]) {
+    reset({ roleRows: ["admin", "super_admin"] });
+    const res = await call({ action, targetAuthUserId: "boss", role: "user" });
+    assert.equal(res.status, 403, action);
+    assert.match((await res.json()).error, /super admin/i);
+    assert.ok(!state.calls.some((c) => c[0] === "update" || c[0] === "delete" || c[0] === "auth.deleteUser"), action);
+  }
+});
+
+test("an admin cannot hand out the super_admin role", async () => {
+  reset({ roleRows: ["admin", "user"] });
+  const res = await call({ action: "update_role", targetAuthUserId: "u2", role: "super_admin" });
+  assert.equal(res.status, 403);
+  assert.match((await res.json()).error, /super_admin/);
+  assert.ok(!state.calls.some((c) => c[0] === "update"));
 });

@@ -1,6 +1,52 @@
--- Editors may now combine evaluations into a group, like admins and case leaders.
--- Non-admins (editors included) must still be able to view every source case.
--- Same signature, so the existing grants and callers are unchanged.
+-- Editors combine evaluations into a group like admins: they may pick evaluations from any case,
+-- see every group, and the picker gets case labels from list_group_source_cases().
+-- Other users keep the old rule (can view every source case and lead at least one).
+-- create_video_group_evaluation keeps its signature, so grants and callers are unchanged.
+
+CREATE OR REPLACE FUNCTION public.can_view_video_group(p_group_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+  SELECT
+    public.role_at_least('editor'::public.app_role)
+    OR EXISTS (
+      SELECT 1
+      FROM public.video_group_evaluation_sources source
+      WHERE source.group_id = p_group_id
+        AND public.can_view_video_case(source.video_case_id)
+    );
+$$;
+
+REVOKE ALL ON FUNCTION public.can_view_video_group(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.can_view_video_group(uuid) TO authenticated;
+
+-- Cases whose evaluations the caller may combine: every non-trashed case for editors and above,
+-- otherwise the cases the caller can view. Only labels are returned.
+CREATE OR REPLACE FUNCTION public.list_group_source_cases()
+RETURNS TABLE (id uuid, case_key text, case_title text)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+SET row_security = off
+AS $$
+  SELECT vc.id, vc.case_key, vc.case_title
+  FROM public.video_cases vc
+  WHERE vc.deleted_at IS NULL
+    AND auth.uid() IS NOT NULL
+    AND (
+      public.role_at_least('editor'::public.app_role)
+      OR public.can_view_video_case(vc.id)
+    );
+$$;
+
+REVOKE ALL ON FUNCTION public.list_group_source_cases() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.list_group_source_cases() TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.create_video_group_evaluation(
   p_order_number text,
   p_group_type text,
@@ -80,7 +126,7 @@ BEGIN
       MESSAGE = 'Source evaluations must have a ready document.';
   END IF;
 
-  IF NOT caller_is_admin THEN
+  IF NOT caller_is_admin AND NOT caller_is_editor THEN
     IF EXISTS (
       SELECT 1
       FROM public.evaluations evaluation
@@ -92,7 +138,7 @@ BEGIN
         MESSAGE = 'You cannot access one or more source evaluations.';
     END IF;
 
-    IF NOT caller_is_editor AND NOT EXISTS (
+    IF NOT EXISTS (
       SELECT 1
       FROM public.evaluations evaluation
       WHERE evaluation.id = ANY (p_evaluation_ids)

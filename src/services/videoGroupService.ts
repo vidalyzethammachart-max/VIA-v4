@@ -41,26 +41,37 @@ export type SelectableEvaluationRow = VideoCaseEvaluationRow & {
 const DUPLICATE_GROUP_MESSAGE = "มีแบบประเมินกลุ่มนี้อยู่แล้ว (เลขที่สั่งงาน ประเภท และชื่อหัวข้อซ้ำกัน)";
 
 export async function getSelectableEvaluations(): Promise<SelectableEvaluationRow[]> {
+  // Case labels come from an RPC: editors and admins get every non-trashed case, other users only
+  // the cases they can view. Evaluations of any other case are not offered.
+  const casesResult = await supabase.rpc("list_group_source_cases");
+  if (casesResult.error) {
+    throw new Error(casesResult.error.message);
+  }
+  const cases = new Map(
+    ((casesResult.data ?? []) as { id: string; case_key: string; case_title: string | null }[]).map((row) => [row.id, row]),
+  );
+  if (cases.size === 0) return [];
+
   const { data, error } = await supabase
     .from("evaluations")
     .select(
-      "id, user_id, created_by, employee_number, video_case_id, analysis_kind, order_number, subject_name, overall_suggestion, rubric, analysis_ai_model, analysis_ai_output, analysis_ai_raw_text, pdf_storage_path, docx_storage_path, document_status, document_error, created_at, video_cases!inner(case_key, case_title, deleted_at)",
+      "id, user_id, created_by, employee_number, video_case_id, analysis_kind, order_number, subject_name, overall_suggestion, rubric, analysis_ai_model, analysis_ai_output, analysis_ai_raw_text, pdf_storage_path, docx_storage_path, document_status, document_error, created_at",
     )
     .eq("document_status", "ready")
     .not("video_case_id", "is", null)
-    // The inner embed is RLS-filtered, so evaluations of cases the user cannot see are dropped
-    // server-side; trashed cases are excluded the same way.
-    .is("video_cases.deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  // Defensive: never offer a row whose case is hidden (null embed) or trashed.
-  return ((data ?? []) as unknown as SelectableEvaluationRow[]).filter(
-    (row) => row.video_cases != null && !row.video_cases.deleted_at,
-  );
+  const rows: SelectableEvaluationRow[] = [];
+  for (const row of (data ?? []) as unknown as VideoCaseEvaluationRow[]) {
+    const label = row.video_case_id ? cases.get(row.video_case_id) : undefined;
+    if (!label) continue;
+    rows.push({ ...row, video_cases: { case_key: label.case_key, case_title: label.case_title, deleted_at: null } });
+  }
+  return rows;
 }
 
 export async function createVideoGroupEvaluation(params: {

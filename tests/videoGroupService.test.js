@@ -60,23 +60,29 @@ test("other RPC errors throw their message", async () => {
   await assert.rejects(svc.createVideoGroupEvaluation(params([run(1, 2), run(2, 4)])), /nope/);
 });
 
-test("getSelectableEvaluations inner-joins visible, non-trashed cases, newest first", async () => {
+test("getSelectableEvaluations offers only evaluations of cases returned by list_group_source_cases, newest first", async () => {
   const rows = [
-    { id: 1, video_cases: { case_key: "k", case_title: "t", deleted_at: null } },
-    { id: 2, video_cases: { case_key: "k2", case_title: "t2", deleted_at: "2026-01-01" } },
-    { id: 3, video_cases: null },
+    { id: 1, video_case_id: "c1" },
+    { id: 2, video_case_id: "c-hidden-or-trashed" },
   ];
-  const { queries } = setup({ tables: { evaluations: { data: rows, error: null } } });
+  const { rpcCalls, queries } = setup({
+    rpcResult: { data: [{ id: "c1", case_key: "k", case_title: "t" }], error: null },
+    tables: { evaluations: { data: rows, error: null } },
+  });
   const out = await svc.getSelectableEvaluations();
-  // Defensive client drop: trashed and RLS-hidden (null embed) rows never reach the picker.
+  assert.equal(rpcCalls[0][0], "list_group_source_cases");
   assert.deepEqual(out.map((r) => r.id), [1]);
+  assert.deepEqual(out[0].video_cases, { case_key: "k", case_title: "t", deleted_at: null });
   const q = queries.evaluations;
   assert.ok(q.some((c) => c[0] === "eq" && c[1] === "document_status" && c[2] === "ready"));
   assert.ok(q.some((c) => c[0] === "not" && c[1] === "video_case_id"));
-  // Inner embed: rows whose case the user cannot see (RLS) are removed server-side.
-  assert.ok(q.some((c) => c[0] === "select" && /video_cases!inner\(\s*case_key,\s*case_title,\s*deleted_at\s*\)/.test(c[1])));
-  assert.ok(q.some((c) => c[0] === "is" && c[1] === "video_cases.deleted_at" && c[2] === null));
   assert.ok(q.some((c) => c[0] === "order" && c[1] === "created_at" && c[2].ascending === false));
+});
+
+test("getSelectableEvaluations returns nothing without any selectable case", async () => {
+  const { queries } = setup({ rpcResult: { data: [], error: null } });
+  assert.deepEqual(await svc.getSelectableEvaluations(), []);
+  assert.equal(queries.evaluations, undefined);
 });
 
 test("sendVideoGroupToN8n skips the invoke when already ready", async () => {

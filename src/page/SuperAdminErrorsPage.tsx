@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import ConfirmModal from "../components/ConfirmModal";
 import ErrorNoticeModal from "../components/ErrorNoticeModal";
+import ErrorTestPanel from "../components/ErrorTestPanel";
 import MainNavbar from "../components/MainNavbar";
 import { useLanguage } from "../i18n/useLanguage";
 import { ERROR_SOURCES, type ErrorSource } from "../services/errorReportCore.js";
@@ -366,6 +367,8 @@ export default function SuperAdminErrorsPage() {
             {t("superAdmin.deleteOlder")}
           </button>
         </section>
+
+        <ErrorTestPanel />
       </main>
     </div>
   );

@@ -117,3 +117,8 @@ test("deleting a single entry asks for confirmation first", () => {
     /<ConfirmModal\s+isOpen=\{confirmDeleteId !== null\}[\s\S]*?t\("superAdmin\.deleteOneTitle"\)[\s\S]*?t\("superAdmin\.deleteOneMessage"\)[\s\S]*?onConfirm=\{\(\) => confirmDeleteId !== null && void handleDeleteOne\(confirmDeleteId\)\}[\s\S]*?onCancel=\{\(\) => setConfirmDeleteId\(null\)\}/,
   );
 });
+
+test("pressing search reloads the list even when the filters did not change", () => {
+  const page = read("../src/page/SuperAdminErrorsPage.tsx");
+  assert.match(page, /onSubmit=\{\(event\) => \{\s*event\.preventDefault\(\);\s*setApplied\(draft\);\s*setPage\(1\);\s*reload\(\);/);
+});

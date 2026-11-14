@@ -48,7 +48,8 @@ export default function ErrorTestPanel() {
     {
       key: "errorTest.network",
       run: () => {
-        void supabase.from("video_group_evaluations").select("id").eq("id", "not-a-uuid");
+        // The builder is lazy: .then() is what sends the request. The 400 is logged by the fetch wrapper.
+        void supabase.from("video_group_evaluations").select("id").eq("id", "not-a-uuid").then(() => undefined);
       },
     },
     {

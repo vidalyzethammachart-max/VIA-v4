@@ -7,35 +7,54 @@ import {
 
 import { ThemeContext, type ThemeContextValue, type ThemeMode } from "./themeContext";
 
-const STORAGE_KEY = "via-theme";
+// v2: the old key also held a value copied from the OS setting on first visit, so it
+// cannot tell a user's choice apart from that default. Everyone starts light once.
+const STORAGE_KEY = "via-theme-v2";
 
 function getInitialTheme(): ThemeMode {
   if (typeof window === "undefined") {
     return "light";
   }
 
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  if (stored === "light" || stored === "dark") {
-    return stored;
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored === "light" || stored === "dark") {
+      return stored;
+    }
+  } catch {
+    // Storage blocked: fall back to the default.
   }
 
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return "light";
+}
+
+function saveTheme(theme: ThemeMode) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, theme);
+  } catch {
+    // Storage blocked: the choice lasts for this page only.
+  }
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(getInitialTheme);
 
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle("dark", theme === "dark");
-    window.localStorage.setItem(STORAGE_KEY, theme);
+    document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
 
   const value = useMemo<ThemeContextValue>(
     () => ({
       theme,
-      setTheme: setThemeState,
-      toggleTheme: () => setThemeState((current) => (current === "dark" ? "light" : "dark")),
+      setTheme: (next) => {
+        saveTheme(next);
+        setThemeState(next);
+      },
+      toggleTheme: () => {
+        const next = theme === "dark" ? "light" : "dark";
+        saveTheme(next);
+        setThemeState(next);
+      },
     }),
     [theme],
   );

@@ -20,7 +20,8 @@ test("each button raises an error that reaches its own source", () => {
   // unhandled_rejection
   assert.match(panel, /void Promise\.reject\(new Error\(/);
   // network: an invalid uuid makes PostgREST answer 400 through the logging fetch wrapper
-  assert.match(panel, /supabase\.from\("video_group_evaluations"\)\.select\("id"\)\.eq\("id", "not-a-uuid"\)/);
+  // The query builder only sends the request once it is awaited or .then() is called.
+  assert.match(panel, /supabase\.from\("video_group_evaluations"\)\.select\("id"\)\.eq\("id", "not-a-uuid"\)\.then\(/);
   // react: a child that throws while rendering, caught by AppErrorBoundary
   assert.match(panel, /function CrashOnRender\(\{ message \}: \{ message: string \}\): never \{\s*throw new Error\(message\);/);
   assert.match(panel, /\{crashMessage && <CrashOnRender message=\{crashMessage\} \/>\}/);

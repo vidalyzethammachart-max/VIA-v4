@@ -155,6 +155,7 @@ export default function SuperAdminErrorsPage() {
             event.preventDefault();
             setApplied(draft);
             setPage(1);
+            reload();
           }}
         >
           <div className="grid gap-4 md:grid-cols-4">

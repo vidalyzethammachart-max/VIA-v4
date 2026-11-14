@@ -106,3 +106,14 @@ test("every superAdmin translation key used by the page and menu exists in both 
     assert.ok(translations.slice(enStart).includes(`"${key}":`), `en missing ${key}`);
   }
 });
+
+test("deleting a single entry asks for confirmation first", () => {
+  const page = read("../src/page/SuperAdminErrorsPage.tsx");
+  // The row button only opens the dialog; the delete runs from the dialog's confirm.
+  assert.match(page, /onClick=\{\(\) => setConfirmDeleteId\(row\.id\)\}/);
+  assert.doesNotMatch(page, /onClick=\{\(\) => void handleDeleteOne\(row\.id\)\}/);
+  assert.match(
+    page,
+    /<ConfirmModal\s+isOpen=\{confirmDeleteId !== null\}[\s\S]*?t\("superAdmin\.deleteOneTitle"\)[\s\S]*?t\("superAdmin\.deleteOneMessage"\)[\s\S]*?onConfirm=\{\(\) => confirmDeleteId !== null && void handleDeleteOne\(confirmDeleteId\)\}[\s\S]*?onCancel=\{\(\) => setConfirmDeleteId\(null\)\}/,
+  );
+});

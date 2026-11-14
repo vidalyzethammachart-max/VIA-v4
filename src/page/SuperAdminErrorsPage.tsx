@@ -42,6 +42,7 @@ export default function SuperAdminErrorsPage() {
   const [popupError, setPopupError] = useState<string | null>(null);
   const [olderDays, setOlderDays] = useState(DELETE_OLDER_DAYS[1]);
   const [confirmOlder, setConfirmOlder] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -84,14 +85,20 @@ export default function SuperAdminErrorsPage() {
   const reload = useCallback(() => setReloadKey((key) => key + 1), []);
 
   async function handleDeleteOne(id: number) {
+    if (deleting) return;
     try {
+      setDeleting(true);
       await deleteErrorLog(id);
+      setConfirmDeleteId(null);
       setExpandedId(null);
       // Removing the last row of the last page would otherwise request an empty range.
       if (rows.length === 1 && page > 1) setPage(page - 1);
       else reload();
     } catch (error) {
+      setConfirmDeleteId(null);
       setPopupError(error instanceof Error ? error.message : t("superAdmin.deleteFailed"));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -124,6 +131,16 @@ export default function SuperAdminErrorsPage() {
         confirmDisabled={deleting}
         onConfirm={() => void handleDeleteOlder()}
         onCancel={() => setConfirmOlder(false)}
+      />
+      <ConfirmModal
+        isOpen={confirmDeleteId !== null}
+        title={t("superAdmin.deleteOneTitle")}
+        message={t("superAdmin.deleteOneMessage")}
+        confirmLabel={deleting ? t("superAdmin.deleting") : t("superAdmin.deleteConfirm")}
+        cancelLabel={t("superAdmin.cancel")}
+        confirmDisabled={deleting}
+        onConfirm={() => confirmDeleteId !== null && void handleDeleteOne(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
       />
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:py-8">
         <section className="ui-hover-card rounded-2xl border border-slate-200 bg-white p-4 md:p-6">
@@ -292,7 +309,7 @@ export default function SuperAdminErrorsPage() {
                             <button
                               type="button"
                               className="btn-danger rounded-full px-4 py-1.5 text-xs"
-                              onClick={() => void handleDeleteOne(row.id)}
+                              onClick={() => setConfirmDeleteId(row.id)}
                             >
                               {t("superAdmin.deleteOne")}
                             </button>

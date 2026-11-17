@@ -9,7 +9,7 @@ import * as roleAccess from '../supabase/functions/_shared/roleAccess.js';
 const G = '71abc689-868a-4bc7-a0b0-000000000001';
 const A = '61abc689-868a-4bc7-a0b0-000000000000';
 
-function setup({ role = 'user', userId = 'u1', group = null, sources = [], memberships = [], aggregate = null } = {}) {
+function setup({ role = 'user', userId = 'u1', group = null, sources = [], memberships = [], aggregate = null, evaluation = null } = {}) {
   let handler;
   const queries = [];
   const signed = [];
@@ -23,6 +23,7 @@ function setup({ role = 'user', userId = 'u1', group = null, sources = [], membe
           if (table === 'user_information') return { data: { role }, error: null };
           if (table === 'video_group_evaluations') return { data: q.filters.some(f => f[2] === G) ? group : null, error: null };
           if (table === 'video_case_aggregates') return { data: aggregate, error: null };
+          if (table === 'evaluations') return { data: evaluation, error: null };
           return { data: null, error: null };
         },
         then(resolve) {
@@ -60,6 +61,13 @@ async function assertOk(r) {
   assert.equal(json.docxUrl, 'https://signed/groups/g.docx');
 }
 
+async function assertPdfOnly(r) {
+  assert.equal(r.status, 200);
+  const json = await r.json();
+  assert.equal(json.pdfUrl, 'https://signed/groups/g.pdf');
+  assert.equal(json.docxUrl, null);
+}
+
 test('admin reads a group document without membership lookups', async () => {
   const { call, queries, signed } = setup({ role: 'admin', group: grp, sources });
   await assertOk(await call({ aggregateId: G }));
@@ -68,13 +76,14 @@ test('admin reads a group document without membership lookups', async () => {
 });
 
 test('the requester reads their group document', async () => {
-  const { call } = setup({ userId: 'owner', group: grp, sources });
-  await assertOk(await call({ aggregateId: G }));
+  const { call, signed } = setup({ userId: 'owner', group: grp, sources });
+  await assertPdfOnly(await call({ aggregateId: G }));
+  assert.deepEqual(signed, ['groups/g.pdf']);
 });
 
 test('a source-case member reads it; queries are wired by group id and source case ids', async () => {
   const { call, queries } = setup({ userId: 'm', group: grp, sources, memberships: [{ video_case_id: 'c2' }] });
-  await assertOk(await call({ aggregateId: G }));
+  await assertPdfOnly(await call({ aggregateId: G }));
   const tables = queries.map(q => q.table);
   assert.ok(tables.includes('video_group_evaluations'));
   assert.equal(tables.includes('video_case_aggregates'), false, 'group is checked before, and instead of, the aggregate table');
@@ -106,4 +115,35 @@ test('a super admin reads a group document like an admin, without membership loo
   await assertOk(await call({ aggregateId: G }));
   assert.deepEqual(signed, ['groups/g.pdf', 'groups/g.docx']);
   assert.equal(queries.some(q => q.table === 'video_case_members'), false);
+});
+
+test('an editor reads a group document as PDF only; the DOCX is never signed', async () => {
+  const { call, signed } = setup({ role: 'editor', userId: 'e1', group: grp, sources });
+  await assertPdfOnly(await call({ aggregateId: G }));
+  assert.deepEqual(signed, ['groups/g.pdf']);
+});
+
+test('a DOCX-only group document is not available to an editor', async () => {
+  const docxOnly = { ...grp, pdf_storage_path: null };
+  const { call, signed } = setup({ role: 'editor', userId: 'e1', group: docxOnly, sources });
+  assert.equal((await call({ aggregateId: G })).status, 404);
+  assert.deepEqual(signed, []);
+});
+
+test('an editor reading an evaluation gets the PDF only, an admin gets both', async () => {
+  const evaluation = { id: 7, user_id: 'someone', pdf_storage_path: 'ev/e.pdf', docx_storage_path: 'ev/e.docx' };
+
+  const editor = setup({ role: 'editor', userId: 'u9', evaluation });
+  const editorJson = await (await editor.call({ evaluationId: 7 })).json();
+  assert.equal(editorJson.pdfUrl, 'https://signed/ev/e.pdf');
+  assert.equal(editorJson.docxUrl, null);
+  assert.deepEqual(editor.signed, ['ev/e.pdf']);
+
+  const admin = setup({ role: 'admin', userId: 'u9', evaluation });
+  const adminJson = await (await admin.call({ evaluationId: 7 })).json();
+  assert.equal(adminJson.docxUrl, 'https://signed/ev/e.docx');
+  assert.deepEqual(admin.signed, ['ev/e.pdf', 'ev/e.docx']);
+
+  const plain = setup({ role: 'user', userId: 'someone', evaluation });
+  assert.equal((await (await plain.call({ evaluationId: 7 })).json()).docxUrl, null);
 });

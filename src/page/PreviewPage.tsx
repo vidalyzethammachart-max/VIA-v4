@@ -174,7 +174,7 @@ export default function PreviewPage() {
         record.pdf_storage_path
           ? supabase.storage.from(DOCUMENTS_BUCKET).createSignedUrl(record.pdf_storage_path, 60 * 60)
           : Promise.resolve({ data: null, error: null }),
-        record.docx_storage_path
+        record.docx_storage_path && isAdmin
           ? supabase.storage.from(DOCUMENTS_BUCKET).createSignedUrl(record.docx_storage_path, 60 * 60)
           : Promise.resolve({ data: null, error: null }),
       ]);
@@ -198,7 +198,7 @@ export default function PreviewPage() {
     };
 
     void loadArtifactUrls();
-  }, [hasStorageArtifact, record, t]);
+  }, [hasStorageArtifact, isAdmin, record, t]);
 
   const handleDelete = async () => {
     if (!record) {

@@ -3,7 +3,9 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import ConfirmModal from "../components/ConfirmModal";
 import MainNavbar from "../components/MainNavbar";
+import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
+import { normalizeRole, roleAtLeast } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
 import { collapseSupersededEvaluations } from "../services/evaluationSupersedeCore.js";
@@ -36,6 +38,9 @@ export default function MyFormsDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "stuck" | EvaluationItem["document_status"]>("all");
   const [deleteTarget, setDeleteTarget] = useState<EvaluationItem | null>(null);
+  // DOCX downloads are for admin and super_admin only; everyone else gets the PDF.
+  const { role: authRole } = useAuthRole();
+  const canDownloadDocx = roleAtLeast(normalizeRole(authRole), "admin");
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const navigationState = location.state as
     | { generated?: boolean; evaluationId?: number; submissionId?: string; aggregateId?: string }
@@ -110,6 +115,10 @@ export default function MyFormsDashboard() {
 
     try {
       setActiveDownloadKey(downloadKey);
+
+      if (format === "docx" && !canDownloadDocx) {
+        throw new Error(t("myForms.downloadFailed", { format: "DOCX" }));
+      }
 
       if (!path) {
         throw new Error(t("myForms.noArtifact", { format: format.toUpperCase() }));
@@ -336,7 +345,7 @@ export default function MyFormsDashboard() {
                   </div>
 
                   <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex sm:flex-row">
-                    {item.document_status === "ready" && (item.pdf_storage_path || item.docx_storage_path) ? (
+                    {item.document_status === "ready" && (item.pdf_storage_path || (canDownloadDocx && item.docx_storage_path)) ? (
                       <>
                         <Link to={`/preview/${item.id}`} className="btn-primary text-center">
                           {t("common.preview")}
@@ -353,7 +362,7 @@ export default function MyFormsDashboard() {
                               : t("myForms.downloadPdf")}
                           </button>
                         )}
-                        {item.docx_storage_path && (
+                        {canDownloadDocx && item.docx_storage_path && (
                           <button
                             type="button"
                             onClick={() => void handleDownload(item, "docx")}

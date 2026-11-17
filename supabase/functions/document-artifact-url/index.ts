@@ -187,6 +187,9 @@ serve(async (req) => {
       docxPath = evaluation.docx_storage_path;
     }
 
+    // DOCX is for admin and super_admin only; everyone else gets the PDF.
+    if (!isAdminRole(role)) docxPath = null;
+
     if (pdfPath || docxPath) {
       const [pdfSigned, docxSigned] = await Promise.all([
         pdfPath

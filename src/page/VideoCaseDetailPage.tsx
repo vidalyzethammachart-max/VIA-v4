@@ -40,8 +40,6 @@ export default function VideoCaseDetailPage() {
   const effectiveCaseRole: VideoCaseMemberRole =
     isAdminRole ? "leader" : (selectedRole ?? "member");
   const canCombine = effectiveCaseRole === "leader";
-  // Editors may combine too; delete rights below stay with leaders and admins.
-  const canCreateGroup = canCombine || roleAtLeast(appRole, "editor");
 
   const loadCases = useCallback(async () => {
     const data = await getMyVideoCases();
@@ -235,7 +233,7 @@ export default function VideoCaseDetailPage() {
                     ตรวจสอบแต่ละแบบประเมินก่อนนำมารวมผลเป็นรายงานสรุปใหม่
                   </p>
                 </div>
-                {canCreateGroup && selectedCase && (
+                {canCombine && selectedCase && (
                   <Link
                     to={`/video-groups/new?caseId=${selectedCase.id}`}
                     className="btn-primary text-center text-xs"

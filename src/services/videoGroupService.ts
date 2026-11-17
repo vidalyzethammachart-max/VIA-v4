@@ -41,7 +41,7 @@ export type SelectableEvaluationRow = VideoCaseEvaluationRow & {
 const DUPLICATE_GROUP_MESSAGE = "มีแบบประเมินกลุ่มนี้อยู่แล้ว (เลขที่สั่งงาน ประเภท และชื่อหัวข้อซ้ำกัน)";
 
 export async function getSelectableEvaluations(): Promise<SelectableEvaluationRow[]> {
-  // Case labels come from an RPC: editors and admins get every non-trashed case, other users only
+  // Case labels come from an RPC: admins get every non-trashed case, other users only
   // the cases they can view. Evaluations of any other case are not offered.
   const casesResult = await supabase.rpc("list_group_source_cases");
   if (casesResult.error) {

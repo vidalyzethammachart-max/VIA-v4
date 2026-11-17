@@ -4,7 +4,9 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import CaseEvaluationPicker from "../components/CaseEvaluationPicker";
 import ErrorNoticeModal from "../components/ErrorNoticeModal";
 import MainNavbar from "../components/MainNavbar";
+import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
+import { normalizeRole, roleAtLeast } from "../lib/roles";
 import { getCombineBlockReason, keepCombinableSelection } from "../services/videoCaseCombineSelectionCore.js";
 import { reportError } from "../services/errorReporter";
 import {
@@ -17,6 +19,7 @@ import {
 import {
   createVideoGroupEvaluation,
   getSelectableEvaluations,
+  isLeaderOfAnyVideoCase,
   type SelectableEvaluationRow,
   type VideoGroupType,
 } from "../services/videoGroupService";
@@ -56,6 +59,22 @@ export default function VideoGroupCreatePage() {
   const [subjectName, setSubjectName] = useState(prefill.subjectName ?? "");
   const [touched, setTouched] = useState(false);
   const [duplicateMessage, setDuplicateMessage] = useState<string | null>(null);
+
+  // Only admins and case leaders may create a group (the RPC enforces it); send anyone else back.
+  const { loading: authLoading, user: authUser, role: authRole } = useAuthRole();
+  const isAdmin = roleAtLeast(normalizeRole(authRole), "admin");
+  useEffect(() => {
+    if (authLoading || !authUser || isAdmin) return;
+    let cancelled = false;
+    isLeaderOfAnyVideoCase(authUser.id)
+      .then((leader) => {
+        if (!cancelled && !leader) navigate("/video-groups", { replace: true });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, authUser, isAdmin, navigate]);
 
   useEffect(() => {
     let active = true;

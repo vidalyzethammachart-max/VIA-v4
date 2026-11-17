@@ -8,10 +8,13 @@ import MainNavbar from "../components/MainNavbar";
 import { getSections } from "../config/sections";
 import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
+import { normalizeRole, roleAtLeast } from "../lib/roles";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { loading: authLoading, user: authUser } = useAuthRole();
+  const { loading: authLoading, user: authUser, role: authRole } = useAuthRole();
+  // DOCX is for admin and super_admin only, so everyone else is offered the PDF.
+  const documentLabel = roleAtLeast(normalizeRole(authRole), "admin") ? "PDF / DOCX" : "PDF";
   const { language, t } = useLanguage();
   const th = language === "th";
   const sections = useMemo(() => getSections(language), [language]);
@@ -161,7 +164,7 @@ export default function Dashboard() {
                     <span className="text-xs text-slate-500">{row.documentPath ? (th ? "พร้อมเปิด" : "Ready") : documentStatusLabel(row.documentStatus, th, row.createdAt)}</span>
                     <div className="flex gap-2">
                       <Link to={row.resultPath} className="btn-secondary whitespace-nowrap text-xs">{th ? "ดูผล" : "View result"}</Link>
-                      {row.documentPath && <Link to={row.documentPath} className="btn-primary whitespace-nowrap text-xs">PDF / DOCX</Link>}
+                      {row.documentPath && <Link to={row.documentPath} className="btn-primary whitespace-nowrap text-xs">{documentLabel}</Link>}
                     </div>
                   </div>
                 </li>)}
@@ -183,7 +186,7 @@ export default function Dashboard() {
                       <td className="px-3 py-3">{row.documentPath ? (th ? "พร้อมเปิด" : "Ready") : documentStatusLabel(row.documentStatus, th, row.createdAt)}</td>
                       <td className="px-3 py-3"><div className="flex flex-wrap gap-2">
                         <Link to={row.resultPath} className="btn-secondary whitespace-nowrap text-xs">{th ? "ดูผล" : "View result"}</Link>
-                        {row.documentPath && <Link to={row.documentPath} className="btn-primary whitespace-nowrap text-xs">PDF / DOCX</Link>}
+                        {row.documentPath && <Link to={row.documentPath} className="btn-primary whitespace-nowrap text-xs">{documentLabel}</Link>}
                       </div></td>
                     </tr>)}
                   </tbody>

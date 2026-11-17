@@ -58,6 +58,8 @@ export default function PreviewPage() {
   const hasStorageArtifact = Boolean(record?.pdf_storage_path || record?.docx_storage_path);
   const isStuck = isEvaluationStuck(record);
   const isAdmin = roleAtLeast(normalizeRole(authRole), "admin");
+  // RLS lets only the owner, a case leader or an admin delete; this page offers it to owner and admin.
+  const canDelete = Boolean(record && authUser && (record.user_id === authUser.id || isAdmin));
   const canReportStuck = Boolean(record && authUser && (record.user_id === authUser.id || isAdmin));
 
   useEffect(() => {
@@ -314,7 +316,7 @@ export default function PreviewPage() {
               <Link to="/my-forms" className="btn-secondary text-center">
                 {t("preview.backToMyForms")}
               </Link>
-              {record && (
+              {canDelete && (
                 <button
                   type="button"
                   onClick={() => setDeleteConfirmOpen(true)}

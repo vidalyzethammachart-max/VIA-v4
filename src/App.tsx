@@ -21,6 +21,7 @@ import ResetPassword from "./page/ResetPassword";
 import MyFormsDashboard from "./page/MyFormsDashboard";
 import PreviewPage from "./page/PreviewPage";
 import SuperAdminErrorsPage from "./page/SuperAdminErrorsPage";
+import NotFoundPage from "./page/NotFoundPage";
 import SessionMonitor from "./components/SessionMonitor";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -207,6 +208,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </div>
 

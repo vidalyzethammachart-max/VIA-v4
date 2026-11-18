@@ -264,7 +264,7 @@ export default function MyFormsDashboard() {
                 {t("myForms.submitNewForm")}
               </Link>
               <Link to="/video-groups" className="btn-secondary inline-flex">
-                {t("videoGroups.navLabel")}
+                {t(canDownloadDocx ? "videoGroups.navLabel" : "videoGroups.navLabelResults")}
               </Link>
             </div>
             <p className="mt-2 text-sm text-slate-500">{t("myForms.quickActionDesc")}</p>

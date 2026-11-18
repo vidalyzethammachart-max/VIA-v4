@@ -8,7 +8,7 @@ const source = readFileSync(
 );
 
 test("links the profile dropdown to video groups, not the removed video cases list", () => {
-  assert.match(source, /label=\{t\("videoGroups\.navLabel"\)\}/);
+  assert.match(source, /label=\{t\(isAdmin \? "videoGroups\.navLabel" : "videoGroups\.navLabelResults"\)\}/);
   assert.match(source, /onClick=\{\(\) => closeAndNavigate\("\/video-groups"\)\}/);
   assert.doesNotMatch(source, /closeAndNavigate\("\/video-cases"\)/);
 });

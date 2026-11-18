@@ -2,7 +2,9 @@ import { Link } from "react-router-dom";
 
 import Logo from "../assets/logo_no_bg.png";
 import MainNavbar from "../components/MainNavbar";
+import { useAuthRole } from "../hooks/useAuthRole";
 import { useLanguage } from "../i18n/useLanguage";
+import { normalizeRole, roleAtLeast } from "../lib/roles";
 
 type HomeAction = {
   href: string;
@@ -25,6 +27,8 @@ const ACTIONS: HomeAction[] = [
 
 export default function Home() {
   const { t } = useLanguage();
+  const { role } = useAuthRole();
+  const isAdmin = roleAtLeast(normalizeRole(role), "admin");
 
   return (
     <div className="min-h-screen bg-white">
@@ -63,7 +67,7 @@ export default function Home() {
                   to="/video-groups"
                   className="ui-hover-button inline-flex min-h-12 items-center justify-center rounded-lg border border-slate-300 bg-white px-6 py-3 text-center text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
                 >
-                  {t("videoGroups.navLabel")}
+                  {t(isAdmin ? "videoGroups.navLabel" : "videoGroups.navLabelResults")}
                 </Link>
               </div>
             </div>

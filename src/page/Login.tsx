@@ -3,8 +3,6 @@ import { supabase } from "../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 import { accountingService } from "../services/accountingService";
 import AuthPageControls from "../components/AuthPageControls";
-import { getUserRole } from "../hooks/useAuthRole";
-import { normalizeRole, roleAtLeast } from "../lib/roles";
 import { useLanguage } from "../i18n/useLanguage";
 
 import Logo from "../assets/logo_no_bg.png";
@@ -52,13 +50,6 @@ export default function Login() {
     }
 
     if (data.user) {
-      const role = normalizeRole(
-        await getUserRole(data.user.id).catch((roleError) => {
-          console.error("Failed to load role after login:", roleError);
-          return "user";
-        }),
-      );
-
       void accountingService
         .logActivity({
           user_id: data.user.id,
@@ -71,22 +62,12 @@ export default function Login() {
 
       setLoading(false);
 
-      if (roleAtLeast(role, "admin")) {
-        navigate("/home", { replace: true });
-        return;
-      }
-
-      if (roleAtLeast(role, "editor")) {
-        navigate("/form-submit", { replace: true });
-        return;
-      }
-
-      navigate("/dashboard", { replace: true });
+      navigate("/home", { replace: true });
       return;
     }
 
     setLoading(false);
-    navigate("/dashboard", { replace: true });
+    navigate("/home", { replace: true });
   };
 
   return (

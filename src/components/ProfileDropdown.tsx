@@ -197,7 +197,7 @@ export default function ProfileDropdown() {
             </li>
             <li>
               <MenuItem
-                label={t("videoGroups.navLabel")}
+                label={t(isAdmin ? "videoGroups.navLabel" : "videoGroups.navLabelResults")}
                 isDark={isDark}
                 onClick={() => closeAndNavigate("/video-groups")}
                 icon={

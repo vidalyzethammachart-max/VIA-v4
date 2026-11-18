@@ -30,7 +30,11 @@
 
 เงื่อนไขการลบ group: เอกสารต้องไม่อยู่ในสถานะ `pending` (policy `video_group_evaluations_delete_owner_or_admin`)
 
-หลังล็อกอิน: admin ขึ้นไปไป `/home`, editor ไป `/form-submit`, user ไป `/dashboard`
+หลังล็อกอิน: ทุก role ไป `/home`
+
+ถ้าเปิดหน้าที่ไม่มีสิทธิ์: admin ขึ้นไปถูกส่งไป `/home`, editor ไป `/form-submit`, user ไป `/dashboard`
+
+ชื่อเมนู/ปุ่ม `/video-groups`: user และ editor เห็น "ผลประเมินแบบกลุ่ม", admin ขึ้นไปเห็น "แบบประเมินกลุ่ม"
 
 ## กฎของ super_admin
 

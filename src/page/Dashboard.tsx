@@ -34,6 +34,12 @@ export default function Dashboard() {
   const stats = useMemo(() => buildDashboardStats(model?.evaluations || [], sections), [model, sections]);
   const totalResponses = model?.evaluations.length || 0;
   const activities = (model?.recent || []).filter(row => activityKind === "all" || row.kind === activityKind);
+  // Show per-kind counts so the tabs differ visibly even when the newest rows are all individual.
+  const activityCounts = useMemo(() => {
+    const recent = model?.recent || [];
+    const evaluation = recent.filter(row => row.kind === "evaluation").length;
+    return { all: recent.length, evaluation, aggregate: recent.length - evaluation };
+  }, [model]);
 
   const fetchDashboard = useCallback(async () => {
     if (!userId) return;
@@ -144,7 +150,7 @@ export default function Dashboard() {
               {(["all", "evaluation", "aggregate"] as const).map(kind => <button key={kind} type="button" aria-pressed={activityKind === kind}
                 className={activityKind === kind ? "btn-primary" : "btn-secondary"}
                 onClick={() => { setActivityKind(kind); setVisibleCount(8); }}>
-                {kind === "all" ? (th ? "ทั้งหมด" : "All") : kind === "evaluation" ? (th ? "รายบุคคล" : "Individual") : (th ? "ผลรวม Video Case" : "Case summaries")}
+                {kind === "all" ? (th ? "ทั้งหมด" : "All") : kind === "evaluation" ? (th ? "รายบุคคล" : "Individual") : (th ? "ผลรวม Video Case" : "Case summaries")} ({activityCounts[kind]})
               </button>)}
             </div>
             {activities.length === 0 ? <p className="py-6 text-sm text-slate-500">{th ? "ยังไม่มีผลวิเคราะห์ประเภทนี้" : "No analyses of this type yet."}</p> : <>

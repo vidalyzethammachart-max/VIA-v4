@@ -119,7 +119,7 @@ export default function Dashboard() {
             <button type="button" className="btn-secondary" disabled={refreshing} onClick={() => void fetchDashboard()}>
               {refreshing ? (th ? "กำลังอัปเดต..." : "Updating...") : (th ? "รีเฟรชข้อมูล" : "Refresh")}
             </button>
-            <Link to="/video-groups" className="btn-secondary">{th ? "แบบประเมินกลุ่มวิดีโอ" : "Video group evaluations"}</Link>
+            <Link to="/video-groups" className="btn-secondary">{t(roleAtLeast(normalizeRole(authRole), "admin") ? "videoGroups.navLabel" : "videoGroups.navLabelResults")}</Link>
             {updatedAt && <span className="text-xs text-slate-500">{th ? "อัปเดตล่าสุด" : "Last updated"} {updatedAt.toLocaleTimeString()}</span>}
           </div>
         </div>
@@ -132,7 +132,7 @@ export default function Dashboard() {
         {model && <>
           <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
             {[
-              [th ? "Video Case ที่ใช้งาน" : "Active video cases", model.caseCount],
+              [th ? "วิดีโอที่ใช้งาน" : "Active videos", model.caseCount],
               [th ? "ผลประเมินรายบุคคล" : "Individual evaluations", totalResponses],
               [th ? "ผลรวมการประเมิน" : "Combined summaries", model.summaryCount],
               [th ? "รายงานพร้อมเปิด" : "Reports ready", model.readyDocumentCount],
@@ -142,7 +142,7 @@ export default function Dashboard() {
             </div>)}
           </div>
           <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
-            {th ? "แสดงข้อมูลตามสิทธิ์ของคุณ ไม่รวมเคสในถังขยะ กราฟด้านล่างใช้ผลประเมินรายบุคคลโดยไม่นับผลรวมซ้ำ และอัปเดตอัตโนมัติทุก 30 วินาทีขณะเปิดหน้านี้" : "Shows data you can access, excluding trashed cases. Charts use individual evaluations without double-counting summaries. Updates every 30 seconds while visible."}
+            {th ? "แสดงข้อมูลตามสิทธิ์ของคุณ ไม่รวมวิดีโอในถังขยะ กราฟด้านล่างใช้ผลประเมินรายบุคคลโดยไม่นับผลรวมซ้ำ และอัปเดตอัตโนมัติทุก 30 วินาทีขณะเปิดหน้านี้" : "Shows data you can access, excluding trashed videos. Charts use individual evaluations without double-counting summaries. Updates every 30 seconds while visible."}
           </p>
           <section className="mb-8 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:p-6">
             <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{th ? "ผลวิเคราะห์วิดีโอและรายงาน" : "Video analyses and reports"}</h2>
@@ -150,7 +150,7 @@ export default function Dashboard() {
               {(["all", "evaluation", "aggregate"] as const).map(kind => <button key={kind} type="button" aria-pressed={activityKind === kind}
                 className={activityKind === kind ? "btn-primary" : "btn-secondary"}
                 onClick={() => { setActivityKind(kind); setVisibleCount(8); }}>
-                {kind === "all" ? (th ? "ทั้งหมด" : "All") : kind === "evaluation" ? (th ? "รายบุคคล" : "Individual") : (th ? "ผลรวม Video Case" : "Case summaries")} ({activityCounts[kind]})
+                {kind === "all" ? (th ? "ทั้งหมด" : "All") : kind === "evaluation" ? (th ? "รายบุคคล" : "Individual") : (th ? "ผลรวมแบบกลุ่ม" : "Group summaries")} ({activityCounts[kind]})
               </button>)}
             </div>
             {activities.length === 0 ? <p className="py-6 text-sm text-slate-500">{th ? "ยังไม่มีผลวิเคราะห์ประเภทนี้" : "No analyses of this type yet."}</p> : <>
@@ -178,7 +178,7 @@ export default function Dashboard() {
               <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[700px] text-left text-sm">
                   <thead className="border-b border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400"><tr>
-                    {(th ? ["วิดีโอ / เคส", "ประเภท", "วันที่", "คะแนนเฉลี่ย", "เอกสาร", "เปิดดู"] : ["Video / case", "Type", "Date", "Average", "Document", "View"]).map(label => <th key={label} className="px-3 py-3 font-medium">{label}</th>)}
+                    {(th ? ["วิดีโอ", "ประเภท", "วันที่", "คะแนนเฉลี่ย", "เอกสาร", "เปิดดู"] : ["Video", "Type", "Date", "Average", "Document", "View"]).map(label => <th key={label} className="px-3 py-3 font-medium">{label}</th>)}
                   </tr></thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                     {activities.slice(0, visibleCount).map(row => <tr key={row.id} className="text-slate-700 dark:text-slate-200">

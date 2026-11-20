@@ -2,18 +2,19 @@
 
 ระบบ **VIA (Video Intelligence & Analytics)** ใช้ส่งแบบประเมินวิดีโอ (rubric 9 หมวด / 45 ข้อ) ให้ AI วิเคราะห์ และสร้างเอกสาร PDF/DOCX
 
-เอกสารนี้เขียนจาก `src/App.tsx`, `README.md`, `docs/figma-screen-map.md` และ `docs/direct-document-dispatch.md`
+เอกสารนี้เขียนจาก `src/App.tsx`, `README.md`, `docs/figma-screen-map.md`, `docs/direct-document-dispatch.md` และ `docs/roles.md` (ปรับล่าสุด 2026-11-20)
 
 ## Actors
 
 | Actor | คำอธิบาย |
 |---|---|
 | ผู้เยี่ยมชม | ยังไม่ล็อกอิน |
-| User | global role `user`: ดู dashboard, My Forms, เข้าร่วมเคสได้ แต่ส่งแบบประเมินไม่ได้ |
+| User | global role `user`: ดู dashboard, My Forms, พรีวิวและดาวน์โหลด PDF แต่ส่งแบบประเมินไม่ได้ |
 | Editor | global role `editor`: ทำได้เท่า User และส่งแบบประเมินได้ (`/form-submit`) |
-| Admin | global role `admin`: ทำได้เท่า Editor และจัดการผู้ใช้ อนุมัติคำขอ และดูงานที่ค้าง |
-| Case Leader | case role `leader` ในเคสหนึ่ง สามารถรวมและลบผลรวมของเคสนั้น (Admin ทำได้เช่นกัน) |
-| Case Member | case role `member` อ่านผลของเคสได้อย่างเดียว |
+| Admin | global role `admin`: ทำได้เท่า Editor และจัดการผู้ใช้ อนุมัติคำขอ ดูงานที่ค้าง และดาวน์โหลด DOCX |
+| Super Admin | global role `super_admin` (มีได้บัญชีเดียว): ทำได้เท่า Admin และดู error log (`/super-admin/errors`) ดูรายละเอียดใน `docs/roles.md` |
+| Case Leader | case role `leader` ในเคสหนึ่ง สร้างแบบประเมินกลุ่มจากเคสนั้นได้ (Admin ทำได้ทุกเคส) ตอนนี้ UI ส่งแบบประเมินกำหนดบทบาทเป็น `member` เสมอ ไม่พบทางตั้ง leader จากฝั่ง UI |
+| Case Member | case role `member`: ถูกเพิ่มอัตโนมัติเมื่อส่งแบบประเมินในเคสนั้น |
 | Supabase | Auth, Postgres (RLS), Storage, Edge Functions |
 | Cloudflare R2 | เก็บวิดีโอที่อัปโหลด |
 | n8n | รับงาน ประมวลผลวิดีโอ/AI สร้างเอกสาร แล้ว callback |
@@ -52,12 +53,12 @@ flowchart LR
     UC13(UC-13 Dashboard)
   end
   subgraph CASE[Video Case]
-    UC14(UC-14 สร้างเคส)
-    UC15(UC-15 เข้าร่วมเคส)
+    UC14(UC-14 สร้าง/เข้าเคสอัตโนมัติ)
     UC16(UC-16 ดูรายละเอียดเคส)
-    UC17(UC-17 รวมผลประเมิน)
+    UC17(UC-17 รวมผลประเมินแบบเดิม)
     UC18(UC-18 สร้างเอกสารสรุปเคส)
     UC19(UC-19 ลบผลรวม)
+    UC23(UC-23 สร้างแบบประเมินกลุ่ม)
   end
   subgraph ADM[ผู้ดูแล]
     UC06(UC-06 อนุมัติคำขอ)
@@ -66,10 +67,11 @@ flowchart LR
   end
 
   V --> UC01 & UC02 & UC03
-  U --> UC04 & UC05 & UC10 & UC11 & UC12 & UC13 & UC14 & UC15 & UC16
+  U --> UC04 & UC05 & UC10 & UC11 & UC12 & UC13 & UC16
   E --> UC07 & UC08
-  L --> UC17 & UC18 & UC19
+  L --> UC17 & UC18 & UC19 & UC23
   A --> UC06 & UC20 & UC21
+  UC07 -. include .-> UC14
   UC07 -. include .-> UC08
   UC07 -. include .-> UC09
   UC18 -. include .-> UC09
@@ -103,10 +105,11 @@ flowchart LR
 - **Main flow**
   1. เปิด `/` กรอก email และ password
   2. ระบบตรวจสอบผ่าน Supabase Auth
-  3. ระบบนำไปหน้าตาม role: Admin ไป `/admin`, Editor ไป `/form-submit`, User ไป `/dashboard`
+  3. ระบบนำทุก role ไป `/home` (`getDefaultRouteForRole` ใน `src/App.tsx`)
 - **Alternate / Exception**
   - ข้อมูลผิด: แจ้ง invalid login
   - มี session อยู่แล้วและเปิด `/`: redirect ไป `/home`
+  - เปิดหน้าที่ไม่มีสิทธิ์ภายหลัง: admin ขึ้นไปไป `/home`, editor ไป `/form-submit`, user ไป `/dashboard` (ดู UC-22)
 - **Postcondition**: มี session ที่ใช้งานได้
 
 ### UC-03 ลืมและรีเซ็ตรหัสผ่าน
@@ -203,7 +206,7 @@ flowchart LR
 - **Actor**: ผู้ใช้ที่ล็อกอินและมีสิทธิ์เห็นข้อมูลนั้น
 - **Main flow**
   1. เลือกรายการที่ ready เปิด `/preview/:docId` (docId คือ evaluation ID)
-  2. ดู PDF และกดดาวน์โหลด PDF หรือ DOCX
+  2. ดู PDF และกดดาวน์โหลด PDF (DOCX ดาวน์โหลดได้เฉพาะ admin ขึ้นไป)
   3. ระบบขอ URL ที่ได้รับอนุญาตผ่าน `document-artifact-url`
 - **Alternate / Exception**: เอกสารยังประมวลผลอยู่ แสดงสถานะรอ; ไม่พบหรือไม่มีสิทธิ์ แสดง error
 - **Postcondition**: ผู้ใช้ได้ไฟล์
@@ -222,30 +225,36 @@ flowchart LR
 
 ## กลุ่ม Video Case
 
-### UC-14 สร้างเคส
-- **Actor**: ผู้ใช้ที่ล็อกอิน
-- **Main flow**: เปิด `/video-cases` กรอกชื่อเคสและรหัส สร้างเคส
-- **Alternate**: ข้อมูลไม่ผ่าน validation
-- **Alternate / Exception**: ขอเป็น Leader ของเคสที่มี Leader อยู่แล้ว ระบบปฏิเสธ (`Video case already has a leader`) เพราะแต่ละเคสมี Leader ได้คนเดียว
-- **Postcondition**: มีเคสใหม่ และผู้เรียกกลายเป็นสมาชิก บทบาท (`member`/`leader`) มาจากค่า `p_member_role` ที่ client ส่งให้ RPC ไม่ได้กำหนดอัตโนมัติว่าผู้สร้างเป็น Leader
+### UC-14 สร้างหรือเข้าเคสอัตโนมัติตอนส่งแบบประเมิน
+- **Actor**: Editor, Admin (ทำภายใน UC-07 ไม่มีหน้าจอแยก)
+- **Main flow**
+  1. ผู้ส่งกรอกเลขลำดับ (`order_number`) และชื่อเรื่อง (`subject_name`) ในฟอร์ม
+  2. `FormSubmit` เรียก RPC `resolve_video_case_by_identity` (ผ่าน `resolveVideoCaseMembership`) ด้วยคู่ค่านี้
+  3. ถ้ายังไม่มีเคสที่ตรงกัน RPC สร้างเคสใหม่ โดยผู้ส่งเป็น `created_by` ถ้ามีแล้วก็ใช้เคสเดิม
+  4. RPC เพิ่มผู้ส่งเป็นสมาชิกเคส (`video_case_members`)
+  5. หลังอัปโหลดวิดีโอ `FormSubmit` เรียก RPC ซ้ำเพื่อแนบวิดีโอต้นทาง (เฉพาะผู้สร้างเคสหรือ admin ที่แนบได้)
+- **Alternate / Exception**
+  - คู่ค่ากับเคสที่เลือกไม่ตรงกัน (ชนกันแบบ A-B + C กับ A + B-C): ระบบปฏิเสธ (`Case identity does not match`)
+  - ขอเป็น leader ของเคสที่มี leader อยู่แล้ว: ปฏิเสธ (`Video case already has a leader`) แต่ UI ปัจจุบันส่ง `member` เสมอ จึงไม่เกิดจากฟอร์มนี้
+- **Postcondition**: มีเคสและผู้ส่งเป็นสมาชิก บทบาท `member`
+- **หมายเหตุ**: เคยมีหน้า `/video-cases` สำหรับสร้างและเข้าร่วมเคสด้วยรหัส ปัจจุบันไม่มี route นี้ใน `src/App.tsx` และไม่พบโค้ด UI ที่ตั้ง leader (ข้อความ i18n "ฉันเป็นหัวหน้าเคสนี้" ใน `FormSubmit.tsx` ถูกประกาศไว้แต่ไม่พบที่เรียกใช้) ยังไม่ได้ตรวจว่ามี leader ในฐานข้อมูลจริงหรือตั้งด้วยวิธีอื่น
 
-### UC-15 เข้าร่วมเคส
-- **Actor**: ผู้ใช้ที่ล็อกอิน
-- **Main flow**: กรอกรหัสและชื่อเคสในหน้า `/video-cases` เพื่อเข้าร่วม
-- **Alternate**: รหัสไม่ถูกต้อง เข้าร่วมไม่ได้
-- **Postcondition**: ผู้ใช้เป็นสมาชิกของเคส
+### UC-15 เข้าร่วมเคส (ยกเลิก)
+- ไม่มีขั้นตอนเข้าร่วมด้วยรหัสแล้ว การเป็นสมาชิกเกิดใน UC-14 เมื่อส่งแบบประเมินในเคสนั้น
 
 ### UC-16 ดูรายละเอียดเคสและประวัติผลรวม
 - **Actor**: สมาชิกเคส (Member/Leader), Admin
 - **Main flow**
-  1. เลือกเคส เปิด `/video-cases/:videoCaseId`
+  1. เปิด `/video-cases/:videoCaseId` จากลิงก์ชื่อรายการบน `/dashboard` (ไม่มีหน้ารายการเคสแยก)
   2. ดูรายการ evaluations และประวัติผลรวม (aggregate)
   3. เปิดผลรวมเพื่อดู rubric เฉลี่ยและสรุป AI
   4. เริ่มประเมินใหม่ในเคสนี้ (ไป UC-07 ถ้ามีสิทธิ์ editor)
 - **Alternate**: Member เห็นแบบอ่านอย่างเดียว ไม่มีปุ่มจัดการ
 - **Postcondition**: ไม่เปลี่ยนข้อมูล
 
-### UC-17 รวมผลประเมินของเคส
+> UC-17 ถึง UC-19 เป็นผลรวมแบบเดิมใน `video_case_aggregates` ตามสเปก `docs/superpowers/specs/2026-11-12-video-group-evaluations-design.md` การสร้างผลรวมใหม่ย้ายไปเป็นแบบประเมินกลุ่ม (UC-23) และปิดของเดิม ข้อมูลเก่ายังอ่านและเปิดเอกสารได้ (route ยังอยู่ใน `App.tsx`) ผมยังไม่ได้ตรวจว่าปุ่มสร้างของเดิมถูกซ่อนในหน้า UI หรือไม่
+
+### UC-17 รวมผลประเมินของเคส (แบบเดิม)
 - **Actor**: Case Leader, Admin (Gemini ร่วมทำงาน)
 - **Precondition**: เคสมี evaluations อย่างน้อย 1 รายการ
 - **Main flow**
@@ -270,6 +279,22 @@ flowchart LR
 - **Main flow**: กดลบ aggregate ยืนยันในหน้าต่างยืนยัน
 - **Alternate**: Member ไม่มีปุ่มนี้
 - **Postcondition**: ผลรวมถูกลบ evaluations ต้นทางยังอยู่
+
+### UC-23 สร้างแบบประเมินกลุ่ม (Video Group)
+- **Actor**: Admin (ทุก case), Case Leader (เฉพาะ case ที่ตนเป็น leader)
+- **Precondition**: มีแบบประเมินสถานะ `ready` อย่างน้อย 2 ใบ ที่ผู้สร้างมองเห็น
+- **Main flow**
+  1. เปิด `/video-groups` แล้วกดสร้าง (ปุ่มแสดงเมื่อเป็น admin หรือ leader) ไป `/video-groups/new`
+  2. เลือกแบบประเมินจากหลายเคสได้ (`list_group_source_cases`)
+  3. ตั้ง `orderNumber`, ประเภท (กลุ่ม / รวมรอบ / สรุปปลายปี) และ `subjectName`
+  4. ระบบเรียก RPC `create_video_group_evaluation` เฉลี่ย 9 หมวดและร่างข้อเสนอแนะรวมให้แก้ได้
+  5. ส่งสร้างเอกสารผ่าน `forward-to-n8n` โดยใช้ id ของกลุ่มเป็น `aggregate_id` (UC-09) แล้วดู/ดาวน์โหลดที่ `/video-groups/:groupId/preview`
+- **Alternate / Exception**
+  - ชุด orderNumber + ประเภท + subjectName ซ้ำ: ปฏิเสธด้วย unique index
+  - ผู้ใช้ที่ไม่ใช่ admin และไม่ได้เป็น leader: ถูกส่งกลับ `/video-groups`
+  - ลบกลุ่ม: ผู้ขอสร้างหรือ admin ลบได้ ต้องไม่อยู่ในสถานะ `pending`
+- **การมองเห็น**: editor ขึ้นไปเห็นทุกกลุ่ม user เห็นเฉพาะกลุ่มที่เป็นสมาชิกเคสต้นทางหรือเป็นผู้ขอ
+- **Postcondition**: มีกลุ่มใหม่และเอกสาร แบบประเมินต้นทางไม่ถูกแก้ ดูรายละเอียดใน `docs/roles.md`
 
 ## กลุ่มผู้ดูแล
 
@@ -308,4 +333,6 @@ flowchart LR
 - UC-21 และข้อมูลการกู้งานเขียนจากชื่อไฟล์และเอกสารเท่านั้น ยังไม่ได้ไล่อ่านโค้ด `AdminStuckJobsPage.tsx` ทีละบรรทัด ควรตรวจปุ่ม/การกระทำจริงก่อนใช้เป็นข้อกำหนด
 - ค่าเริ่มต้นของ role หลังสมัคร (`user`) อนุมานจากโมเดล role ใน README (โค้ดฝั่ง client ใช้ `user` เป็นค่า fallback เมื่อ role ไม่ถูกต้อง)
 - UC-05, UC-14 และ UC-20 ตรวจกับ migration แล้ว (`20260403223000_role_requests.sql`, `20260710000000_video_case_multi_review.sql`, `20261014040000_video_case_identity_without_suffix.sql`) แต่ไม่ได้รันกับฐานข้อมูลจริง
+- แก้เอกสารนี้เมื่อ 2026-11-20 ให้ตรงกับโค้ด: login ไป `/home`, เคสถูกสร้างอัตโนมัติตอนส่งฟอร์ม (UC-14), ยกเลิก UC-15, เพิ่ม UC-23 และ super_admin ส่วนกฎ DOCX/สิทธิ์ละเอียดอ่านจาก `docs/roles.md` ไม่ได้ตรวจซ้ำในโค้ด
+- ช่องว่างที่ยังไม่ยืนยัน: ไม่พบ UI ที่ตั้ง Case Leader ซึ่งกระทบ UC-23 สำหรับผู้ใช้ที่ไม่ใช่ admin
 - เทสต์อัตโนมัติของ use case อยู่ใน `tests/` (ไฟล์ `roles`, `passwordReset`, `roleRequestService`, `videoCaseService`, `adminUserManagement`) ยังไม่มีเทสต์ที่ครอบคลุมการ redirect ของ `ProtectedRoute` และหน้า UI

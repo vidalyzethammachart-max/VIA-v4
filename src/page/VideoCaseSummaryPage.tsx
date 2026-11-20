@@ -242,7 +242,7 @@ export default function VideoCaseSummaryPage() {
               </Link>
             )}
             <Link to={`/video-cases/${videoCaseId}`} className="btn-secondary">
-              Back to video case
+              {language === "th" ? "กลับไปวิดีโอ" : "Back to video"}
             </Link>
           </div>
         </div>
@@ -357,7 +357,7 @@ export default function VideoCaseSummaryPage() {
                   rows={4}
                   required
                   className="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/60"
-                  placeholder="สรุปผลการประเมินสำหรับเคสนี้..."
+                  placeholder="สรุปผลการประเมินสำหรับวิดีโอนี้..."
                 />
               </div>
             </section>

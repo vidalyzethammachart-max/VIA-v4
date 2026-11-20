@@ -324,8 +324,8 @@ export default function MyFormsDashboard() {
                     <p className="mt-1 text-sm text-slate-500">{formatDate(item.created_at)}</p>
                     {item.video_case_id && (
                       <p className="mt-1 text-xs text-slate-500">
-                        Case ID: {item.video_case_id} ·{" "}
-                        <span className="font-medium text-[#04418b]">Linked case</span>
+                        Video ID: {item.video_case_id} ·{" "}
+                        <span className="font-medium text-[#04418b]">Linked video</span>
                       </p>
                     )}
                     <p className="mt-3 line-clamp-2 text-sm text-slate-600">

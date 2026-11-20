@@ -82,7 +82,7 @@ export default function VideoCaseDetailPage() {
         setErrorMessage(null);
         await loadCases();
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Failed to load video case.");
+        setErrorMessage(error instanceof Error ? error.message : "Failed to load video.");
       } finally {
         setLoading(false);
       }
@@ -95,7 +95,7 @@ export default function VideoCaseDetailPage() {
     if (!videoCaseId) return;
 
     void loadCaseData(videoCaseId).catch((error) => {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to load case details.");
+      setErrorMessage(error instanceof Error ? error.message : "Failed to load video details.");
     });
   }, [loadCaseData, videoCaseId]);
 
@@ -130,14 +130,14 @@ export default function VideoCaseDetailPage() {
             setCases((previous) => previous.map((item) => item.id === updated.id ? updated : item));
             setEditingCase(null);
             setErrorMessage(null);
-            setSuccessMessage("บันทึกข้อมูลเคสเรียบร้อยแล้ว");
+            setSuccessMessage("บันทึกข้อมูลวิดีโอเรียบร้อยแล้ว");
           }}
         />
       )}
       <ConfirmModal
         isOpen={Boolean(evaluationToDelete)}
         title="ลบแบบประเมิน"
-        message={`ลบแบบประเมิน #${evaluationToDelete?.id ?? ""} ใช่ไหม? ลบแล้วกู้คืนไม่ได้`}
+        message={`ลบแบบประเมิน #${evaluationToDelete?.id ?? ""} ใช่ไหม?`}
         variant="danger"
         onCancel={() => {
           if (!deleting) setEvaluationToDelete(null);
@@ -151,17 +151,17 @@ export default function VideoCaseDetailPage() {
       <main className="mx-auto max-w-7xl px-4 py-6 md:py-8">
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">รายละเอียด Video Case</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">รายละเอียดวิดีโอ</p>
             <h1 className="mt-2 text-2xl font-bold text-slate-900">
-              {selectedCase?.case_title || selectedCase?.case_key || "Video Case"}
+              {selectedCase?.case_title || selectedCase?.case_key || "Video"}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              {selectedCase ? `รหัสเคส: ${selectedCase.case_key}` : "เลือกเคสจากรายการ"}
+              {selectedCase ? `รหัสวิดีโอ: ${selectedCase.case_key}` : "เลือกวิดีโอจากรายการ"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Link to="/video-groups" className="btn-secondary">
-              กลับไปรายการเคส
+              กลับไปรายการแบบประเมินกลุ่ม
             </Link>
             {selectedCase && (
               <Link to={`/form-submit?caseId=${selectedCase.id}`} className="btn-primary">
@@ -185,18 +185,18 @@ export default function VideoCaseDetailPage() {
 
         {loading ? (
           <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
-            Loading case details...
+            Loading video details...
           </section>
         ) : !selectedCase ? (
           <section className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-sm text-red-700 shadow-sm">
-            ไม่พบ Video Case นี้
+            ไม่พบวิดีโอนี้
           </section>
         ) : (
           <div className="space-y-6">
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-col gap-5 p-5 md:flex-row md:items-start md:justify-between md:p-6">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">ข้อมูลเคส</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">ข้อมูลวิดีโอ</p>
                   {selectedCase.description && <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-600">{selectedCase.description}</p>}
                   <p className="mt-1 text-sm text-slate-500">
                     {selectedCase.source_file_name || "ไม่มีไฟล์วิดีโอ"} · แก้ไขล่าสุด {new Date(selectedCase.updated_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
@@ -204,10 +204,10 @@ export default function VideoCaseDetailPage() {
                 </div>
                 <div className="flex shrink-0 flex-col items-start gap-3">
                 {(isAdminRole || selectedCase.created_by === currentUserId) && (
-                  <button type="button" className="btn-secondary" onClick={() => setEditingCase(selectedCase)}>แก้ไขเคส</button>
+                  <button type="button" className="btn-secondary" onClick={() => setEditingCase(selectedCase)}>แก้ไขวิดีโอ</button>
                 )}
                 <p className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                  บทบาทของคุณ: {effectiveCaseRole === "leader" ? "หัวหน้าเคส" : "สมาชิก"}{isAdminRole ? " (ผู้ดูแลระบบ)" : ""}
+                  บทบาทของคุณ: {effectiveCaseRole === "leader" ? "หัวหน้าวิดีโอ" : "สมาชิก"}{isAdminRole ? " (ผู้ดูแลระบบ)" : ""}
                 </p>
                 </div>
               </div>

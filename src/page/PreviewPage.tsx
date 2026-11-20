@@ -278,7 +278,7 @@ export default function PreviewPage() {
               </h2>
               {record?.video_case_id && (
                 <p className="mt-2 text-xs text-slate-500">
-                  Case ID: {record.video_case_id} · <span className="font-medium text-[#04418b]">Linked case</span>
+                  Video ID: {record.video_case_id} · <span className="font-medium text-[#04418b]">Linked video</span>
                 </p>
               )}
               {location.state && "generated" in (location.state as Record<string, unknown>) && (
@@ -370,7 +370,7 @@ export default function PreviewPage() {
                   </button>
                 )}
                 {isAdmin && (
-                  <Link to="/admin" className="btn-secondary text-sm">
+                  <Link to="/admin/stuck-jobs" className="btn-secondary text-sm">
                     {t("preview.stuckAdminList")}
                   </Link>
                 )}

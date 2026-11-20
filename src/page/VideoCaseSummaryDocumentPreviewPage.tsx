@@ -27,7 +27,7 @@ function getStateMessage(state: VideoCaseSummaryDocumentState): string | null {
     case "not_found":
       return "ไม่พบผลสรุปที่ต้องการ";
     case "mismatched_case":
-      return "ผลสรุปนี้ไม่ได้อยู่ใน Video Case ที่ระบุ";
+      return "ผลสรุปนี้ไม่ได้อยู่ในวิดีโอที่ระบุ";
     case "failed":
       return state.error;
     case "ready_without_artifact":
@@ -239,7 +239,7 @@ export default function VideoCaseSummaryDocumentPreviewPage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#04418b]">
-                Video Case Summary Document
+                Video Summary Document
               </p>
               <h1 className="mt-1 text-xl font-semibold text-slate-900">
                 เอกสารสรุปผลแบบประเมิน
@@ -285,7 +285,7 @@ export default function VideoCaseSummaryDocumentPreviewPage() {
                 to={`/video-cases/${videoCaseId}`}
                 className="btn-secondary text-center"
               >
-                กลับไป Video Case
+                กลับไปวิดีโอ
               </Link>
             </div>
           </div>
@@ -324,7 +324,7 @@ export default function VideoCaseSummaryDocumentPreviewPage() {
               หากตัวอย่าง PDF ไม่แสดง ให้กด “ดาวน์โหลด PDF” ด้านบนเพื่อเปิดไฟล์ในเครื่อง
             </p>
             <iframe
-              title="Video case summary document preview"
+              title="Video summary document preview"
               src={artifactUrls.pdfUrl}
               className="h-[800px] w-full"
             />

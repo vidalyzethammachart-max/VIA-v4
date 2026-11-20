@@ -180,12 +180,12 @@ function FormSubmit() {
         analyzing: "à¸à¸³à¸¥à¸±à¸‡à¸§à¸´à¹€à¸„à¸£à¸²à¸°à¸«à¹Œà¸§à¸´à¸”à¸µà¹‚à¸­",
       }
     : {
-        title: "Video case",
-        description: "Enter the order number and subject name, then the system will generate the case key automatically.",
-        keyLabel: "Video case key (auto-generated)",
+        title: "Video",
+        description: "Enter the order number and subject name, then the system will generate the video key automatically.",
+        keyLabel: "Video key (auto-generated)",
         keyPlaceholder: "e.g. 001-Test",
-        leaderLabel: "I am the case leader",
-        leaderDescription: "If the case has no leader yet, you can claim the role.",
+        leaderLabel: "I am the video leader",
+        leaderDescription: "If the video has no leader yet, you can claim the role.",
         keyRequired: "Please enter an order number and a subject name.",
         analyzing: "Analyzing video",
       };
@@ -193,21 +193,21 @@ function FormSubmit() {
   const videoCaseUi = language === "th"
     ? {
         title: "กลุ่มวิดีโอ",
-        description: "ระบบจะสร้างเคสจากเลขที่สั่งงานและชื่อหัวข้อโดยอัตโนมัติ เพื่อให้หลายคนประเมินงานเดียวกันได้",
-        keyLabel: "Video Case",
+        description: "ระบบจะสร้างวิดีโอจากเลขที่สั่งงานและชื่อหัวข้อโดยอัตโนมัติ เพื่อให้หลายคนประเมินงานเดียวกันได้",
+        keyLabel: "Video",
         keyPlaceholder: "รอกรอกเลขที่สั่งงานและชื่อหัวข้อ",
-        leaderLabel: "ฉันเป็นหัวหน้าเคสนี้",
-        leaderDescription: "หัวหน้าเคสสามารถรวมผลของผู้ประเมินทุกคนและสั่งให้ AI วิเคราะห์ใหม่ได้",
+        leaderLabel: "ฉันเป็นหัวหน้าวิดีโอนี้",
+        leaderDescription: "หัวหน้าวิดีโอสามารถรวมผลของผู้ประเมินทุกคนและสั่งให้ AI วิเคราะห์ใหม่ได้",
         keyRequired: "กรุณาระบุเลขที่สั่งงานและชื่อหัวข้อ",
         analyzing: "กำลังวิเคราะห์วิดีโอ",
       }
     : {
-        title: "Video case",
-        description: "The case is generated automatically from the order number and subject name so multiple people can review the same work.",
-        keyLabel: "Video Case",
+        title: "Video",
+        description: "The video entry is generated automatically from the order number and subject name so multiple people can review the same work.",
+        keyLabel: "Video",
         keyPlaceholder: "Waiting for an order number and subject name",
-        leaderLabel: "I am the case leader",
-        leaderDescription: "The case leader can combine all reviewers' results and ask AI to analyze them again.",
+        leaderLabel: "I am the video leader",
+        leaderDescription: "The video leader can combine all reviewers' results and ask AI to analyze them again.",
         keyRequired: "Please enter an order number and a subject name.",
         analyzing: "Analyzing video",
       };
@@ -268,11 +268,11 @@ function FormSubmit() {
       .eq("id", videoCaseId).maybeSingle().then(({ data, error }) => {
         if (cancelled) return;
         if (data?.deleted_at) {
-          setSubmitErrorMessage("เคสนี้อยู่ในถังขยะ กรุณาให้ผู้สร้างเคสหรือแอดมินกู้คืนก่อนส่งประเมิน");
+          setSubmitErrorMessage("วิดีโอนี้อยู่ในถังขยะ กรุณาให้ผู้สร้างวิดีโอหรือแอดมินกู้คืนก่อนส่งประเมิน");
           return;
         }
         if (error || !data?.order_number || !data?.subject_name) {
-          setSubmitErrorMessage("โหลดข้อมูลเคสไม่สำเร็จ กรุณาเลือกเคสอีกครั้ง");
+          setSubmitErrorMessage("โหลดข้อมูลวิดีโอไม่สำเร็จ กรุณาเลือกวิดีโออีกครั้ง");
           return;
         }
         setOrderNumber(data.order_number);
@@ -319,7 +319,7 @@ function FormSubmit() {
   };
 
   const validateForm = useCallback((): string | null => {
-    if (videoCaseId && loadedCaseId !== videoCaseId) return "กรุณารอโหลดข้อมูลเคสให้เรียบร้อยก่อนส่ง";
+    if (videoCaseId && loadedCaseId !== videoCaseId) return "กรุณารอโหลดข้อมูลวิดีโอให้เรียบร้อยก่อนส่ง";
     if (!authUserId) {
       return t("form.sessionNotReady");
     }

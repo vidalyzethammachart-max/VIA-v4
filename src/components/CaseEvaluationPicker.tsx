@@ -30,7 +30,7 @@ export default function CaseEvaluationPicker({ analyses, selectedIds, onChange, 
   const reason = blockReasonOverride !== undefined ? blockReasonOverride : getCombineBlockReason(analyses, selectedIds);
 
   if (analyses.length === 0) {
-    return <p className="text-sm text-slate-500">ยังไม่มีแบบประเมินในเคสนี้</p>;
+    return <p className="text-sm text-slate-500">ยังไม่มีแบบประเมินในวิดีโอนี้</p>;
   }
 
   return (

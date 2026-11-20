@@ -207,6 +207,8 @@ export const translations: Record<Locale, Dictionary> = {
     "myForms.deleteMessage": "คุณแน่ใจหรือไม่ว่าต้องการลบ \"{label}\" ออกจาก Supabase? การลบนี้ไม่สามารถย้อนกลับได้",
     "myForms.confirmDelete": "ลบรายการ",
     "myForms.deleteFailed": "ลบรายการไม่สำเร็จ",
+    "myForms.deleteInUse": "ลบไม่ได้ เพราะรายการนี้ถูกใช้ในแบบประเมินกลุ่มหรือผลรวมของเคสแล้ว ต้องลบกลุ่มหรือผลรวมนั้นก่อน",
+    "myForms.deleteNotAllowed": "ลบไม่ได้ ไม่พบรายการนี้ หรือคุณไม่มีสิทธิ์ลบรายการนี้",
 
     "preview.title": "ดูตัวอย่างเอกสาร",
     "preview.subtitle": "ดูเอกสารที่สร้างและเชื่อมโยงกับ evaluation นี้",
@@ -724,6 +726,8 @@ export const translations: Record<Locale, Dictionary> = {
     "myForms.deleteMessage": "Are you sure you want to delete \"{label}\" from Supabase? This cannot be undone.",
     "myForms.confirmDelete": "Delete",
     "myForms.deleteFailed": "Failed to delete submission.",
+    "myForms.deleteInUse": "This submission cannot be deleted because a group evaluation or case summary uses it. Delete that group or summary first.",
+    "myForms.deleteNotAllowed": "Cannot delete: the submission was not found or you do not have permission to delete it.",
 
     "preview.title": "Document Preview",
     "preview.subtitle": "Preview the generated document linked to this evaluation.",

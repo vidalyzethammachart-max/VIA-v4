@@ -8,6 +8,7 @@ import { useLanguage } from "../i18n/useLanguage";
 import { normalizeRole, roleAtLeast } from "../lib/roles";
 import { supabase } from "../lib/supabaseClient";
 import { buildDocumentDownloadUrl } from "../services/documentDownload.js";
+import { EvaluationDeleteError, deleteEvaluationById } from "../services/evaluationDeleteCore.js";
 import { collapseSupersededEvaluations } from "../services/evaluationSupersedeCore.js";
 import { isEvaluationStuck } from "../services/stuckEvaluationCore.js";
 
@@ -153,23 +154,20 @@ export default function MyFormsDashboard() {
         return;
       }
 
-      const { error } = await supabase
-        .from("evaluations")
-        .delete()
-        .eq("id", deleteTarget.id)
-        .eq("user_id", user.id)
-        .select("id")
-        .single();
-
-      if (error) {
-        throw error;
-      }
+      await deleteEvaluationById(supabase, deleteTarget.id);
 
       setItems((current) => current.filter((item) => item.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (error) {
       console.error("Failed to delete form:", error);
-      setErrorMessage(error instanceof Error ? error.message : t("myForms.deleteFailed"));
+      if (error instanceof EvaluationDeleteError && error.code === "in_use") {
+        setErrorMessage(t("myForms.deleteInUse"));
+      } else if (error instanceof EvaluationDeleteError && error.code === "not_allowed") {
+        setErrorMessage(t("myForms.deleteNotAllowed"));
+      } else {
+        setErrorMessage(error instanceof Error ? error.message : t("myForms.deleteFailed"));
+      }
+      setDeleteTarget(null);
     } finally {
       setDeletingId(null);
     }
